@@ -1,0 +1,2745 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kost Hade - Guesthouse Management Premium</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap');
+    body { 
+      font-family: 'Plus Jakarta Sans', sans-serif; 
+    }
+    .loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+    }
+    
+    /* Premium Blue to Red Gradient for Active Navigation */
+    .nav-btn-active {
+      background: linear-gradient(135deg, #2563eb 0%, #e11d48 100%) !important; /* Royal Blue to Crimson */
+      color: #ffffff !important;
+      box-shadow: 0 4px 15px -3px rgba(37, 99, 235, 0.3);
+    }
+    @media (max-width: 767px) {
+      .nav-btn-active {
+        background: linear-gradient(135deg, #2563eb 0%, #e11d48 100%) !important;
+        border-top: 3px solid #e11d48;
+      }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    
+    /* Exclusive metallic border & card hover effects */
+    .premium-card {
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .premium-card:hover {
+      transform: translateY(-4px) scale(1.01);
+      box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.05), 0 10px 10px -5px rgba(225, 29, 72, 0.05);
+    }
+
+    /* Print styling rules */
+    .double-underline {
+      border-bottom: 3px double #334155;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row">
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading" class="loading-overlay hidden">
+    <div class="flex flex-col items-center p-8 bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-xs w-full mx-4">
+      <div class="relative flex items-center justify-center mb-4">
+        <div class="animate-spin rounded-full h-14 w-14 border-4 border-slate-100 border-t-blue-600"></div>
+        <div class="absolute w-8 h-8 rounded-full bg-gradient-to-tr from-blue-600 to-rose-600 flex items-center justify-center text-white text-[10px]">
+          <i class="fas fa-sync animate-spin"></i>
+        </div>
+      </div>
+      <p class="text-sm text-slate-800 font-bold mb-1 text-center">Sinkronisasi Cloud...</p>
+      <p class="text-[11px] text-slate-400 text-center italic">Enkripsi Data Aman Aktif</p>
+      <button onclick="showLoading(false)" class="mt-4 px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] text-slate-500 hover:text-rose-600 font-semibold transition border border-slate-200">Tutup Paksa</button>
+    </div>
+  </div>
+
+  <!-- CUSTOM MODAL DIALOG (PENGGANTI ALERT) -->
+  <div id="custom-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10001] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-sm w-full animate-fade-in text-center relative overflow-hidden">
+      <div id="modal-decor" class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 to-rose-600"></div>
+      <div id="modal-icon" class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl"></div>
+      <h3 id="modal-title" class="text-lg font-bold mb-2 text-slate-900"></h3>
+      <p id="modal-message" class="text-sm text-slate-500 mb-6 px-2"></p>
+      <div class="flex gap-3 justify-center">
+        <button id="modal-cancel-btn" onclick="closeModal()" class="hidden flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">Batal</button>
+        <button id="modal-confirm-btn" onclick="closeModal()" class="flex-1 bg-gradient-to-r from-blue-600 to-rose-600 text-white py-3 px-4 rounded-xl font-bold hover:from-blue-700 hover:to-rose-700 transition shadow-lg shadow-blue-600/20">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SIDEBAR / NAVIGASI UTAMA -->
+  <nav class="w-full md:w-64 bg-white text-slate-700 shadow-xl flex flex-col z-50 flex-shrink-0 md:h-full justify-between border-b md:border-b-0 md:border-r border-slate-200/80">
+    <div class="flex flex-col w-full">
+      <!-- Logo Header -->
+      <div class="p-4 md:p-6 border-b border-slate-100 flex flex-row md:flex-col items-center justify-between md:justify-center text-left md:text-center gap-3 bg-gradient-to-b from-blue-50/20 to-transparent">
+        <div class="flex flex-row md:flex-col items-center gap-3 md:gap-2">
+          <div class="w-10 h-10 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-rose-500 rounded-2xl flex items-center justify-center border border-white shadow-md p-1.5 overflow-hidden shrink-0">
+            <img src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
+          </div>
+          <div>
+            <h1 class="text-base md:text-lg font-black tracking-tight bg-gradient-to-r from-blue-600 to-rose-600 bg-clip-text text-transparent uppercase">Kost Hade</h1>
+            <span class="block text-[10px] font-extrabold text-blue-500 uppercase tracking-widest md:mt-1">ROYAL SYNC</span>
+          </div>
+        </div>
+        
+        <!-- Subtle Live Indicator -->
+        <div class="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+          <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+          <span class="text-[9px] text-blue-600 font-extrabold uppercase tracking-widest">LIVE LEDGER</span>
+        </div>
+      </div>
+
+      <!-- Navigation Menu -->
+      <ul class="flex flex-row md:flex-col gap-1.5 w-full p-2 md:p-4 overflow-x-auto hide-scrollbar border-b border-slate-100 md:border-none" id="sidebar-nav">
+        <li class="shrink-0 md:shrink">
+          <button onclick="showSection('dashboard', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition nav-btn-active text-xs md:text-sm font-bold w-full">
+            <i class="fas fa-chart-pie w-5 text-center text-base"></i> Dashboard
+          </button>
+        </li>
+        <li class="shrink-0 md:shrink">
+          <button onclick="showSection('penyewa', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+            <i class="fas fa-users w-5 text-center text-base"></i> Penyewa
+          </button>
+        </li>
+        <li class="shrink-0 md:shrink">
+          <button onclick="showSection('kamar', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+            <i class="fas fa-door-open w-5 text-center text-base"></i> Kamar
+          </button>
+        </li>
+        <li class="shrink-0 md:shrink">
+          <button onclick="showSection('pembayaran', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+            <i class="fas fa-receipt w-5 text-center text-base"></i> Pembayaran
+          </button>
+        </li>
+        <li class="shrink-0 md:shrink">
+          <button onclick="showSection('transaksi-ops', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+            <i class="fas fa-exchange-alt w-5 text-center text-base"></i> Transaksi
+          </button>
+        </li>
+        <li class="shrink-0 md:shrink">
+          <button onclick="showSection('laporan', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+            <i class="fas fa-file-invoice-dollar w-5 text-center text-base"></i> Laporan
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Sidebar footer hidden on mobile -->
+    <div class="hidden md:block p-4 border-t border-slate-100 bg-slate-50">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center shadow-sm">
+            <i class="fas fa-user-shield text-xs text-rose-500"></i>
+          </div>
+          <div>
+            <p class="text-xs font-black text-slate-800">Administrator</p>
+            <p class="text-[9px] text-slate-400 uppercase font-black">Lux Premium Access</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- AREA KONTEN UTAMA -->
+  <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 lg:p-10 bg-slate-50 w-full hide-scrollbar">
+    <div class="max-w-7xl mx-auto w-full pb-16">
+
+      <!-- SECTION: DASHBOARD -->
+      <section id="sec-dashboard" class="content-section w-full animate-fade-in">
+        <!-- Dashboard Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div>
+            <p class="text-xs font-black text-rose-500 uppercase tracking-widest mb-1">Eksklusif Guesthouse</p>
+            <h2 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Ringkasan Operasional</h2>
+          </div>
+          <div class="flex gap-2 w-full md:w-auto">
+            <button onclick="syncData()" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-xs transition shadow-sm">
+              <i class="fas fa-sync text-blue-500 animate-spin-slow"></i> Segarkan
+            </button>
+            <button onclick="showSection('penyewa', document.querySelectorAll('#sidebar-nav button')[1])" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition shadow-md shadow-blue-500/20">
+              <i class="fas fa-user-plus"></i> Registrasi Baru
+            </button>
+          </div>
+        </div>
+
+        <!-- ALERT JATUH TEMPO DAN TUNGGAKAN -->
+        <div id="billing-alerts-container" class="hidden mb-8 animate-fade-in">
+          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+              <h3 class="text-base font-black text-slate-900 uppercase tracking-tight">Pemberitahuan Billing & Jatuh Tempo</h3>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="billing-alerts-list">
+              <!-- Dynamically rendered alerting banners -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- DASHBOARD GRID ANALYTICS -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+            <div class="flex justify-between items-start mb-2">
+              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Total Suite</p>
+              <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
+                <i class="fas fa-door-open text-blue-600 text-xs"></i>
+              </div>
+            </div>
+            <h3 id="stat-total-kamar" class="text-2xl md:text-3xl font-black text-slate-900 leading-none">0</h3>
+            <p class="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Unit Kamar Terdaftar</p>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+            <div class="flex justify-between items-start mb-2">
+              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Kamar Terisi</p>
+              <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
+                <i class="fas fa-bed text-blue-600 text-xs"></i>
+              </div>
+            </div>
+            <h3 id="stat-kamar-terisi" class="text-2xl md:text-3xl font-black text-blue-600 leading-none">0</h3>
+            <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
+              <div id="occupancy-bar" class="bg-gradient-to-r from-blue-600 to-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+            </div>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+            <div class="flex justify-between items-start mb-2">
+              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Penyewa Aktif</p>
+              <div class="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center border border-rose-100">
+                <i class="fas fa-user-check text-rose-600 text-xs"></i>
+              </div>
+            </div>
+            <h3 id="stat-total-penyewa" class="text-2xl md:text-3xl font-black text-rose-600 leading-none">0</h3>
+            <p class="text-[10px] text-slate-500 mt-2 font-semibold"><span id="occupancy-percentage" class="font-extrabold text-blue-600">0%</span> Tingkat Hunian</p>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+            <div class="flex justify-between items-start mb-2">
+              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Sisa Saldo Kas</p>
+              <div class="w-7 h-7 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100">
+                <i class="fas fa-wallet text-emerald-600 text-xs"></i>
+              </div>
+            </div>
+            <h3 id="stat-pendapatan" class="text-lg md:text-2xl font-black text-emerald-600 leading-none truncate">Rp 0</h3>
+            <p class="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Arus Kas Bersih (Net)</p>
+          </div>
+        </div>
+
+        <!-- QUICK FINANCIAL SUMMARY BAR -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div class="bg-emerald-50/50 border border-emerald-100/75 p-4 rounded-2xl flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white"><i class="fas fa-arrow-down"></i></div>
+              <div>
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Pendapatan (Sewa + Ops)</p>
+                <p id="sum-total-pendapatan" class="text-base font-black text-emerald-700">Rp 0</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-rose-50/50 border border-rose-100/75 p-4 rounded-2xl flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white"><i class="fas fa-arrow-up"></i></div>
+              <div>
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Pengeluaran Ops</p>
+                <p id="sum-total-pengeluaran" class="text-base font-black text-rose-700">Rp 0</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RECENT TRANSACTIONS TABLE -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div class="p-5 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gradient-to-r from-blue-50/10 to-rose-50/10">
+            <div>
+              <h3 class="font-extrabold text-slate-900 text-base">Log Pembayaran Terbaru</h3>
+              <p class="text-xs text-slate-400">Arsip billing digital Kost Hade</p>
+            </div>
+            <button onclick="showSection('pembayaran', document.querySelectorAll('#sidebar-nav button')[3])" class="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1.5 transition uppercase tracking-wider">
+              Catat Pembayaran <i class="fas fa-arrow-right text-[10px]"></i>
+            </button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left min-w-[700px] border-collapse">
+              <thead>
+                <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                  <th class="py-3 px-6 text-center w-12">No</th>
+                  <th class="py-3 px-4">Tanggal</th>
+                  <th class="py-3 px-4">Penyewa</th>
+                  <th class="py-3 px-4">Kamar</th>
+                  <th class="py-3 px-4">Total Bayar</th>
+                  <th class="py-3 px-4">Keterangan</th>
+                  <th class="py-3 px-6 text-center">Receipt</th>
+                </tr>
+              </thead>
+              <tbody id="table-transaksi" class="divide-y divide-slate-100">
+                <!-- Loaded dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION: PENYEWA (MANAGEMENT & REGISTRATION) -->
+      <section id="sec-penyewa" class="content-section hidden w-full animate-fade-in">
+        <div class="flex flex-col lg:flex-row gap-8">
+          
+          <!-- LEFT SIDE: LIST OF ACTIVE TENANTS -->
+          <div class="flex-1">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+              <div class="p-6 border-b border-slate-100">
+                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Penyewa Suite</h3>
+                <p class="text-xs text-slate-400 mb-4">Pengelolaan data penghuni yang sedang terdaftar</p>
+                
+                <!-- Search Box for Tenants -->
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i class="fas fa-search text-slate-400 text-sm"></i>
+                  </span>
+                  <input type="text" id="tenant-search" oninput="filterTenants()" placeholder="Cari nama, kamar, atau kontak..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                </div>
+              </div>
+
+              <!-- Tenant Responsive Table -->
+              <div class="overflow-x-auto">
+                <table class="w-full text-left min-w-[750px] border-collapse">
+                  <thead>
+                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <th class="py-3.5 px-6">ID / Penyewa</th>
+                      <th class="py-3.5 px-4">Kamar</th>
+                      <th class="py-3.5 px-4">No HP</th>
+                      <th class="py-3.5 px-4">Mulai Sewa</th>
+                      <th class="py-3.5 px-4">Status</th>
+                      <th class="py-3.5 px-6 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-penyewa-list" class="divide-y divide-slate-100">
+                    <!-- Dynamically Generated -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- RIGHT SIDE: TENANT REGISTRATION FORM -->
+          <div class="w-full lg:w-96 shrink-0">
+            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+              <div class="mb-6">
+                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-500 text-lg shadow-inner">
+                  <i class="fas fa-user-plus"></i>
+                </div>
+                <h3 class="font-extrabold text-slate-900 text-lg">Registrasi Penghuni</h3>
+                <p class="text-xs text-slate-400">Daftarkan penghuni suite baru ke database</p>
+              </div>
+
+              <form id="form-penyewa" class="space-y-4">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+                  <input type="text" name="nama" required placeholder="Ahmad Fauzi" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">WhatsApp Handphone</label>
+                  <input type="tel" name="hp" required placeholder="08123456789" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Suite Kamar</label>
+                  <select id="select-kamar" name="kamar" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition bg-white">
+                    <!-- Loaded dynamically -->
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal Check-In</label>
+                  <input type="date" name="tglMasuk" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                </div>
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                  <i class="fas fa-check"></i> Selesaikan Registrasi
+                </button>
+              </form>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SECTION: DAFTAR KAMAR & TAMBAH KAMAR -->
+      <section id="sec-kamar" class="content-section hidden w-full animate-fade-in">
+        <!-- Room Controls Header -->
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+          <div>
+            <h2 class="text-xl md:text-2xl font-black text-slate-900"><i class="fas fa-bed mr-2 text-rose-500 animate-pulse"></i>Suite & Kamar</h2>
+            <p class="text-xs text-slate-400">Management Status Hunian & Layanan Kamar</p>
+          </div>
+          <div class="flex gap-2 w-full md:w-auto">
+            <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 grow md:grow-0">
+              <button onclick="filterRoomCards('semua')" id="btn-filter-semua" class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition">Semua</button>
+              <button onclick="filterRoomCards('Tersedia')" id="btn-filter-tersedia" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Tersedia</button>
+              <button onclick="filterRoomCards('Terisi')" id="btn-filter-terisi" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Terisi</button>
+            </div>
+            <button onclick="toggleRoomForm()" class="bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/10 text-xs flex items-center gap-2">
+              <i class="fas fa-plus"></i> Unit Baru
+            </button>
+          </div>
+        </div>
+        
+        <!-- Add Room Form Drawer (Collapsible) -->
+        <div id="room-form-container" class="hidden mb-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-md max-w-4xl w-full mx-auto animate-fade-in">
+          <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+            <h4 class="font-bold text-slate-900 text-sm"><i class="fas fa-plus-circle text-rose-500 mr-1.5"></i>Formulir Tambah Kamar Baru</h4>
+            <button onclick="toggleRoomForm()" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
+          </div>
+          <form id="form-kamar" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
+              <input type="text" name="noKamar" required placeholder="105" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Kamar</label>
+              <input type="text" name="tipe" required placeholder="Standar" value="Standar" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Bulanan (Rp)</label>
+              <input type="number" name="hargaBulanan" required value="1100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Harian (Rp)</label>
+              <input type="number" name="hargaHarian" required value="100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            </div>
+            <div class="md:col-span-4 mt-2">
+              <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm">
+                Simpan Unit Kamar
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Room Grid Content -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6" id="grid-kamar">
+          <!-- Dynamically Loaded Room Cards -->
+        </div>
+      </section>
+      
+      <!-- SECTION: RECORD PAYMENT & HISTORY -->
+      <section id="sec-pembayaran" class="content-section hidden w-full animate-fade-in">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          <!-- LEFT SIDE: FORM RECORD PAYMENT -->
+          <div class="lg:col-span-4">
+            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+              <div class="mb-6">
+                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg shadow-inner">
+                  <i class="fas fa-file-invoice-dollar"></i>
+                </div>
+                <h3 class="font-extrabold text-slate-900 text-lg">Catat Pembayaran</h3>
+                <p class="text-xs text-slate-400">Pembukuan billing sewa bulanan & harian</p>
+              </div>
+
+              <form id="form-pembayaran" class="space-y-4">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Penyewa</label>
+                  <select id="select-penyewa" name="nama" onchange="handlePenyewaChange()" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition bg-white">
+                    <!-- Dynamically Loaded Tenants -->
+                  </select>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
+                    <input type="text" id="input-kamar-pembayaran" name="kamar" required class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 text-sm outline-none" readonly placeholder="Terpilih otomatis">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Pembayaran</label>
+                    <input type="date" id="input-tgl-pembayaran" name="tglBayar" required onchange="calculateBilling()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Sewa</label>
+                    <select id="select-tipe-sewa" name="tipeSewa" onchange="handleTipeSewaChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition bg-white">
+                      <option value="Bulanan">Bulanan</option>
+                      <option value="Harian">Harian</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label id="label-durasi-sewa" class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jumlah Bulan Sewa</label>
+                    <input type="number" id="input-durasi-sewa" name="durasi" required min="1" value="1" oninput="calculateBilling()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Total Bayar (Rp)</label>
+                    <input type="number" id="input-jumlah-pembayaran" name="jumlah" required placeholder="1100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Jatuh Tempo</label>
+                    <input type="text" id="input-jatuh-tempo" name="jatuhTempo" readonly class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 text-sm outline-none font-bold" placeholder="Terhitung otomatis">
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Keterangan / Periode</label>
+                  <input type="text" id="input-keterangan-pembayaran" name="keterangan" required placeholder="Pembayaran Sewa Bulanan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                </div>
+                
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/15 text-sm mt-2 flex items-center justify-center gap-2">
+                  <i class="fas fa-cloud-upload-alt"></i> Simpan Transaksi
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- RIGHT SIDE: ALL TRANSACTIONS HISTORY WITH DETAILED ACTIONS -->
+          <div class="lg:col-span-8">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+              <div class="p-6 border-b border-slate-100">
+                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Arsip Sejarah Keuangan</h3>
+                <p class="text-xs text-slate-400 mb-4">Daftar rekapan transaksi pembayaran digital</p>
+                
+                <!-- Search Box for Payments -->
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i class="fas fa-search text-slate-400 text-sm"></i>
+                  </span>
+                  <input type="text" id="payment-search" oninput="filterPayments()" placeholder="Cari transaksi berdasarkan nama, kamar, atau deskripsi..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                </div>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left min-w-[650px] border-collapse">
+                  <thead>
+                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <th class="py-3.5 px-6">Tanggal</th>
+                      <th class="py-3.5 px-4">Nama Penyewa</th>
+                      <th class="py-3.5 px-4">Kamar</th>
+                      <th class="py-3.5 px-4">Jumlah</th>
+                      <th class="py-3.5 px-4">Keterangan</th>
+                      <th class="py-3.5 px-6 text-center">Receipt</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-pembayaran-history" class="divide-y divide-slate-100">
+                    <!-- Dynamically Loaded -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- SECTION: TRANSAKSI OPERASIONAL (PENDAPATAN & PENGELUARAN) -->
+      <section id="sec-transaksi-ops" class="content-section hidden w-full animate-fade-in">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          <!-- LEFT SIDE: FORM RECORD GENERAL TRANSACTION -->
+          <div class="lg:col-span-4">
+            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+              <div class="mb-6">
+                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-600 text-lg shadow-inner">
+                  <i class="fas fa-hand-holding-usd"></i>
+                </div>
+                <h3 class="font-extrabold text-slate-900 text-lg">Catat Transaksi</h3>
+                <p class="text-xs text-slate-400">Pencatatan pemasukan tambahan & pengeluaran operasional</p>
+              </div>
+
+              <form id="form-transaksi" class="space-y-4">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jenis Transaksi</label>
+                  <select id="trans-jenis" name="jenis" onchange="handleTransTypeChange()" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                    <option value="Pengeluaran" class="text-rose-600">Pengeluaran (Operasional)</option>
+                    <option value="Pendapatan" class="text-emerald-600">Pendapatan (Lain-lain)</option>
+                    <option value="Neraca" class="text-blue-600">Neraca (Aset/Kewajiban/Ekuitas)</option>
+                  </select>
+                </div>
+                
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal</label>
+                  <input type="date" id="trans-tanggal" name="tanggal" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kategori</label>
+                  <select id="trans-kategori" name="kategori" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white">
+                    <!-- Loaded dynamically via JS depending on selection -->
+                  </select>
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jumlah (Rp)</label>
+                  <input type="number" id="trans-jumlah" name="jumlah" required placeholder="500000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition font-bold text-slate-900">
+                </div>
+
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Keterangan / Deskripsi</label>
+                  <input type="text" id="trans-keterangan" name="keterangan" required placeholder="Contoh: Beli token listrik utama" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                </div>
+                
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                  <i class="fas fa-plus-circle"></i> Tambah Transaksi
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- RIGHT SIDE: ALL OPERATIONAL TRANSACTIONS HISTORY -->
+          <div class="lg:col-span-8">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+              <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h3 class="font-extrabold text-slate-900 text-lg mb-1">Buku Ledger Operasional</h3>
+                  <p class="text-xs text-slate-400">Histori terperinci pemasukan non-sewa dan pengeluaran berkala</p>
+                </div>
+                <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+                  <button onclick="filterOpsLedger('Semua')" id="btn-ops-all" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition">Semua</button>
+                  <button onclick="filterOpsLedger('Pendapatan')" id="btn-ops-income" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Pendapatan</button>
+                  <button onclick="filterOpsLedger('Pengeluaran')" id="btn-ops-expense" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Pengeluaran</button>
+                  <button onclick="filterOpsLedger('Neraca')" id="btn-ops-neraca" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Neraca</button>
+                </div>
+              </div>
+
+              <!-- Search Ledger -->
+              <div class="p-6 pb-2 border-b border-slate-100/50 bg-slate-50/30">
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i class="fas fa-search text-slate-400 text-sm"></i>
+                  </span>
+                  <input type="text" id="ops-search" oninput="filterLedgerData()" placeholder="Cari berdasarkan kategori atau keterangan..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition shadow-sm">
+                </div>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left min-w-[650px] border-collapse">
+                  <thead>
+                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <th class="py-3.5 px-6">Tanggal</th>
+                      <th class="py-3.5 px-4">Tipe</th>
+                      <th class="py-3.5 px-4">Kategori</th>
+                      <th class="py-3.5 px-4">Jumlah</th>
+                      <th class="py-3.5 px-4">Keterangan</th>
+                      <th class="py-3.5 px-6 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-ops-ledger" class="divide-y divide-slate-100">
+                    <!-- Dynamically Loaded -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION: LAPORAN KEUANGAN (NERACA, RUGI LABA, ARUS KAS) -->
+      <section id="sec-laporan" class="content-section hidden w-full animate-fade-in">
+        <!-- Report Header & Month Filter -->
+        <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div>
+            <h2 class="text-xl md:text-2xl font-black text-slate-900 flex items-center gap-2">
+              <i class="fas fa-file-invoice-dollar text-rose-500"></i> Laporan Keuangan Berkala
+            </h2>
+            <p class="text-xs text-slate-400">Pembukuan standard akuntansi guesthouse komparatif</p>
+          </div>
+          
+          <!-- Month/Year Filters -->
+          <div class="flex items-center gap-3 w-full md:w-auto">
+            <div class="flex flex-col gap-1 w-full md:w-40">
+              <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter Bulan</label>
+              <select id="filter-laporan-bulan" onchange="generateSelectedReport()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition">
+                <option value="1">Januari</option>
+                <option value="2">Februari</option>
+                <option value="3">Maret</option>
+                <option value="4">April</option>
+                <option value="5" selected>Mei</option>
+                <option value="6">Juni</option>
+                <option value="7">Juli</option>
+                <option value="8">Agustus</option>
+                <option value="9">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
+            </div>
+            <div class="flex flex-col gap-1 w-full md:w-28">
+              <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tahun</label>
+              <select id="filter-laporan-tahun" onchange="generateSelectedReport()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition">
+                <option value="2026" selected>2026</option>
+                <option value="2027">2027</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subtabs Navigation inside Reports -->
+        <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-lg mb-6 shadow-inner">
+          <button onclick="switchReportTab('rugi-laba')" id="tab-rep-rugi-laba" class="flex-1 py-3 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
+            <i class="fas fa-chart-line mr-1.5"></i> Rugi Laba
+          </button>
+          <button onclick="switchReportTab('arus-kas')" id="tab-rep-arus-kas" class="flex-1 py-3 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
+            <i class="fas fa-funnel-dollar mr-1.5"></i> Arus Kas
+          </button>
+          <button onclick="switchReportTab('neraca')" id="tab-rep-neraca" class="flex-1 py-3 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
+            <i class="fas fa-balance-scale mr-1.5"></i> Neraca
+          </button>
+        </div>
+
+        <!-- REPORT DISPLAY PANEL -->
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 md:p-8 relative">
+          <!-- Decorative Stamp / Watermark -->
+          <div class="absolute top-6 right-6 flex items-center gap-1 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full pointer-events-none">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+            <span class="text-[9px] text-blue-600 font-extrabold uppercase tracking-widest">E-Report Valid</span>
+          </div>
+
+          <!-- Dynamic Report Content Area (Prints perfectly) -->
+          <div id="financial-report-content" class="text-slate-800 max-w-4xl mx-auto">
+            <!-- Loaded dynamically depending on tab -->
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
+            <button onclick="printFinancialReport()" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-xl font-bold text-xs transition shadow-md shadow-slate-800/10">
+              <i class="fas fa-print"></i> Cetak Laporan Keuangan
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- MODAL: EDIT KAMAR -->
+  <div id="edit-room-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-md w-full animate-fade-in relative flex flex-col text-slate-800">
+      <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-600 rounded-t-2xl"></div>
+      
+      <div class="flex justify-between items-center mt-2 mb-6">
+        <span class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Edit Unit Kamar</span>
+        <button onclick="closeEditRoomModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"><i class="fas fa-times"></i></button>
+      </div>
+
+      <form id="form-edit-kamar" class="space-y-4">
+        <input type="hidden" id="edit-old-noKamar">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
+          <input type="text" id="edit-noKamar" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Kamar</label>
+          <input type="text" id="edit-tipe" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Bulanan (Rp)</label>
+            <input type="number" id="edit-hargaBulanan" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Harian (Rp)</label>
+            <input type="number" id="edit-hargaHarian" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+          </div>
+        </div>
+        <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm mt-2">
+          Simpan Perubahan
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT PENYEWA (CRUD UPDATE) -->
+  <div id="edit-tenant-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-md w-full animate-fade-in relative flex flex-col text-slate-800">
+      <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-600 rounded-t-2xl"></div>
+      
+      <div class="flex justify-between items-center mt-2 mb-6">
+        <span class="text-[10px] font-black text-rose-600 uppercase tracking-widest">Edit Data Penyewa</span>
+        <button onclick="closeEditTenantModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"><i class="fas fa-times"></i></button>
+      </div>
+
+      <form id="form-edit-penyewa" class="space-y-4">
+        <input type="hidden" id="edit-tenant-id">
+        <input type="hidden" id="edit-tenant-old-kamar">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+          <input type="text" id="edit-tenant-nama" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No HP (WhatsApp)</label>
+          <input type="tel" id="edit-tenant-hp" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Pindah Suite Kamar</label>
+            <select id="edit-tenant-kamar" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white">
+              <!-- Loaded dynamically to show available + current room -->
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Check-In</label>
+            <input type="date" id="edit-tenant-tglmasuk" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Status Kontrak</label>
+            <select id="edit-tenant-status" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+              <option value="Aktif">Aktif</option>
+              <option value="Keluar">Keluar (Check-out)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tenggat Jatuh Tempo</label>
+            <input type="date" id="edit-tenant-tempo" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition font-bold">
+          </div>
+        </div>
+        <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm mt-2">
+          Simpan Pembaruan
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: RECEIPT PREVIEW -->
+  <div id="receipt-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-md w-full animate-fade-in relative flex flex-col text-slate-800">
+      <!-- Receipt Decorative Notch -->
+      <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-600 rounded-t-2xl"></div>
+      
+      <div class="flex justify-between items-center mt-2 mb-6">
+        <span class="text-[10px] font-black text-rose-600 uppercase tracking-widest">E-Receipt Premium Resmi</span>
+        <button onclick="closeReceiptModal()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"><i class="fas fa-times"></i></button>
+      </div>
+
+      <!-- Receipt Content Printable Area -->
+      <div id="receipt-print-area" class="border border-dashed border-slate-200 rounded-xl p-5 bg-slate-50 mb-6 text-slate-700">
+        <div class="text-center pb-4 border-b border-dashed border-slate-200">
+          <h4 class="font-black text-slate-900 text-lg tracking-wider">KOST HADE</h4>
+          <p class="text-[9px] text-rose-600 uppercase tracking-widest font-extrabold mt-0.5">EXCLUSIVITY AT ITS BEST</p>
+          <p class="text-[9px] text-slate-400 mt-1">Sleman, Yogyakarta - Indonesia</p>
+        </div>
+
+        <div class="py-4 space-y-2 text-xs border-b border-dashed border-slate-200">
+          <div class="flex justify-between"><span class="text-slate-400">Tgl Transaksi:</span><span id="rcp-tgl" class="font-semibold text-slate-800">-</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">No. Invoice:</span><span id="rcp-id" class="font-mono text-blue-600 font-bold">-</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Status Pembayaran:</span><span class="px-2.5 py-0.5 rounded text-[9px] bg-emerald-100 border border-emerald-200 text-emerald-700 font-black tracking-widest">VERIFIED</span></div>
+        </div>
+
+        <div class="py-4 space-y-2 text-xs">
+          <div class="flex justify-between"><span class="text-slate-400">Penyewa:</span><span id="rcp-nama" class="font-bold text-slate-900">-</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Unit Kamar:</span><span id="rcp-kamar" class="px-2 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-600 font-bold text-[9px]">-</span></div>
+          <div class="flex justify-between"><span class="text-slate-400">Keterangan:</span><span id="rcp-ket" class="text-slate-500 font-medium max-w-[180px] text-right truncate">-</span></div>
+        </div>
+
+        <div class="pt-4 border-t border-dashed border-slate-200 flex justify-between items-center">
+          <span class="text-slate-500 font-bold text-xs uppercase tracking-widest">TOTAL BAYAR</span>
+          <span id="rcp-total" class="font-black text-xl text-emerald-600">-</span>
+        </div>
+      </div>
+
+      <div class="flex gap-3">
+        <button onclick="printReceipt()" class="flex-1 bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3 rounded-xl font-bold transition flex items-center justify-center gap-2 text-sm shadow-md shadow-blue-500/10">
+          <i class="fas fa-print"></i> Cetak Struk
+        </button>
+        <button onclick="closeReceiptModal()" class="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-semibold hover:bg-slate-200 transition text-sm">
+          Tutup
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Cached Data and Navigation States
+    let cachedData = null;
+    let loadingTimeout;
+    let selectedRoomFilter = 'semua';
+    let selectedOpsFilter = 'Semua';
+    let activeReportTab = 'rugi-laba';
+    
+    // Custom Callback Placeholder for Confirmation Modal Actions
+    let modalConfirmCallback = null;
+
+    // Categories for general Ledger
+    const categoryOptions = {
+      Pengeluaran: [
+        "Listrik & Air",
+        "Gaji Karyawan",
+        "Wifi & Internet",
+        "Perawatan Kamar (Maintenance)",
+        "Kebersihan & Peralatan",
+        "Air Minum & Sembako",
+        "Pajak & Perizinan",
+        "Biaya Lain-lain"
+      ],
+      Pendapatan: [
+        "Kantin / Vending Machine",
+        "Penjualan Barang Bekas",
+        "Deposit Hangus",
+        "Kemitraan Jasa Laundry",
+        "Pemasukan Lain-lain"
+      ],
+      Neraca: [
+        "Pembelian Aset Tetap",
+        "Penyusutan Aset Tetap",
+        "Penerimaan Deposit Jaminan",
+        "Pengembalian Deposit Jaminan",
+        "Setoran Modal Pemilik",
+        "Penarikan Prive Pemilik"
+      ]
+    };
+
+    // CUSTOM ALERT SYSTEM WITH SUCCESS/ERROR/CONFIRM FLAVORS
+    function showCustomAlert(title, message, isSuccess = true, isConfirm = false, onConfirm = null) {
+      const modal = document.getElementById('custom-modal');
+      const icon = document.getElementById('modal-icon');
+      const tElement = document.getElementById('modal-title');
+      const mElement = document.getElementById('modal-message');
+      const decor = document.getElementById('modal-decor');
+      const cancelBtn = document.getElementById('modal-cancel-btn');
+      const confirmBtn = document.getElementById('modal-confirm-btn');
+
+      tElement.innerText = title;
+      mElement.innerText = message;
+      modalConfirmCallback = onConfirm;
+
+      if (isConfirm) {
+        decor.className = "absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 to-rose-600";
+        icon.className = "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl bg-blue-50 text-blue-500 border border-blue-100 shadow-inner";
+        icon.innerHTML = '<i class="fas fa-exclamation-triangle text-rose-500"></i>';
+        cancelBtn.classList.remove('hidden');
+        confirmBtn.className = "flex-1 bg-gradient-to-r from-blue-600 to-rose-600 text-white py-3 px-4 rounded-xl font-bold hover:from-blue-700 hover:to-rose-700 transition shadow-lg shadow-blue-500/10";
+        confirmBtn.innerText = "Konfirmasi";
+      } else if (isSuccess) {
+        decor.className = "absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500";
+        icon.className = "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-inner";
+        icon.innerHTML = '<i class="fas fa-check-circle"></i>';
+        cancelBtn.classList.add('hidden');
+        confirmBtn.className = "flex-1 bg-slate-800 text-white py-3 px-4 rounded-xl font-bold hover:bg-slate-900 transition";
+        confirmBtn.innerText = "OK";
+      } else {
+        decor.className = "absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-rose-500 to-rose-600";
+        icon.className = "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl bg-rose-50 text-rose-500 border border-rose-100 shadow-inner";
+        icon.innerHTML = '<i class="fas fa-times-circle"></i>';
+        cancelBtn.classList.add('hidden');
+        confirmBtn.className = "flex-1 bg-slate-800 text-white py-3 px-4 rounded-xl font-bold hover:bg-slate-900 transition";
+        confirmBtn.innerText = "OK";
+      }
+
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeModal() {
+      const modal = document.getElementById('custom-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    // Modal Confirmation Execution Hook
+    document.getElementById('modal-confirm-btn').addEventListener('click', () => {
+      if (modalConfirmCallback) {
+        modalConfirmCallback();
+        modalConfirmCallback = null;
+      }
+    });
+
+    function showLoading(show) { 
+      const loader = document.getElementById('loading');
+      if (show) {
+        loader.classList.remove('hidden');
+        clearTimeout(loadingTimeout);
+        loadingTimeout = setTimeout(() => {
+          if (!loader.classList.contains('hidden')) {
+            loader.classList.add('hidden');
+            showCustomAlert("Enkripsi Timeout", "⚠️ Saluran Google Workspace API tidak merespons dalam siklus standar. Memuat instans lokal offline.", false);
+          }
+        }, 12000);
+      } else {
+        loader.classList.add('hidden');
+        clearTimeout(loadingTimeout);
+      }
+    }
+
+    function handleError(e) { 
+      showLoading(false); 
+      showCustomAlert("Error Server", e.message || e, false); 
+    }
+
+    function toggleRoomForm() { 
+      document.getElementById('room-form-container').classList.toggle('hidden'); 
+    }
+
+    // POPULATE CATEGORY DROPDOWN DYNAMICALLY
+    function handleTransTypeChange() {
+      const type = document.getElementById('trans-jenis').value;
+      const selectKategori = document.getElementById('trans-kategori');
+      selectKategori.innerHTML = categoryOptions[type].map(cat => `<option value="${cat}">${cat}</option>`).join('');
+    }
+
+    function showSection(sectionId, btn) {
+      document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
+      document.getElementById('sec-' + sectionId).classList.remove('hidden');
+      
+      document.querySelectorAll('#sidebar-nav button').forEach(b => b.classList.remove('nav-btn-active'));
+      if(btn) btn.classList.add('nav-btn-active');
+      
+      // Auto-load related dependencies based on selection
+      if(sectionId === 'penyewa') {
+        loadAvailableRooms();
+        loadAllTenantsList();
+      }
+      if(sectionId === 'pembayaran') {
+        loadActiveTenants();
+        loadPaymentsHistory();
+      }
+      if(sectionId === 'transaksi-ops') {
+        // Default values for Transaction page
+        document.getElementById('trans-tanggal').value = new Date().toISOString().split('T')[0];
+        handleTransTypeChange();
+        loadLedgerData();
+      }
+      if(sectionId === 'dashboard') {
+        loadDashboard();
+      }
+      if(sectionId === 'kamar') {
+        loadDashboard(); // Refresh kamar structure
+      }
+      if(sectionId === 'laporan') {
+        generateSelectedReport();
+      }
+    }
+
+    function syncData() {
+      cachedData = null;
+      loadDashboard();
+      showCustomAlert("Sinkronisasi Sukses", "Data cloud & cache eksklusif didekripsi secara real-time.", true);
+    }
+
+    function loadDashboard() {
+      if (cachedData) {
+        renderDashboard(cachedData);
+        return;
+      }
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          cachedData = JSON.parse(responseString);
+          renderDashboard(cachedData);
+          showLoading(false);
+        }).getDashboardData();
+    }
+
+    // FINANCIAL REPORTS TAB SWITCHER & CALCULATOR
+    function switchReportTab(reportType) {
+      activeReportTab = reportType;
+      
+      document.querySelectorAll('#sec-laporan button[id^="tab-rep-"]').forEach(btn => {
+        btn.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+        btn.classList.add('text-slate-500', 'hover:text-slate-800');
+      });
+      
+      const activeBtn = document.getElementById('tab-rep-' + reportType);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-500', 'hover:text-slate-800');
+        activeBtn.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+      }
+      generateSelectedReport();
+    }
+
+    // Date parsing helper to extract standard JavaScript Date Month and Year indices
+    function parseDateObj(dateStr) {
+      // Handles formats like: "28/05/2026", "2026-05-28", "28-05-2026"
+      if (!dateStr) return { month: 0, year: 0 };
+      let dParts = [];
+      if (dateStr.includes('/')) {
+        dParts = dateStr.split('/');
+        return { month: parseInt(dParts[1]) || 0, year: parseInt(dParts[2]) || 0 };
+      } else if (dateStr.includes('-')) {
+        dParts = dateStr.split('-');
+        if (dParts[0].length === 4) {
+          // YYYY-MM-DD
+          return { month: parseInt(dParts[1]) || 0, year: parseInt(dParts[0]) || 0 };
+        } else {
+          // DD-MM-YYYY
+          return { month: parseInt(dParts[1]) || 0, year: parseInt(dParts[2]) || 0 };
+        }
+      }
+      return { month: 0, year: 0 };
+    }
+
+    function generateSelectedReport() {
+      const selMonth = parseInt(document.getElementById('filter-laporan-bulan').value);
+      const selYear = parseInt(document.getElementById('filter-laporan-tahun').value);
+      
+      const targetDiv = document.getElementById('financial-report-content');
+      
+      // Load and consolidate transaction arrays
+      const tenantPayments = JSON.parse(localStorage.getItem('kost_hade_transaksi')) || [];
+      const opsTransactions = JSON.parse(localStorage.getItem('kost_hade_ops_transaksi')) || [];
+      const rooms = JSON.parse(localStorage.getItem('kost_hade_kamar')) || [];
+      const tenants = JSON.parse(localStorage.getItem('kost_hade_penyewa')) || [];
+
+      // MONTH NAMES ARRAY
+      const indonesianMonths = [
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+      ];
+
+      // FILTER DATA FOR THE SELECTED MONTH & YEAR
+      const monthlyTenantPayments = tenantPayments.filter(p => {
+        const parsed = parseDateObj(p[0]);
+        return parsed.month === selMonth && parsed.year === selYear;
+      });
+
+      const monthlyOps = opsTransactions.filter(o => {
+        const parsed = parseDateObj(o[1]);
+        return parsed.month === selMonth && parsed.year === selYear;
+      });
+
+      // CALCULATE ACCUMULATED HISTORICAL CASH BALANCES (for starting balance metrics)
+      let cumulativeCashPrior = 0;
+      
+      // Tenant payments prior
+      tenantPayments.forEach(p => {
+        const parsed = parseDateObj(p[0]);
+        const paymentDate = new Date(parsed.year, parsed.month - 1, 1);
+        const targetDate = new Date(selYear, selMonth - 1, 1);
+        if (paymentDate < targetDate) {
+          cumulativeCashPrior += (Number(String(p[3]).replace(/[^0-9]/g, '')) || 0);
+        }
+      });
+
+      // Ops ledger prior
+      opsTransactions.forEach(o => {
+        const parsed = parseDateObj(o[1]);
+        const opsDate = new Date(parsed.year, parsed.month - 1, 1);
+        const targetDate = new Date(selYear, selMonth - 1, 1);
+        if (opsDate < targetDate) {
+          const val = Number(o[4]) || 0;
+          if (o[2] === 'Pendapatan') {
+            cumulativeCashPrior += val;
+          } else if (o[2] === 'Pengeluaran') {
+            cumulativeCashPrior -= val;
+          } else if (o[2] === 'Neraca') {
+            if (o[3] === "Setoran Modal Pemilik" || o[3] === "Penerimaan Deposit Jaminan") {
+              cumulativeCashPrior += val;
+            } else if (o[3] === "Pembelian Aset Tetap" || o[3] === "Penarikan Prive Pemilik" || o[3] === "Pengembalian Deposit Jaminan") {
+              cumulativeCashPrior -= val;
+            }
+          }
+        }
+      });
+
+      // Calculate totals for active selected month
+      const activeMonthlyRentIncome = monthlyTenantPayments.reduce((acc, curr) => acc + (Number(String(curr[3]).replace(/[^0-9]/g, '')) || 0), 0);
+      const activeMonthlyOpsIncome = monthlyOps.filter(o => o[2] === 'Pendapatan').reduce((acc, curr) => acc + (Number(curr[4]) || 0), 0);
+      const activeMonthlyOpsExpenses = monthlyOps.filter(o => o[2] === 'Pengeluaran').reduce((acc, curr) => acc + (Number(curr[4]) || 0), 0);
+      
+      // Monthly Neraca cash-flow additions
+      let activeMonthlyNeracaInflow = 0;
+      let activeMonthlyNeracaOutflow = 0;
+      monthlyOps.filter(o => o[2] === 'Neraca').forEach(o => {
+        const val = Number(o[4]) || 0;
+        if (o[3] === "Setoran Modal Pemilik" || o[3] === "Penerimaan Deposit Jaminan") {
+          activeMonthlyNeracaInflow += val;
+        } else if (o[3] === "Pembelian Aset Tetap" || o[3] === "Penarikan Prive Pemilik" || o[3] === "Pengembalian Deposit Jaminan") {
+          activeMonthlyNeracaOutflow += val;
+        }
+      });
+
+      const totalMonthlyIncome = activeMonthlyRentIncome + activeMonthlyOpsIncome;
+      const netMonthlyIncome = totalMonthlyIncome - activeMonthlyOpsExpenses;
+
+      // Total Cashflow for current month
+      const totalMonthlyInflow = activeMonthlyRentIncome + activeMonthlyOpsIncome + activeMonthlyNeracaInflow;
+      const totalMonthlyOutflow = activeMonthlyOpsExpenses + activeMonthlyNeracaOutflow;
+      const netMonthlyCashFlow = totalMonthlyInflow - totalMonthlyOutflow;
+
+      // Cumulative Cash up to END of current month
+      const cumulativeCashEnd = cumulativeCashPrior + netMonthlyCashFlow;
+
+      if (activeReportTab === 'rugi-laba') {
+        // --- 1. LAPORAN RUGI LABA ---
+        // Group Expenses by Categories
+        const expenseGroups = {};
+        categoryOptions.Pengeluaran.forEach(cat => expenseGroups[cat] = 0);
+        monthlyOps.filter(o => o[2] === 'Pengeluaran').forEach(o => {
+          if (expenseGroups[o[3]] !== undefined) {
+            expenseGroups[o[3]] += Number(o[4]) || 0;
+          } else {
+            expenseGroups["Biaya Lain-lain"] += Number(o[4]) || 0;
+          }
+        });
+
+        targetDiv.innerHTML = `
+          <div class="text-center mb-8 border-b border-slate-100 pb-6">
+            <h3 class="font-extrabold text-slate-900 text-xl">Laporan Laba Rugi Bulanan</h3>
+            <p class="text-xs text-rose-500 font-extrabold uppercase tracking-widest mt-1">Kost Hade Exclusive</p>
+            <p class="text-sm text-slate-500 mt-2 font-medium">Periode: ${indonesianMonths[selMonth - 1]} ${selYear}</p>
+          </div>
+
+          <div class="space-y-6 text-sm">
+            <!-- PENDAPATAN SECTION -->
+            <div>
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">I. Pendapatan Operasional</h4>
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
+                <span class="text-slate-600 font-medium">Pendapatan Sewa Kamar</span>
+                <span class="font-bold text-slate-900">Rp ${activeMonthlyRentIncome.toLocaleString()}</span>
+              </div>
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg border-b border-slate-100">
+                <span class="text-slate-600 font-medium">Pendapatan Lain-lain (Auxiliary)</span>
+                <span class="font-bold text-slate-900">Rp ${activeMonthlyOpsIncome.toLocaleString()}</span>
+              </div>
+              <div class="flex justify-between py-3 px-2 bg-emerald-50 text-emerald-800 rounded-xl font-extrabold mt-3">
+                <span>TOTAL PENDAPATAN</span>
+                <span>Rp ${totalMonthlyIncome.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <!-- BEBAN / BIAYA SECTION -->
+            <div>
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">II. Beban Operasional</h4>
+              <div class="space-y-1">
+                ${Object.entries(expenseGroups).map(([cat, val]) => `
+                  <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
+                    <span class="text-slate-500">${cat}</span>
+                    <span class="font-semibold text-slate-800">Rp ${val.toLocaleString()}</span>
+                  </div>
+                `).join('')}
+              </div>
+              <div class="flex justify-between py-3 px-2 bg-rose-50 text-rose-800 rounded-xl font-extrabold mt-4">
+                <span>TOTAL BEBAN OPERASIONAL</span>
+                <span>Rp ${activeMonthlyOpsExpenses.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <!-- NET INCOME SUMMARY -->
+            <div class="pt-4 border-t border-slate-300">
+              <div class="flex justify-between py-4 px-3 ${netMonthlyIncome >= 0 ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white' : 'bg-rose-600 text-white'} rounded-2xl font-black text-base shadow-md">
+                <span>LABA (RUGI) BERSIH</span>
+                <span class="double-underline text-lg">Rp ${netMonthlyIncome.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (activeReportTab === 'arus-kas') {
+        // --- 2. LAPORAN ARUS KAS ---
+        targetDiv.innerHTML = `
+          <div class="text-center mb-8 border-b border-slate-100 pb-6">
+            <h3 class="font-extrabold text-slate-900 text-xl">Laporan Arus Kas Bulanan</h3>
+            <p class="text-xs text-rose-500 font-extrabold uppercase tracking-widest mt-1">Kost Hade Exclusive</p>
+            <p class="text-sm text-slate-500 mt-2 font-medium">Periode: ${indonesianMonths[selMonth - 1]} ${selYear}</p>
+          </div>
+
+          <div class="space-y-6 text-sm">
+            <!-- ARUS MASUK -->
+            <div>
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">Arus Kas Masuk (Inflow)</h4>
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
+                <span class="text-slate-600 font-medium">Penerimaan Pembayaran Sewa Kamar</span>
+                <span class="font-semibold text-slate-800">Rp ${activeMonthlyRentIncome.toLocaleString()}</span>
+              </div>
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
+                <span class="text-slate-600 font-medium">Penerimaan Pendapatan Lain-lain</span>
+                <span class="font-semibold text-slate-800">Rp ${activeMonthlyOpsIncome.toLocaleString()}</span>
+              </div>
+              ${activeMonthlyNeracaInflow > 0 ? `
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg text-blue-600">
+                <span class="font-medium">Penerimaan Modal / Deposit (Neraca)</span>
+                <span class="font-semibold">Rp ${activeMonthlyNeracaInflow.toLocaleString()}</span>
+              </div>` : ''}
+              <div class="flex justify-between py-2 px-2 font-bold text-emerald-600 border-t border-slate-100 mt-2">
+                <span>Subtotal Kas Masuk</span>
+                <span>Rp ${totalMonthlyInflow.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <!-- ARUS KELUAR -->
+            <div>
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">Arus Kas Keluar (Outflow)</h4>
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
+                <span class="text-slate-600 font-medium">Pembayaran Beban Operasional Bulanan</span>
+                <span class="font-semibold text-rose-600">Rp ${activeMonthlyOpsExpenses.toLocaleString()}</span>
+              </div>
+              ${activeMonthlyNeracaOutflow > 0 ? `
+              <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg text-rose-500">
+                <span class="font-medium">Pembelian Aset / Prive / Refund (Neraca)</span>
+                <span class="font-semibold">Rp ${activeMonthlyNeracaOutflow.toLocaleString()}</span>
+              </div>` : ''}
+              <div class="flex justify-between py-2 px-2 font-bold text-rose-600 border-t border-slate-100 mt-2">
+                <span>Subtotal Kas Keluar</span>
+                <span>Rp ${totalMonthlyOutflow.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <!-- SINKRONISASI KAS AWAL DAN AKHIR -->
+            <div>
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">Konsolidasi Kas Berkala</h4>
+              
+              <div class="space-y-2 pt-2">
+                <div class="flex justify-between py-2 px-2 bg-slate-50 rounded-lg">
+                  <span class="text-slate-500 font-medium">Arus Kas Bersih (Kenaikan / Penurunan Kas)</span>
+                  <span class="font-bold ${netMonthlyCashFlow >= 0 ? 'text-emerald-600' : 'text-rose-600'}">
+                    Rp ${netMonthlyCashFlow.toLocaleString()}
+                  </span>
+                </div>
+                
+                <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
+                  <span class="text-slate-500">Saldo Kas Awal Periode</span>
+                  <span class="font-semibold text-slate-800">Rp ${cumulativeCashPrior.toLocaleString()}</span>
+                </div>
+
+                <div class="flex justify-between py-3.5 px-3 bg-slate-800 text-white rounded-xl font-bold text-sm">
+                  <span>SALDO KAS AKHIR PERIODE</span>
+                  <span class="double-underline">Rp ${cumulativeCashEnd.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      } else if (activeReportTab === 'neraca') {
+        // --- 3. LAPORAN NERACA (BALANCE SHEET) ---
+        // Base starting values
+        let assetLandBuildingVal = 1200000000; // 1.2 Billion IDR Base Land & Building Valuation
+        let accumulatedDepreciation = -50000000; // Accumulated Depreciation 50m IDR
+        const activeTenantsCount = tenants.filter(p => p[5] === 'Aktif').length;
+        let depositLiabilities = activeTenantsCount * 500000;
+        let startingEquityCapital = 1100000000; // Owner Capital 1.1 Billion IDR
+
+        // Dynamic adjustment based on all historical Neraca transactions up to the target date
+        opsTransactions.forEach(o => {
+          const parsed = parseDateObj(o[1]);
+          const oDate = new Date(parsed.year, parsed.month - 1, 1);
+          const targetDate = new Date(selYear, selMonth - 1, 1);
+          
+          if (oDate <= targetDate && o[2] === 'Neraca') {
+            const val = Number(o[4]) || 0;
+            if (o[3] === "Pembelian Aset Tetap") {
+              assetLandBuildingVal += val;
+            } else if (o[3] === "Penyusutan Aset Tetap") {
+              accumulatedDepreciation -= val; // Increase depreciation reserve
+            } else if (o[3] === "Penerimaan Deposit Jaminan") {
+              depositLiabilities += val;
+            } else if (o[3] === "Pengembalian Deposit Jaminan") {
+              depositLiabilities -= val;
+            } else if (o[3] === "Setoran Modal Pemilik") {
+              startingEquityCapital += val;
+            } else if (o[3] === "Penarikan Prive Pemilik") {
+              startingEquityCapital -= val;
+            }
+          }
+        });
+
+        const netFixedAssets = assetLandBuildingVal + accumulatedDepreciation;
+        const totalAssets = cumulativeCashEnd + netFixedAssets;
+
+        // Balance Equation: Equity = Assets - Liabilities
+        const retainedEarnings = totalAssets - depositLiabilities - startingEquityCapital;
+        const totalEquity = startingEquityCapital + retainedEarnings;
+        const totalLiabilitiesEquity = depositLiabilities + totalEquity;
+
+        targetDiv.innerHTML = `
+          <div class="text-center mb-8 border-b border-slate-100 pb-6">
+            <h3 class="font-extrabold text-slate-900 text-xl">Laporan Posisi Keuangan (Neraca)</h3>
+            <p class="text-xs text-rose-500 font-extrabold uppercase tracking-widest mt-1">Kost Hade Exclusive</p>
+            <p class="text-sm text-slate-500 mt-2 font-medium">Periode: S.d ${indonesianMonths[selMonth - 1]} ${selYear}</p>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm">
+            <!-- ASSETS SIDE -->
+            <div class="space-y-4">
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1.5 uppercase tracking-wider text-xs">SISI AKTIVA (ASET)</h4>
+              
+              <!-- ASET LANCAR -->
+              <div>
+                <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">A. Aset Lancar</p>
+                <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
+                  <span>Kas dan Setara Kas</span>
+                  <span class="font-semibold text-slate-800">Rp ${cumulativeCashEnd.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
+                  <span>Total Aset Lancar</span>
+                  <span>Rp ${cumulativeCashEnd.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <!-- ASET TETAP -->
+              <div>
+                <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">B. Aset Tetap</p>
+                <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
+                  <span>Bangunan & Inventaris Guesthouse</span>
+                  <span class="font-semibold text-slate-800">Rp ${assetLandBuildingVal.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg text-rose-600">
+                  <span>Akumulasi Penyusutan Aset Tetap</span>
+                  <span class="font-semibold">Rp ${accumulatedDepreciation.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
+                  <span>Total Aset Tetap (Net)</span>
+                  <span>Rp ${netFixedAssets.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div class="flex justify-between py-3 px-3 bg-blue-50 text-blue-900 rounded-xl font-extrabold text-sm border border-blue-100">
+                <span>TOTAL AKTIVA (ASET)</span>
+                <span>Rp ${totalAssets.toLocaleString()}</span>
+              </div>
+            </div>
+
+            <!-- LIABILITIES & EQUITY SIDE -->
+            <div class="space-y-4">
+              <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1.5 uppercase tracking-wider text-xs">SISI PASIVA (KEWAJIBAN & EKUITAS)</h4>
+              
+              <!-- LIABILITIES -->
+              <div>
+                <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">A. Kewajiban Jangka Pendek</p>
+                <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
+                  <span>Kewajiban Deposit Jaminan Penghuni</span>
+                  <span class="font-semibold text-slate-800">Rp ${depositLiabilities.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
+                  <span>Total Kewajiban</span>
+                  <span>Rp ${depositLiabilities.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <!-- OWNER EQUITY -->
+              <div>
+                <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">B. Ekuitas Pemilik</p>
+                <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
+                  <span>Modal Disetor Pemilik</span>
+                  <span class="font-semibold text-slate-800">Rp ${startingEquityCapital.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
+                  <span>Laba Ditahan & Berjalan</span>
+                  <span class="font-semibold text-slate-800">Rp ${retainedEarnings.toLocaleString()}</span>
+                </div>
+                <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
+                  <span>Total Ekuitas</span>
+                  <span>Rp ${totalEquity.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div class="flex justify-between py-3 px-3 bg-emerald-50 text-emerald-900 rounded-xl font-extrabold text-sm border border-emerald-100">
+                <span>TOTAL PASIVA (KEWAJIBAN & EKUITAS)</span>
+                <span>Rp ${totalLiabilitiesEquity.toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- BALANCED INDICATOR STAMP -->
+          <div class="mt-8 flex justify-center">
+            <span class="px-4 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
+              <i class="fas fa-check-double animate-pulse"></i> Balance sheet verified
+            </span>
+          </div>
+        `;
+      }
+    }
+
+    // PRINT INDIVIDUAL REPORTS TEMPLATES FLUIDLY
+    function printFinancialReport() {
+      const printContents = document.getElementById('financial-report-content').innerHTML;
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Cetak Laporan Keuangan Kost Hade</title>
+            <style>
+              body { 
+                font-family: 'Courier New', Courier, monospace; 
+                padding: 40px; 
+                font-size: 13px; 
+                color: #000; 
+                background: #fff; 
+              }
+              .text-center { text-align: center; }
+              .border-b { border-bottom: 1px solid #ccc; }
+              .pb-6 { padding-bottom: 20px; }
+              .mb-8 { margin-bottom: 30px; }
+              .space-y-6 > div { margin-bottom: 25px; }
+              .font-bold { font-weight: bold; }
+              .font-extrabold { font-weight: 800; }
+              .text-xl { font-size: 20px; }
+              .text-xs { font-size: 11px; }
+              .flex { display: flex; justify-content: space-between; }
+              .py-2 { padding-top: 6px; padding-bottom: 6px; }
+              .py-3 { padding-top: 10px; padding-bottom: 10px; }
+              .bg-emerald-50, .bg-rose-50, .bg-slate-50, .bg-blue-50 { background-color: #fafafa !important; border: 1px solid #000; padding: 10px; }
+              .double-underline { 
+                border-bottom: 3px double #000; 
+              }
+              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+              .border-t { border-top: 1px solid #000; }
+            </style>
+          </head>
+          <body onload="window.print(); window.close();">
+            ${printContents}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+
+    // RENDERS LIVE DYNAMIC LEASE BILLING ALERT BOXES
+    function renderBillingAlerts(penyewaList) {
+      const container = document.getElementById('billing-alerts-container');
+      const listElement = document.getElementById('billing-alerts-list');
+      listElement.innerHTML = '';
+
+      let hasAlerts = false;
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      penyewaList.forEach(p => {
+        // Only trigger alerts for active tenants
+        if (p[5] !== 'Aktif') return;
+
+        // p[6] stores 'jatuhTempo' in format 'YYYY-MM-DD'
+        const dueStr = p[6];
+        if (!dueStr) return;
+
+        const dueDate = new Date(dueStr);
+        dueDate.setHours(0,0,0,0);
+
+        // Difference in time
+        const diffTime = dueDate.getTime() - today.getTime();
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays < 0) {
+          // Overdue (Menunggak)
+          hasAlerts = true;
+          const lateDays = Math.abs(diffDays);
+          listElement.innerHTML += `
+            <div class="flex items-center justify-between p-4 rounded-2xl bg-rose-50 border border-rose-100 animate-fade-in">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-rose-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-rose-500/10">
+                  <i class="fas fa-exclamation-triangle"></i>
+                </div>
+                <div>
+                  <h4 class="font-extrabold text-slate-900 text-xs md:text-sm">${p[1]} <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[9px] font-black uppercase">${p[3]}</span></h4>
+                  <p class="text-[11px] text-rose-600 font-bold mt-0.5"><i class="far fa-clock mr-1"></i>Status: Menunggak ${lateDays} Hari (Batas: ${dueStr})</p>
+                </div>
+              </div>
+              <button onclick="quickPayPort('${p[1]}', '${p[3]}')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition shadow-sm">
+                Catat Bayar
+              </button>
+            </div>
+          `;
+        } else if (diffDays <= 5) {
+          // Closing due date (Mendekati Jatuh Tempo)
+          hasAlerts = true;
+          listElement.innerHTML += `
+            <div class="flex items-center justify-between p-4 rounded-2xl bg-amber-50 border border-amber-100 animate-fade-in">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center text-white shrink-0 shadow-md shadow-amber-500/10">
+                  <i class="fas fa-bell"></i>
+                </div>
+                <div>
+                  <h4 class="font-extrabold text-slate-900 text-xs md:text-sm">${p[1]} <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-black uppercase">${p[3]}</span></h4>
+                  <p class="text-[11px] text-amber-600 font-bold mt-0.5"><i class="far fa-hourglass mr-1"></i>Jatuh Tempo: Sisa ${diffDays} Hari (Batas: ${dueStr})</p>
+                </div>
+              </div>
+              <button onclick="quickPayPort('${p[1]}', '${p[3]}')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition shadow-sm">
+                Catat Bayar
+              </button>
+            </div>
+          `;
+        }
+      });
+
+      if (hasAlerts) {
+        container.classList.remove('hidden');
+      } else {
+        container.classList.add('hidden');
+      }
+    }
+
+    // PORT TO QUICK PAYMENT SCENE
+    function quickPayPort(tenantName, targetRoom) {
+      showSection('pembayaran', document.querySelectorAll('#sidebar-nav button')[3]);
+      setTimeout(() => {
+        const selectPenyewa = document.getElementById('select-penyewa');
+        for (let i = 0; i < selectPenyewa.options.length; i++) {
+          if (selectPenyewa.options[i].value === tenantName) {
+            selectPenyewa.selectedIndex = i;
+            break;
+          }
+        }
+        handlePenyewaChange();
+      }, 300);
+    }
+
+    function renderDashboard(data) {
+      document.getElementById('stat-total-kamar').innerText = data.stats.totalKamar;
+      document.getElementById('stat-kamar-terisi').innerText = data.stats.kamarTerisi;
+      document.getElementById('stat-total-penyewa').innerText = data.stats.totalPenyewa;
+      
+      // Sisa Saldo Kas (Net Profit)
+      document.getElementById('stat-pendapatan').innerText = "Rp " + data.stats.sisaKas.toLocaleString();
+      
+      // Unified financial summary panel updates
+      document.getElementById('sum-total-pendapatan').innerText = "Rp " + data.stats.totalPendapatan.toLocaleString();
+      document.getElementById('sum-total-pengeluaran').innerText = "Rp " + data.stats.totalPengeluaran.toLocaleString();
+      
+      // Calculate & update occupancy percentages & bars
+      const rawPercentage = data.stats.totalKamar > 0 ? (data.stats.kamarTerisi / data.stats.totalKamar) * 100 : 0;
+      const roundedPercentage = Math.round(rawPercentage);
+      document.getElementById('occupancy-bar').style.width = roundedPercentage + "%";
+      document.getElementById('occupancy-percentage').innerText = roundedPercentage + "%";
+
+      // Render Billing/Arrears Alert banners dynamically
+      renderBillingAlerts(data.penyewa);
+
+      // Render Dashboard Transaction Table
+      const tbody = document.getElementById('table-transaksi');
+      if (data.transaksi.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400 text-sm italic">Belum ada riwayat transaksi pembayaran digital.</td></tr>`;
+      } else {
+        tbody.innerHTML = data.transaksi.map((t, idx) => {
+          let angkaBersih = String(t[3]).replace(/[^0-9]/g, '');
+          return `
+            <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700">
+              <td class="py-3 px-6 text-center font-bold text-slate-400 text-xs">${idx + 1}</td>
+              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">${t[0]}</td>
+              <td class="py-3 px-4 font-bold text-xs md:text-sm text-slate-900">${t[1]}</td>
+              <td class="py-3 px-4"><span class="bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tight">${t[2]}</span></td>
+              <td class="py-3 px-4 text-emerald-600 font-extrabold text-xs md:text-sm whitespace-nowrap">Rp ${Number(angkaBersih).toLocaleString()}</td>
+              <td class="py-3 px-4 text-xs text-slate-500 max-w-[180px] truncate" title="${t[4]}">${t[4]}</td>
+              <td class="py-3 px-6 text-center">
+                <button onclick="viewReceipt('${t[0]}', '${t[1]}', '${t[2]}', ${angkaBersih}, '${t[4]}')" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-rose-600 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat Struk">
+                  <i class="fas fa-file-invoice text-xs"></i>
+                </button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+      
+      // Render Room Grids
+      renderRoomCards(data.kamar);
+    }
+
+    function renderRoomCards(kamarList) {
+      const grid = document.getElementById('grid-kamar');
+      
+      // Filter the UI list according to chosen filter
+      const filtered = kamarList.filter(k => {
+        if (selectedRoomFilter === 'semua') return true;
+        return k[4] === selectedRoomFilter;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-16 text-center bg-white border border-slate-100 rounded-3xl text-slate-400 text-sm italic"><i class="fas fa-door-closed text-3xl mb-3 block text-slate-300"></i>Tidak ada unit suite dalam kriteria penyaringan ini.</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(k => {
+        let bulananClean = String(k[2]).replace(/[^0-9]/g, '');
+        let harianClean = String(k[3]).replace(/[^0-9]/g, '');
+        const isOccupied = k[4] === 'Terisi';
+        
+        return `
+          <div class="bg-white p-5 rounded-2xl shadow-sm border-t-4 ${isOccupied ? 'border-t-blue-500' : 'border-t-rose-500'} transition duration-250 hover:shadow-md flex flex-col justify-between h-52 premium-card border border-slate-100">
+            <div>
+              <div class="flex justify-between items-center mb-3">
+                <span class="text-xl font-black text-slate-800">${k[0]}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${isOccupied ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}">${k[4]}</span>
+              </div>
+              <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">${k[1]}</p>
+              <div class="space-y-1">
+                <p class="text-xs font-semibold text-slate-500">Bln: <span class="text-rose-600 font-extrabold text-sm">Rp ${Number(bulananClean).toLocaleString()}</span></p>
+                <p class="text-xs font-semibold text-slate-500">Har: <span class="text-blue-600 font-extrabold text-sm">Rp ${Number(harianClean).toLocaleString()}</span></p>
+              </div>
+            </div>
+            <div class="pt-3 border-t border-slate-100 text-xs flex justify-between items-center mt-3">
+              <div class="flex-1 min-w-0 pr-2">
+                ${isOccupied 
+                  ? `<p class="text-slate-600 font-semibold truncate" title="${k[5]}"><i class="fas fa-user-circle mr-1.5 text-blue-500"></i>${k[5]}</p>` 
+                  : `<span class="text-rose-500 italic font-medium"><i class="fas fa-check-circle mr-1 text-rose-500"></i> Siap Disewa</span>`}
+              </div>
+              <div class="flex gap-1.5 shrink-0">
+                <button onclick="openEditRoomModal('${k[0]}', '${k[1]}', '${k[2]}', '${k[3]}')" class="w-7 h-7 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Edit Kamar">
+                  <i class="fas fa-edit text-[10px]"></i>
+                </button>
+                <button onclick="promptDeleteRoom('${k[0]}', '${k[4]}')" class="w-7 h-7 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Hapus Kamar">
+                  <i class="fas fa-trash-alt text-[10px]"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function filterRoomCards(type) {
+      selectedRoomFilter = type;
+      document.querySelectorAll('#sec-kamar button[id^="btn-filter-"]').forEach(btn => {
+        btn.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+        btn.classList.add('text-slate-500', 'hover:text-slate-800');
+      });
+      const activeBtn = document.getElementById('btn-filter-' + type.toLowerCase());
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-500', 'hover:text-slate-800');
+        activeBtn.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+      }
+      if (cachedData) renderRoomCards(cachedData.kamar);
+    }
+
+    function loadAvailableRooms() {
+      if (cachedData) {
+        const rooms = cachedData.kamar.filter(k => k[4] === 'Tersedia').map(k => k[0]);
+        renderAvailableRooms(rooms);
+        return;
+      }
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const rooms = JSON.parse(responseString);
+          renderAvailableRooms(rooms);
+          showLoading(false);
+        }).getAvailableRooms();
+    }
+
+    function renderAvailableRooms(rooms) {
+      const select = document.getElementById('select-kamar');
+      select.innerHTML = rooms.length > 0 
+        ? '<option value="">-- Pilih Kamar --</option>' + rooms.map(r => `<option value="${r}">${r}</option>`).join('') 
+        : '<option value="">Semua Kamar Terisi</option>';
+    }
+
+    // LOAD ALL TENANTS LIST FOR TENANT TAB
+    function loadAllTenantsList() {
+      if (cachedData) {
+        renderTenantsList(cachedData.penyewa);
+        return;
+      }
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const data = JSON.parse(responseString);
+          renderTenantsList(data.penyewa);
+          showLoading(false);
+        }).getDashboardData();
+    }
+
+    function renderTenantsList(tenants) {
+      const tbody = document.getElementById('table-penyewa-list');
+      if (!tenants || tenants.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-slate-400 text-sm italic">Belum ada penyewa yang terdaftar.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = tenants.map(p => {
+        const statusActive = p[5] === 'Aktif';
+        // Clean telephone for WA links
+        let cleanHp = String(p[2]).trim().replace(/[^0-9]/g, '');
+        if (cleanHp.startsWith('0')) {
+          cleanHp = '62' + cleanHp.slice(1);
+        }
+        
+        // Custom Rent Reminder Text for WhatsApp
+        const waText = encodeURIComponent(`Halo ${p[1]},\nKami ingin menginformasikan terkait tagihan sewa bulanan Anda untuk Unit Kamar ${p[3]}. Pembayaran dapat segera diselesaikan melaui transfer atau tunai. Terima kasih.\n- Admin Kost Hade`);
+        const waLink = `https://wa.me/${cleanHp}?text=${waText}`;
+
+        return `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
+            <td class="py-4 px-6">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center font-bold text-slate-500 text-[10px] shrink-0 border border-slate-100">
+                  ${p[0].substring(0, 5)}
+                </div>
+                <div>
+                  <p class="font-extrabold text-slate-900 leading-tight">${p[1]}</p>
+                  <p class="text-[9px] text-slate-400 font-mono mt-0.5">${p[0]}</p>
+                </div>
+              </div>
+            </td>
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 font-black text-[10px] uppercase">${p[3]}</span>
+            </td>
+            <td class="py-4 px-4 font-medium text-slate-500">${p[2]}</td>
+            <td class="py-4 px-4 font-medium text-slate-400">
+              <div>${p[4]}</div>
+              ${p[6] ? `<div class="text-[9px] text-rose-500 font-bold mt-0.5">Tempo: ${p[6]}</div>` : ''}
+            </td>
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${statusActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-400 border border-slate-200'}">
+                ${p[5]}
+              </span>
+            </td>
+            <td class="py-4 px-6">
+              <div class="flex items-center justify-center gap-1.5">
+                <a href="${waLink}" target="_blank" class="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 flex items-center justify-center transition" title="Kirim Pengingat WA">
+                  <i class="fab fa-whatsapp text-xs"></i>
+                </a>
+                <button onclick="openEditTenantModal('${p[0]}', '${p[1]}', '${p[2]}', '${p[3]}', '${p[4]}', '${p[5]}', '${p[6] || ''}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Penyewa">
+                  <i class="fas fa-edit text-[10px]"></i>
+                </button>
+                <button onclick="promptDeleteTenant('${p[0]}', '${p[1]}', '${p[3]}', '${p[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition" title="Hapus Penyewa">
+                  <i class="fas fa-trash-alt text-[10px]"></i>
+                </button>
+                ${statusActive ? `
+                  <button onclick="promptTenantCheckout('${p[0]}', '${p[1]}', '${p[3]}')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 text-[9px] font-black tracking-widest uppercase transition" title="Keluarkan Penyewa / Check-out">
+                    Checkout
+                  </button>
+                ` : ''}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterTenants() {
+      const q = document.getElementById('tenant-search').value.toLowerCase().trim();
+      if (!cachedData) return;
+      const filtered = cachedData.penyewa.filter(p => {
+        return p[1].toLowerCase().includes(q) || p[3].toLowerCase().includes(q) || p[2].toLowerCase().includes(q);
+      });
+      renderTenantsList(filtered);
+    }
+
+    function loadActiveTenants() {
+      if (cachedData) {
+        const tenants = cachedData.penyewa.filter(p => p[5] === 'Aktif').map(p => ({nama: p[1], kamar: p[3]}));
+        renderActiveTenants(tenants);
+        return;
+      }
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const tenants = JSON.parse(responseString);
+          renderActiveTenants(tenants);
+          showLoading(false);
+        }).getActiveTenants();
+    }
+
+    function renderActiveTenants(tenants) {
+      const select = document.getElementById('select-penyewa');
+      select.innerHTML = tenants.length > 0 
+        ? '<option value="">-- Pilih Penyewa --</option>' + tenants.map(t => `<option value="${t.nama}" data-kamar="${t.kamar}">${t.nama} (${t.kamar})</option>`).join('') 
+        : '<option value="">Tidak ada penyewa aktif</option>';
+    }
+
+    function handlePenyewaChange() {
+      const select = document.getElementById('select-penyewa');
+      const selectedOption = select.options[select.selectedIndex];
+      const kamarInput = document.getElementById('input-kamar-pembayaran');
+      if (selectedOption && selectedOption.value !== "") {
+        kamarInput.value = selectedOption.getAttribute('data-kamar');
+        calculateBilling();
+      } else {
+        kamarInput.value = "";
+      }
+    }
+
+    // HANDLES SWITCHING TYPE TO REDETERMINE DURATION LABELS
+    function handleTipeSewaChange() {
+      const type = document.getElementById('select-tipe-sewa').value;
+      const label = document.getElementById('label-durasi-sewa');
+      if (type === 'Bulanan') {
+        label.innerText = 'Jumlah Bulan Sewa';
+      } else {
+        label.innerText = 'Jumlah Hari Sewa';
+      }
+      calculateBilling();
+    }
+
+    // AUTO CALCULATE DATES AND CASH INFLOW ESTIMATES FOR RENTS
+    function calculateBilling() {
+      const select = document.getElementById('select-penyewa');
+      const selectedOption = select.options[select.selectedIndex];
+      const type = document.getElementById('select-tipe-sewa').value;
+      const durasi = parseInt(document.getElementById('input-durasi-sewa').value) || 1;
+      const inputJumlah = document.getElementById('input-jumlah-pembayaran');
+      const inputJatuhTempo = document.getElementById('input-jatuh-tempo');
+      const inputKeterangan = document.getElementById('input-keterangan-pembayaran');
+      const tglBayarStr = document.getElementById('input-tgl-pembayaran').value;
+
+      if (!selectedOption || selectedOption.value === "") return;
+
+      const kamarNo = selectedOption.getAttribute('data-kamar');
+      let basePrice = 1100000; // default bulanan
+      if (type === 'Harian') {
+        basePrice = 100000;
+      } else {
+        // deluxe adjustment
+        if (kamarNo === '106' || kamarNo === '107') {
+          basePrice = 1250000;
+        }
+      }
+
+      // Compute pricing
+      const totalCost = basePrice * durasi;
+      inputJumlah.value = totalCost;
+
+      // Compute due date
+      const payDate = tglBayarStr ? new Date(tglBayarStr) : new Date();
+      if (type === 'Bulanan') {
+        payDate.setMonth(payDate.getMonth() + durasi);
+      } else {
+        payDate.setDate(payDate.getDate() + durasi);
+      }
+
+      const yyyy = payDate.getFullYear();
+      let mm = payDate.getMonth() + 1;
+      let dd = payDate.getDate();
+      if (dd < 10) dd = '0' + dd;
+      if (mm < 10) mm = '0' + mm;
+      const formattedDate = `${yyyy}-${mm}-${dd}`;
+      inputJatuhTempo.value = formattedDate;
+
+      // Populate auto description helper
+      inputKeterangan.value = `Pembayaran Sewa ${type} Kamar ${kamarNo} (${durasi} ${type === 'Bulanan' ? 'Bulan' : 'Hari'}) - s.d. ${formattedDate}`;
+    }
+
+    // LOAD EXPANDED PAYMENTS LOG FOR DETAILED LOGS TAB
+    function loadPaymentsHistory() {
+      if (cachedData) {
+        renderPaymentsHistory(cachedData.transaksi);
+        return;
+      }
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const data = JSON.parse(responseString);
+          renderPaymentsHistory(data.transaksi);
+          showLoading(false);
+        }).getDashboardData();
+    }
+
+    function renderPaymentsHistory(payments) {
+      const tbody = document.getElementById('table-pembayaran-history');
+      if (!payments || payments.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-slate-400 text-sm italic">Belum ada pembayaran keuangan tercatat.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = payments.map(t => {
+        let angkaBersih = String(t[3]).replace(/[^0-9]/g, '');
+        return `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
+            <td class="py-4 px-6 text-slate-500 whitespace-nowrap">${t[0]}</td>
+            <td class="py-4 px-4 font-bold text-slate-900">${t[1]}</td>
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-black uppercase">${t[2]}</span>
+            </td>
+            <td class="py-4 px-4 font-extrabold text-emerald-600">Rp ${Number(angkaBersih).toLocaleString()}</td>
+            <td class="py-4 px-4 text-slate-500 font-medium">${t[4]}</td>
+            <td class="py-4 px-6 text-center">
+              <button onclick="viewReceipt('${t[0]}', '${t[1]}', '${t[2]}', ${angkaBersih}, '${t[4]}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat/Print Struk">
+                <i class="fas fa-file-invoice text-xs"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterPayments() {
+      const q = document.getElementById('payment-search').value.toLowerCase().trim();
+      if (!cachedData) return;
+      const filtered = cachedData.transaksi.filter(t => {
+        return t[1].toLowerCase().includes(q) || t[2].toLowerCase().includes(q) || t[4].toLowerCase().includes(q);
+      });
+      renderPaymentsHistory(filtered);
+    }
+
+    // AUTOMATIC DEFAULT PRICING & TYPE HANDLERS
+    document.querySelector('input[name="noKamar"]').addEventListener('input', function() {
+      const roomVal = this.value.trim();
+      const tipeInput = document.querySelector('input[name="tipe"]');
+      const bulananInput = document.querySelector('input[name="hargaBulanan"]');
+      const harianInput = document.querySelector('input[name="hargaHarian"]');
+      if (roomVal === '106' || roomVal === '107') {
+        tipeInput.value = 'Deluxe';
+        bulananInput.value = 1250000;
+      } else {
+        tipeInput.value = 'Standar';
+        bulananInput.value = 1100000;
+      }
+      harianInput.value = 100000;
+    });
+
+    document.getElementById('edit-noKamar').addEventListener('input', function() {
+      const roomVal = this.value.trim();
+      const tipeInput = document.getElementById('edit-tipe');
+      const bulananInput = document.getElementById('edit-hargaBulanan');
+      const harianInput = document.getElementById('edit-hargaHarian');
+      if (roomVal === '106' || roomVal === '107') {
+        tipeInput.value = 'Deluxe';
+        bulananInput.value = 1250000;
+      } else {
+        tipeInput.value = 'Standar';
+        bulananInput.value = 1100000;
+      }
+      harianInput.value = 100000;
+    });
+
+    // OPEN & CLOSE EDIT TENANT MODAL
+    function openEditTenantModal(id, nama, hp, kamar, tglMasuk, status, jatuhTempo) {
+      document.getElementById('edit-tenant-id').value = id;
+      document.getElementById('edit-tenant-nama').value = nama;
+      document.getElementById('edit-tenant-hp').value = hp;
+      document.getElementById('edit-tenant-old-kamar').value = kamar;
+      document.getElementById('edit-tenant-tglmasuk').value = tglMasuk;
+      document.getElementById('edit-tenant-status').value = status;
+      document.getElementById('edit-tenant-tempo').value = jatuhTempo;
+
+      const select = document.getElementById('edit-tenant-kamar');
+      select.innerHTML = `<option value="${kamar}">${kamar}</option>`;
+      if (cachedData) {
+        const availableRooms = cachedData.kamar.filter(k => k[4] === 'Tersedia').map(k => k[0]);
+        availableRooms.forEach(r => {
+          if (r !== kamar) {
+            select.innerHTML += `<option value="${r}">${r}</option>`;
+          }
+        });
+      }
+
+      const modal = document.getElementById('edit-tenant-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeEditTenantModal() {
+      const modal = document.getElementById('edit-tenant-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    // OPEN & CLOSE EDIT MODAL
+    function openEditRoomModal(noKamar, tipe, hargaBulanan, hargaHarian) {
+      document.getElementById('edit-old-noKamar').value = noKamar;
+      document.getElementById('edit-noKamar').value = noKamar;
+      document.getElementById('edit-tipe').value = tipe;
+      document.getElementById('edit-hargaBulanan').value = hargaBulanan;
+      document.getElementById('edit-hargaHarian').value = hargaHarian;
+
+      const modal = document.getElementById('edit-room-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeEditRoomModal() {
+      const modal = document.getElementById('edit-room-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    // OPERATIONAL LEDGER METHODS
+    function loadLedgerData() {
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const ledgerList = JSON.parse(responseString);
+          renderLedgerTable(ledgerList);
+          showLoading(false);
+        }).getOpsTransactions();
+    }
+
+    function renderLedgerTable(items) {
+      const tbody = document.getElementById('table-ops-ledger');
+      
+      // Filter the list depending on selected filter button
+      const filtered = items.filter(item => {
+        if (selectedOpsFilter === 'Semua') return true;
+        return item[2] === selectedOpsFilter;
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-slate-400 text-sm italic">Buku ledger operasional masih kosong.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(item => {
+        let isIncome = item[2] === 'Pendapatan';
+        let displaySign = '-';
+        let colorClass = 'bg-rose-50 text-rose-600 border border-rose-100';
+        let textCol = 'text-rose-600';
+        
+        if (item[2] === 'Pendapatan') {
+          isIncome = true;
+          displaySign = '+';
+          colorClass = 'bg-emerald-50 text-emerald-600 border border-emerald-100';
+          textCol = 'text-emerald-600';
+        } else if (item[2] === 'Pengeluaran') {
+          isIncome = false;
+          displaySign = '-';
+          colorClass = 'bg-rose-50 text-rose-600 border border-rose-100';
+          textCol = 'text-rose-600';
+        } else if (item[2] === 'Neraca') {
+          colorClass = 'bg-blue-50 text-blue-600 border border-blue-100';
+          if (item[3] === "Setoran Modal Pemilik" || item[3] === "Penerimaan Deposit Jaminan") {
+            isIncome = true;
+            displaySign = '+';
+            textCol = 'text-emerald-600';
+          } else if (item[3] === "Pembelian Aset Tetap" || item[3] === "Penarikan Prive Pemilik" || item[3] === "Pengembalian Deposit Jaminan") {
+            isIncome = false;
+            displaySign = '-';
+            textCol = 'text-rose-600';
+          } else {
+            // Penyusutan Aset Tetap (Non-cash)
+            displaySign = '';
+            textCol = 'text-slate-500';
+          }
+        }
+
+        return `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
+            <td class="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">${item[1]}</td>
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${colorClass}">
+                ${item[2]}
+              </span>
+            </td>
+            <td class="py-4 px-4 font-bold text-slate-800">${item[3]}</td>
+            <td class="py-4 px-4 font-extrabold ${textCol} whitespace-nowrap">
+              ${displaySign} Rp ${Number(item[4]).toLocaleString()}
+            </td>
+            <td class="py-4 px-4 text-slate-500 font-medium max-w-[200px] truncate" title="${item[5]}">${item[5]}</td>
+            <td class="py-4 px-6 text-center">
+              <button onclick="promptDeleteOpsTransaction('${item[0]}', '${item[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition" title="Hapus Transaksi">
+                <i class="fas fa-trash-alt text-[10px]"></i>
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterOpsLedger(type) {
+      selectedOpsFilter = type;
+      document.querySelectorAll('#sec-transaksi-ops button[id^="btn-ops-"]').forEach(btn => {
+        btn.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+        btn.classList.add('text-slate-500', 'hover:text-slate-800');
+      });
+      const activeMap = { Semua: 'all', Pendapatan: 'income', Pengeluaran: 'expense', Neraca: 'neraca' };
+      const activeBtn = document.getElementById('btn-ops-' + activeMap[type]);
+      if (activeBtn) {
+        activeBtn.classList.remove('text-slate-500', 'hover:text-slate-800');
+        activeBtn.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+      }
+      loadLedgerData();
+    }
+
+    function filterLedgerData() {
+      const q = document.getElementById('ops-search').value.toLowerCase().trim();
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const items = JSON.parse(responseString);
+          const filtered = items.filter(item => {
+            return item[3].toLowerCase().includes(q) || item[5].toLowerCase().includes(q);
+          });
+          renderLedgerTable(filtered);
+        }).getOpsTransactions();
+    }
+
+    function promptDeleteOpsTransaction(id, desc) {
+      showCustomAlert(
+        "Hapus Transaksi?",
+        `Apakah Anda yakin ingin menghapus pencatatan transaksi "${desc}" dari buku ledger? Tindakan ini akan mengoreksi ulang kas laporan keuangan secara permanen.`,
+        false,
+        true,
+        () => {
+          showLoading(true);
+          google.script.run
+            .withFailureHandler(handleError)
+            .withSuccessHandler(msg => {
+              cachedData = null; // force reload dashboard calculations
+              showLoading(false);
+              showCustomAlert("Berhasil Dihapus", msg, true);
+              loadLedgerData();
+            }).deleteOpsTransaction(id);
+        }
+      );
+    }
+
+    // SUBMISSIONS
+    document.getElementById('form-transaksi').onsubmit = function(e) {
+      e.preventDefault();
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(msg => {
+          cachedData = null;
+          showLoading(false);
+          showCustomAlert("Sukses", msg, true);
+          this.reset();
+          document.getElementById('trans-tanggal').value = new Date().toISOString().split('T')[0];
+          handleTransTypeChange();
+          loadLedgerData();
+        }).addOpsTransaction({
+          jenis: this.jenis.value,
+          tanggal: this.tanggal.value,
+          kategori: this.kategori.value,
+          jumlah: this.jumlah.value,
+          keterangan: this.keterangan.value
+        });
+    };
+
+    document.getElementById('form-kamar').onsubmit = function(e) {
+      e.preventDefault(); 
+      showLoading(true);
+      google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
+        cachedData = null; 
+        showLoading(false); 
+        showCustomAlert("Sukses", msg, true); 
+        this.reset(); 
+        this.tipe.value = 'Standar';
+        this.hargaBulanan.value = 1100000;
+        this.hargaHarian.value = 100000;
+        toggleRoomForm(); 
+        loadDashboard();
+      }).addRoom({
+        noKamar: this.noKamar.value, 
+        tipe: this.tipe.value, 
+        hargaBulanan: this.hargaBulanan.value,
+        hargaHarian: this.hargaHarian.value
+      });
+    };
+
+    document.getElementById('form-edit-kamar').onsubmit = function(e) {
+      e.preventDefault();
+      showLoading(true);
+      const oldNoKamar = document.getElementById('edit-old-noKamar').value;
+      const noKamar = document.getElementById('edit-noKamar').value;
+      const tipe = document.getElementById('edit-tipe').value;
+      const hargaBulanan = document.getElementById('edit-hargaBulanan').value;
+      const hargaHarian = document.getElementById('edit-hargaHarian').value;
+
+      google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
+        cachedData = null;
+        showLoading(false);
+        closeEditRoomModal();
+        showCustomAlert("Sukses", msg, true);
+        loadDashboard();
+      }).editRoom({
+        oldNoKamar: oldNoKamar,
+        noKamar: noKamar,
+        tipe: tipe,
+        hargaBulanan: hargaBulanan,
+        hargaHarian: hargaHarian
+      });
+    };
+
+    document.getElementById('form-edit-penyewa').onsubmit = function(e) {
+      e.preventDefault();
+      showLoading(true);
+      const id = document.getElementById('edit-tenant-id').value;
+      const nama = document.getElementById('edit-tenant-nama').value;
+      const hp = document.getElementById('edit-tenant-hp').value;
+      const oldKamar = document.getElementById('edit-tenant-old-kamar').value;
+      const kamar = document.getElementById('edit-tenant-kamar').value;
+      const tglMasuk = document.getElementById('edit-tenant-tglmasuk').value;
+      const status = document.getElementById('edit-tenant-status').value;
+      const jatuhTempo = document.getElementById('edit-tenant-tempo').value;
+
+      google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
+        cachedData = null;
+        showLoading(false);
+        closeEditTenantModal();
+        showCustomAlert("Sukses", msg, true);
+        loadAllTenantsList();
+      }).editTenant({
+        id: id,
+        nama: nama,
+        hp: hp,
+        oldKamar: oldKamar,
+        kamar: kamar,
+        tglMasuk: tglMasuk,
+        status: status,
+        jatuhTempo: jatuhTempo
+      });
+    };
+
+    document.getElementById('form-penyewa').onsubmit = function(e) {
+      e.preventDefault(); 
+      showLoading(true);
+      google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
+        cachedData = null; 
+        showLoading(false); 
+        showCustomAlert("Sukses", msg, true); 
+        this.reset(); 
+        showSection('dashboard', document.querySelector('#sidebar-nav button'));
+      }).addTenant({nama: this.nama.value, hp: this.hp.value, kamar: this.kamar.value, tglMasuk: this.tglMasuk.value});
+    };
+
+    document.getElementById('form-pembayaran').onsubmit = function(e) {
+      e.preventDefault(); 
+      showLoading(true);
+      google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
+        cachedData = null; 
+        showLoading(false); 
+        showCustomAlert("Sukses", msg, true); 
+        this.reset(); 
+        showSection('dashboard', document.querySelector('#sidebar-nav button'));
+      }).recordPayment({
+        nama: this.nama.value, 
+        kamar: this.kamar.value, 
+        jumlah: this.jumlah.value, 
+        keterangan: this.keterangan.value,
+        jatuhTempo: this.jatuhTempo.value
+      });
+    };
+
+    // DIGITAL RECEIPT ACTIONS
+    function viewReceipt(tgl, nama, kamar, jumlah, keterangan) {
+      document.getElementById('rcp-tgl').innerText = tgl;
+      const invoiceHash = "INV-" + Math.floor(100000 + Math.random() * 900000);
+      document.getElementById('rcp-id').innerText = invoiceHash;
+      document.getElementById('rcp-nama').innerText = nama;
+      document.getElementById('rcp-kamar').innerText = kamar;
+      document.getElementById('rcp-ket').innerText = keterangan;
+      document.getElementById('rcp-total').innerText = "Rp " + jumlah.toLocaleString();
+
+      const modal = document.getElementById('receipt-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeReceiptModal() {
+      const modal = document.getElementById('receipt-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    function printReceipt() {
+      const printContents = document.getElementById('receipt-print-area').innerHTML;
+      const printWindow = window.open('', '_blank');
+      printWindow.document.write(`
+        <html>
+          <head>
+            <title>Cetak Receipt Kost Hade Premium</title>
+            <style>
+              body { font-family: 'Courier New', Courier, monospace; padding: 20px; font-size: 13px; color: #000; background: #fff; }
+              .text-center { text-align: center; }
+              .pb-4 { padding-bottom: 12px; }
+              .border-b { border-bottom: 1px dashed #000; }
+              .py-4 { padding-top: 12px; padding-bottom: 12px; }
+              .space-y-2 > div { display: flex; justify-content: space-between; margin-bottom: 4px; }
+              .font-bold { font-weight: bold; }
+              .text-xl { font-size: 18px; }
+              .mt-4 { margin-top: 15px; }
+            </style>
+          </head>
+          <body onload="window.print(); window.close();">
+            ${printContents}
+          </body>
+        </html>
+      `);
+      printWindow.document.close();
+    }
+
+    // INTERACTIVE CHECKOUT ACTION PROMPTER
+    function promptTenantCheckout(tenantId, name, roomNo) {
+      showCustomAlert(
+        "Keluarkan Penyewa?",
+        `Apakah Anda yakin ingin mengakhiri kontrak sewa ${name} di Suite ${roomNo}? Kamar ini akan dikosongkan dan siap dipasarkan kembali.`,
+        false,
+        true,
+        () => {
+          showLoading(true);
+          google.script.run
+            .withFailureHandler(handleError)
+            .withSuccessHandler(msg => {
+              cachedData = null;
+              showLoading(false);
+              showCustomAlert("Proses Selesai", msg, true);
+              loadAllTenantsList(); // Reload view
+            }).checkoutTenant(tenantId, roomNo);
+        }
+      );
+    }
+
+    // PROMPT DELETE TENANT DIRECTLY FROM TABLE
+    function promptDeleteTenant(tenantId, name, roomNo, status) {
+      let extraWarn = status === 'Aktif' ? ` Penyewa saat ini aktif menghuni Kamar ${roomNo}. Menghapus penyewa akan mengosongkan kamar tersebut.` : "";
+      showCustomAlert(
+        "Hapus Penyewa?",
+        `Apakah Anda yakin ingin menghapus data penyewa ${name} secara permanen dari arsip database?${extraWarn}`,
+        false,
+        true,
+        () => {
+          showLoading(true);
+          google.script.run
+            .withFailureHandler(handleError)
+            .withSuccessHandler(msg => {
+              cachedData = null;
+              showLoading(false);
+              showCustomAlert("Berhasil Dihapus", msg, true);
+              loadAllTenantsList();
+            }).deleteTenant(tenantId, roomNo);
+        }
+      );
+    }
+
+    // INTERACTIVE DELETE ROOM PROMPTER
+    function promptDeleteRoom(roomNo, status) {
+      const alertMsg = status === 'Terisi' 
+        ? `Unit Kamar ${roomNo} sedang TERISI. Menghapus kamar ini juga akan berdampak pada penyewa aktif di dalamnya. Apakah Anda yakin ingin mematikan / menghapus secara permanen?`
+        : `Apakah Anda yakin ingin menghapus Unit Kamar ${roomNo} secara permanen dari Kost Hade?`;
+
+      showCustomAlert(
+        "Hapus Unit Kamar?",
+        alertMsg,
+        false,
+        true,
+        () => {
+          showLoading(true);
+          google.script.run
+            .withFailureHandler(handleError)
+            .withSuccessHandler(msg => {
+              cachedData = null;
+              showLoading(false);
+              showCustomAlert("Berhasil Dihapus", msg, true);
+              loadDashboard(); // Reload current view
+            }).deleteRoom(roomNo);
+        }
+      );
+    }
+
+    // =======================================================
+    // DETEKSI JALUR & EMULASI FULLY INTERAKTIF UNTUK PREVIEW
+    // =======================================================
+    if (typeof google === 'undefined' || !google.script || !google.script.run) {
+      // Helper to generate dynamic dates relative to today for perfect simulation anywhere in time
+      function getRelativeDate(offsetDays) {
+        const d = new Date();
+        d.setDate(d.getDate() + offsetDays);
+        const yyyy = d.getFullYear();
+        let mm = d.getMonth() + 1;
+        let dd = d.getDate();
+        if (dd < 10) dd = '0' + dd;
+        if (mm < 10) mm = '0' + mm;
+        return `${yyyy}-${mm}-${dd}`;
+      }
+
+      const existingKamar = localStorage.getItem('kost_hade_kamar');
+      let needsReset = false;
+      if (existingKamar) {
+        try {
+          const parsed = JSON.parse(existingKamar);
+          if (parsed.length === 0 || parsed[0].length < 6 || parsed[0][1] === 'Standar Luxury') {
+            needsReset = true;
+          }
+        } catch(e) {
+          needsReset = true;
+        }
+      } else {
+        needsReset = true;
+      }
+
+      if (needsReset) {
+        localStorage.setItem('kost_hade_kamar', JSON.stringify([
+          ['101', 'Standar', '1100000', '100000', 'Terisi', 'Budi Santoso'],
+          ['102', 'Standar', '1100000', '100000', 'Tersedia', ''],
+          ['103', 'Standar', '1100000', '100000', 'Terisi', 'Siti Rahma'],
+          ['104', 'Standar', '1100000', '100000', 'Tersedia', ''],
+          ['105', 'Standar', '1100000', '100000', 'Tersedia', ''],
+          ['106', 'Deluxe', '1250000', '100000', 'Tersedia', ''],
+          ['107', 'Deluxe', '1250000', '100000', 'Tersedia', ''],
+          ['108', 'Standar', '1100000', '100000', 'Tersedia', ''],
+          ['109', 'Standar', '1100000', '100000', 'Tersedia', ''],
+          ['110', 'Standar', '1100000', '100000', 'Tersedia', '']
+        ]));
+      }
+
+      if (!localStorage.getItem('kost_hade_penyewa')) {
+        localStorage.setItem('kost_hade_penyewa', JSON.stringify([
+          ['TEN-001', 'Budi Santoso', '08123456789', '101', getRelativeDate(-27), 'Aktif', getRelativeDate(3)],
+          ['TEN-002', 'Siti Rahma', '08579998888', '103', getRelativeDate(-34), 'Aktif', getRelativeDate(-4)]
+        ]));
+      }
+      if (!localStorage.getItem('kost_hade_transaksi')) {
+        localStorage.setItem('kost_hade_transaksi', JSON.stringify([
+          [new Date().toLocaleDateString('id-ID'), 'Budi Santoso', '101', '1100000', 'Sewa Kamar 101 - Siklus Baru'],
+          [getRelativeDate(-34), 'Siti Rahma', '103', '1100000', 'Sewa Kamar 103 - Siklus Lama']
+        ]));
+      }
+      if (!localStorage.getItem('kost_hade_ops_transaksi')) {
+        localStorage.setItem('kost_hade_ops_transaksi', JSON.stringify([
+          ['OPS-001', getRelativeDate(-5), 'Pengeluaran', 'Wifi & Internet', '350000', 'Pembayaran Wifi Router utama'],
+          ['OPS-002', getRelativeDate(-10), 'Pengeluaran', 'Listrik & Air', '500000', 'Token Listrik utama guesthouse'],
+          ['OPS-003', getRelativeDate(-2), 'Pengeluaran', 'Gaji Karyawan', '1200000', 'Gaji staff kebersihan berkala'],
+          ['OPS-004', getRelativeDate(-1), 'Pendapatan', 'Kantin / Vending Machine', '150000', 'Penjualan minuman & cemilan lobby'],
+          ['OPS-005', getRelativeDate(-12), 'Neraca', 'Pembelian Aset Tetap', '15000000', 'Pembelian unit AC tambahan 106 & 107']
+        ]));
+      }
+
+      window.google = {
+        script: {
+          run: {
+            withFailureHandler: function(handler) { this.fail = handler; return this; },
+            withSuccessHandler: function(handler) { this.success = handler; return this; },
+            getDashboardData: function() {
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const transaksi = JSON.parse(localStorage.getItem('kost_hade_transaksi'));
+              const opsTrans = JSON.parse(localStorage.getItem('kost_hade_ops_transaksi'));
+              
+              const totalKamar = kamar.length;
+              const kamarTerisi = kamar.filter(k => k[4] === 'Terisi').length;
+              const totalPenyewa = penyewa.filter(p => p[5] === 'Aktif').length;
+              
+              // Financial calculations
+              const tenantIncomeTotal = transaksi.reduce((acc, curr) => acc + (Number(String(curr[3]).replace(/[^0-9]/g, '')) || 0), 0);
+              const extraIncomeTotal = opsTrans.filter(i => i[2] === 'Pendapatan').reduce((acc, curr) => acc + Number(curr[4] || 0), 0);
+              const totalExpenses = opsTrans.filter(e => e[2] === 'Pengeluaran').reduce((acc, curr) => acc + Number(curr[4] || 0), 0);
+              
+              // Neraca cash-flow additions
+              let neracaInflow = 0;
+              let neracaOutflow = 0;
+              opsTrans.filter(o => o[2] === 'Neraca').forEach(o => {
+                const val = Number(o[4]) || 0;
+                if (o[3] === "Setoran Modal Pemilik" || o[3] === "Penerimaan Deposit Jaminan") {
+                  neracaInflow += val;
+                } else if (o[3] === "Pembelian Aset Tetap" || o[3] === "Penarikan Prive Pemilik" || o[3] === "Pengembalian Deposit Jaminan") {
+                  neracaOutflow += val;
+                }
+              });
+
+              const combinedIncome = tenantIncomeTotal + extraIncomeTotal + neracaInflow;
+              const combinedExpenses = totalExpenses + neracaOutflow;
+              const sisaKas = combinedIncome - combinedExpenses;
+
+              const response = {
+                stats: { 
+                  totalKamar, 
+                  kamarTerisi, 
+                  kamarTersedia: totalKamar - kamarTerisi, 
+                  totalPenyewa, 
+                  totalPendapatan: combinedIncome, 
+                  totalPengeluaran: combinedExpenses,
+                  sisaKas: sisaKas,
+                  pendapatanBulanIni: combinedIncome
+                },
+                kamar,
+                penyewa,
+                transaksi: transaksi.slice(0, 10)
+              };
+              setTimeout(() => this.success(JSON.stringify(response)), 400);
+            },
+            getAvailableRooms: function() {
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              const emptyRooms = kamar.filter(k => k[4] === 'Tersedia').map(k => k[0]);
+              setTimeout(() => this.success(JSON.stringify(emptyRooms)), 300);
+            },
+            getActiveTenants: function() {
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const active = penyewa.filter(p => p[5] === 'Aktif').map(p => ({ nama: p[1], kamar: p[3] }));
+              setTimeout(() => this.success(JSON.stringify(active)), 300);
+            },
+            getOpsTransactions: function() {
+              const opsTrans = JSON.parse(localStorage.getItem('kost_hade_ops_transaksi')) || [];
+              setTimeout(() => this.success(JSON.stringify(opsTrans)), 300);
+            },
+            addRoom: function(data) {
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              if (kamar.some(k => k[0] === data.noKamar)) {
+                setTimeout(() => this.fail(`Unit Kamar dengan nomor ${data.noKamar} sudah terdaftar!`), 300);
+                return;
+              }
+              kamar.push([data.noKamar, data.tipe, data.hargaBulanan, data.hargaHarian, 'Tersedia', '']);
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(kamar));
+              setTimeout(() => this.success(`Kamar ${data.noKamar} (${data.tipe}) berhasil ditambahkan!`), 400);
+            },
+            editTenant: function(data) {
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+
+              const updatedPenyewa = penyewa.map(p => {
+                if (p[0] === data.id) {
+                  return [data.id, data.nama, data.hp, data.kamar, data.tglMasuk, data.status, data.jatuhTempo];
+                }
+                return p;
+              });
+
+              let updatedKamar = kamar;
+              if (data.status === 'Keluar') {
+                updatedKamar = kamar.map(k => {
+                  if (k[0] === data.oldKamar) return [k[0], k[1], k[2], k[3], 'Tersedia', ''];
+                  return k;
+                });
+              } else {
+                if (data.oldKamar !== data.kamar) {
+                  updatedKamar = kamar.map(k => {
+                    if (k[0] === data.oldKamar) return [k[0], k[1], k[2], k[3], 'Tersedia', ''];
+                    if (k[0] === data.kamar) return [k[0], k[1], k[2], k[3], 'Terisi', data.nama];
+                    return k;
+                  });
+                } else {
+                  updatedKamar = kamar.map(k => {
+                    if (k[0] === data.kamar) return [k[0], k[1], k[2], k[3], 'Terisi', data.nama];
+                    return k;
+                  });
+                }
+              }
+
+              localStorage.setItem('kost_hade_penyewa', JSON.stringify(updatedPenyewa));
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(updatedKamar));
+              setTimeout(() => this.success(`Data penyewa ${data.nama} berhasil diperbarui!`), 400);
+            },
+            editRoom: function(data) {
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const transaksi = JSON.parse(localStorage.getItem('kost_hade_transaksi'));
+              
+              if (data.oldNoKamar !== data.noKamar && kamar.some(k => k[0] === data.noKamar)) {
+                setTimeout(() => this.fail(`Unit Kamar dengan nomor ${data.noKamar} sudah terdaftar!`), 300);
+                return;
+              }
+
+              const updatedKamar = kamar.map(k => {
+                if (k[0] === data.oldNoKamar) {
+                  return [data.noKamar, data.tipe, data.hargaBulanan, data.hargaHarian, k[4], k[5]];
+                }
+                return k;
+              });
+
+              const updatedPenyewa = penyewa.map(p => {
+                if (p[3] === data.oldNoKamar) p[3] = data.noKamar;
+                return p;
+              });
+
+              const updatedTransaksi = transaksi.map(t => {
+                if (t[2] === data.oldNoKamar) t[2] = data.noKamar;
+                return t;
+              });
+
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(updatedKamar));
+              localStorage.setItem('kost_hade_penyewa', JSON.stringify(updatedPenyewa));
+              localStorage.setItem('kost_hade_transaksi', JSON.stringify(updatedTransaksi));
+
+              setTimeout(() => this.success(`Kamar ${data.noKamar} berhasil diperbarui!`), 400);
+            },
+            addTenant: function(data) {
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              
+              // Calculate default 1-month due date for new monthly registrations
+              const checkInDate = new Date(data.tglMasuk);
+              checkInDate.setMonth(checkInDate.getMonth() + 1);
+              const yyyy = checkInDate.getFullYear();
+              let mm = checkInDate.getMonth() + 1;
+              let dd = checkInDate.getDate();
+              if (dd < 10) dd = '0' + dd;
+              if (mm < 10) mm = '0' + mm;
+              const dueStr = `${yyyy}-${mm}-${dd}`;
+
+              penyewa.unshift(['TEN-' + Math.floor(1000 + Math.random() * 9000), data.nama, data.hp, data.kamar, data.tglMasuk, 'Aktif', dueStr]);
+              const updatedKamar = kamar.map(k => {
+                if (k[0] === data.kamar) return [k[0], k[1], k[2], k[3], 'Terisi', data.nama];
+                return k;
+              });
+
+              localStorage.setItem('kost_hade_penyewa', JSON.stringify(penyewa));
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(updatedKamar));
+              setTimeout(() => this.success(`Registrasi ${data.nama} di Kamar ${data.kamar} berhasil disimpan!`), 400);
+            },
+            recordPayment: function(data) {
+              const transaksi = JSON.parse(localStorage.getItem('kost_hade_transaksi'));
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              
+              // Record receipt payment row
+              const tglStr = new Date().toLocaleDateString('id-ID');
+              transaksi.unshift([tglStr, data.nama, data.kamar, data.jumlah, data.keterangan]);
+              localStorage.setItem('kost_hade_transaksi', JSON.stringify(transaksi));
+
+              // Auto update tenant's target billing alert 'jatuhTempo' date to match the calculated billing tempo
+              const updatedPenyewa = penyewa.map(p => {
+                if (p[1] === data.nama && p[3] === data.kamar) {
+                  p[6] = data.jatuhTempo; // update 'jatuhTempo' parameter
+                }
+                return p;
+              });
+              localStorage.setItem('kost_hade_penyewa', JSON.stringify(updatedPenyewa));
+
+              setTimeout(() => this.success(`Pembayaran sebesar Rp ${Number(data.jumlah).toLocaleString()} berhasil dibukukan & tenggat waktu terperbarui!`), 400);
+            },
+            checkoutTenant: function(tenantId, roomNo) {
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              
+              const updatedPenyewa = penyewa.map(p => {
+                if (p[0] === tenantId) return [p[0], p[1], p[2], p[3], p[4], 'Keluar', p[6]];
+                return p;
+              });
+
+              const updatedKamar = kamar.map(k => {
+                if (k[0] === roomNo) return [k[0], k[1], k[2], k[3], 'Tersedia', ''];
+                return k;
+              });
+
+              localStorage.setItem('kost_hade_penyewa', JSON.stringify(updatedPenyewa));
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(updatedKamar));
+              setTimeout(() => this.success(`Proses Check-out selesai. Kamar ${roomNo} kini kosong & siap disewakan kembali.`), 400);
+            },
+            deleteTenant: function(tenantId, roomNo) {
+              const penyewa = JSON.parse(localStorage.getItem('kost_hade_penyewa'));
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+
+              const filteredPenyewa = penyewa.filter(p => p[0] !== tenantId);
+              const updatedKamar = kamar.map(k => {
+                if (k[0] === roomNo) return [k[0], k[1], k[2], k[3], 'Tersedia', ''];
+                return k;
+              });
+
+              localStorage.setItem('kost_hade_penyewa', JSON.stringify(filteredPenyewa));
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(updatedKamar));
+              setTimeout(() => this.success(`Penyewa dengan ID ${tenantId} telah dihapus permanen.`), 400);
+            },
+            deleteRoom: function(roomNo) {
+              const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
+              const filteredKamar = kamar.filter(k => k[0] !== roomNo);
+              localStorage.setItem('kost_hade_kamar', JSON.stringify(filteredKamar));
+              setTimeout(() => this.success(`Unit Kamar ${roomNo} telah dihapus permanen.`), 400);
+            },
+            addOpsTransaction: function(data) {
+              const opsTrans = JSON.parse(localStorage.getItem('kost_hade_ops_transaksi')) || [];
+              const transId = "OPS-" + Math.floor(1000 + Math.random() * 9000);
+              opsTrans.unshift([transId, data.tanggal, data.jenis, data.kategori, data.jumlah, data.keterangan]);
+              localStorage.setItem('kost_hade_ops_transaksi', JSON.stringify(opsTrans));
+              setTimeout(() => this.success(`Transaksi ${data.jenis} "${data.keterangan}" berhasil dicatat ke Ledger!`), 400);
+            },
+            deleteOpsTransaction: function(id) {
+              const opsTrans = JSON.parse(localStorage.getItem('kost_hade_ops_transaksi')) || [];
+              const filtered = opsTrans.filter(t => t[0] !== id);
+              localStorage.setItem('kost_hade_ops_transaksi', JSON.stringify(filtered));
+              setTimeout(() => this.success(`Transaksi berhasil dihapus dari Buku Ledger.`), 400);
+            }
+          }
+        }
+      };
+    }
+
+    // Auto-bootstrap dashboard analytics on load
+    window.onload = () => { 
+      setTimeout(loadDashboard, 400); 
+    };
+  </script>
+</body>
+</html>
