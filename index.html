@@ -53,9 +53,17 @@
     .double-underline {
       border-bottom: 3px double #334155;
     }
+
+    /* HIDE DELETE BUTTONS FOR USER LEVEL */
+    .role-user .btn-delete-action {
+      display: none !important;
+    }
+    .role-user .restricted-user-view {
+      display: none !important;
+    }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row">
+<body class="bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0">
 
   <!-- LOADING OVERLAY -->
   <div id="loading" class="loading-overlay hidden">
@@ -86,733 +94,944 @@
     </div>
   </div>
 
-  <!-- SIDEBAR / NAVIGASI UTAMA -->
-  <nav class="w-full md:w-64 bg-white text-slate-700 shadow-xl flex flex-col z-50 flex-shrink-0 md:h-full justify-between border-b md:border-b-0 md:border-r border-slate-200/80">
-    <div class="flex flex-col w-full">
-      <!-- Logo Header -->
-      <div class="p-4 md:p-6 border-b border-slate-100 flex flex-row md:flex-col items-center justify-between md:justify-center text-left md:text-center gap-3 bg-gradient-to-b from-blue-50/20 to-transparent">
-        <div class="flex flex-row md:flex-col items-center gap-3 md:gap-2">
-          <div class="w-10 h-10 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-rose-500 rounded-2xl flex items-center justify-center border border-white shadow-md p-1.5 overflow-hidden shrink-0">
-            <img src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
-          </div>
-          <div>
-            <h1 class="text-base md:text-lg font-black tracking-tight bg-gradient-to-r from-blue-600 to-rose-600 bg-clip-text text-transparent uppercase">Kost Hade</h1>
-            <span class="block text-[10px] font-extrabold text-blue-500 uppercase tracking-widest md:mt-1">ROYAL SYNC</span>
-          </div>
-        </div>
-        
-        <!-- Subtle Live Indicator -->
-        <div class="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
-          <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-          <span class="text-[9px] text-blue-600 font-extrabold uppercase tracking-widest">LIVE LEDGER</span>
-        </div>
+  <!-- LOGIN SCREEN (VISIBLE BY DEFAULT) -->
+  <div id="login-screen" class="fixed inset-0 bg-gradient-to-br from-blue-50 via-white to-rose-50 flex items-center justify-center z-[9999] overflow-hidden p-4 animate-fade-in">
+    <!-- Decorative background elements -->
+    <div class="absolute w-96 h-96 bg-blue-400/10 rounded-full blur-3xl -top-12 -left-12 pointer-events-none"></div>
+    <div class="absolute w-96 h-96 bg-rose-400/10 rounded-full blur-3xl -bottom-12 -right-12 pointer-events-none"></div>
+
+    <div class="bg-white/85 backdrop-blur-xl rounded-3xl p-6 md:p-10 shadow-2xl border border-white/60 max-w-md w-full relative premium-card">
+      <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-600 rounded-t-3xl"></div>
+      
+      <!-- Logo Container -->
+      <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-rose-500 rounded-2xl flex items-center justify-center border border-white shadow-md mx-auto mb-6 p-0 overflow-hidden shrink-0">
+        <img src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
       </div>
 
-      <!-- Navigation Menu -->
-      <ul class="flex flex-row md:flex-col gap-1.5 w-full p-2 md:p-4 overflow-x-auto hide-scrollbar border-b border-slate-100 md:border-none" id="sidebar-nav">
-        <li class="shrink-0 md:shrink">
-          <button onclick="showSection('dashboard', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition nav-btn-active text-xs md:text-sm font-bold w-full">
-            <i class="fas fa-chart-pie w-5 text-center text-base"></i> Dashboard
-          </button>
-        </li>
-        <li class="shrink-0 md:shrink">
-          <button onclick="showSection('penyewa', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
-            <i class="fas fa-users w-5 text-center text-base"></i> Penyewa
-          </button>
-        </li>
-        <li class="shrink-0 md:shrink">
-          <button onclick="showSection('kamar', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
-            <i class="fas fa-door-open w-5 text-center text-base"></i> Kamar
-          </button>
-        </li>
-        <li class="shrink-0 md:shrink">
-          <button onclick="showSection('pembayaran', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
-            <i class="fas fa-receipt w-5 text-center text-base"></i> Pembayaran
-          </button>
-        </li>
-        <li class="shrink-0 md:shrink">
-          <button onclick="showSection('transaksi-ops', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
-            <i class="fas fa-exchange-alt w-5 text-center text-base"></i> Transaksi
-          </button>
-        </li>
-        <li class="shrink-0 md:shrink">
-          <button onclick="showSection('laporan', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
-            <i class="fas fa-file-invoice-dollar w-5 text-center text-base"></i> Laporan
-          </button>
-        </li>
-      </ul>
-    </div>
+      <div class="text-center mb-8">
+        <h2 class="text-2xl font-black text-slate-900 tracking-tight uppercase">Kost Hade</h2>
+        <p class="text-[10px] font-extrabold text-blue-500 uppercase tracking-widest mt-1">Guesthouse Management Premium</p>
+      </div>
 
-    <!-- Sidebar footer hidden on mobile -->
-    <div class="hidden md:block p-4 border-t border-slate-100 bg-slate-50">
-      <div class="flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center shadow-sm">
-            <i class="fas fa-user-shield text-xs text-rose-500"></i>
-          </div>
-          <div>
-            <p class="text-xs font-black text-slate-800">Administrator</p>
-            <p class="text-[9px] text-slate-400 uppercase font-black">Lux Premium Access</p>
+      <form id="form-login" class="space-y-4" onsubmit="handleLoginSubmit(event)">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Pengguna (Username)</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+              <i class="fas fa-user-circle"></i>
+            </span>
+            <input type="text" id="login-username" required placeholder="Masukkan username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
           </div>
         </div>
-      </div>
-    </div>
-  </nav>
 
-  <!-- AREA KONTEN UTAMA -->
-  <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 lg:p-10 bg-slate-50 w-full hide-scrollbar">
-    <div class="max-w-7xl mx-auto w-full pb-16">
-
-      <!-- SECTION: DASHBOARD -->
-      <section id="sec-dashboard" class="content-section w-full animate-fade-in">
-        <!-- Dashboard Header -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
-          <div>
-            <p class="text-xs font-black text-rose-500 uppercase tracking-widest mb-1">Eksklusif Guesthouse</p>
-            <h2 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Ringkasan Operasional</h2>
-          </div>
-          <div class="flex gap-2 w-full md:w-auto">
-            <button onclick="syncData()" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-xs transition shadow-sm">
-              <i class="fas fa-sync text-blue-500 animate-spin-slow"></i> Segarkan
-            </button>
-            <button onclick="showSection('penyewa', document.querySelectorAll('#sidebar-nav button')[1])" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition shadow-md shadow-blue-500/20">
-              <i class="fas fa-user-plus"></i> Registrasi Baru
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kata Sandi (Password)</label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+              <i class="fas fa-lock"></i>
+            </span>
+            <input type="password" id="login-password" required placeholder="Masukkan password" class="w-full pl-10 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            <button type="button" onclick="togglePasswordVisibility()" class="absolute inset-y-0 right-0 flex items-center pr-3.5 text-slate-400 hover:text-slate-600 transition">
+              <i class="fas fa-eye" id="toggle-password-icon"></i>
             </button>
           </div>
         </div>
 
-        <!-- ALERT JATUH TEMPO DAN TUNGGAKAN -->
-        <div id="billing-alerts-container" class="hidden mb-8 animate-fade-in">
-          <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
-              <h3 class="text-base font-black text-slate-900 uppercase tracking-tight">Pemberitahuan Billing & Jatuh Tempo</h3>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="billing-alerts-list">
-              <!-- Dynamically rendered alerting banners -->
-            </div>
+        <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-4 flex items-center justify-center gap-2">
+          <i class="fas fa-sign-in-alt"></i> Masuk Sistem
+        </button>
+
+        <!-- Help Info -->
+        <div class="mt-6 pt-6 border-t border-slate-100 text-center">
+          <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Akun Default:</p>
+          <div class="flex justify-center gap-3 mt-1.5 text-[9px] font-semibold text-slate-500">
+            <span>Admin: <strong class="text-blue-600">admin / admin</strong></span>
+            <span>User: <strong class="text-rose-500">user_operasional / user</strong></span>
           </div>
         </div>
-        
-        <!-- DASHBOARD GRID ANALYTICS -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
-          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
-            <div class="flex justify-between items-start mb-2">
-              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Total Suite</p>
-              <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
-                <i class="fas fa-door-open text-blue-600 text-xs"></i>
-              </div>
-            </div>
-            <h3 id="stat-total-kamar" class="text-2xl md:text-3xl font-black text-slate-900 leading-none">0</h3>
-            <p class="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Unit Kamar Terdaftar</p>
-          </div>
+      </form>
+    </div>
+  </div>
 
-          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
-            <div class="flex justify-between items-start mb-2">
-              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Kamar Terisi</p>
-              <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
-                <i class="fas fa-bed text-blue-600 text-xs"></i>
-              </div>
-            </div>
-            <h3 id="stat-kamar-terisi" class="text-2xl md:text-3xl font-black text-blue-600 leading-none">0</h3>
-            <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
-              <div id="occupancy-bar" class="bg-gradient-to-r from-blue-600 to-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
-            </div>
-          </div>
+  <!-- MAIN APP CONTAINER (HIDDEN UNTIL LOGIN SUCCESS) -->
+  <div id="app-container" class="hidden h-screen w-screen flex flex-col md:flex-row m-0 p-0 overflow-hidden">
 
-          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
-            <div class="flex justify-between items-start mb-2">
-              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Penyewa Aktif</p>
-              <div class="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center border border-rose-100">
-                <i class="fas fa-user-check text-rose-600 text-xs"></i>
-              </div>
+    <!-- SIDEBAR / NAVIGASI UTAMA -->
+    <nav class="w-full md:w-64 bg-white text-slate-700 shadow-xl flex flex-col z-50 flex-shrink-0 md:h-full justify-between border-b md:border-b-0 md:border-r border-slate-200/80">
+      <div class="flex flex-col w-full">
+        <!-- Logo Header -->
+        <div class="p-4 md:p-6 border-b border-slate-100 flex flex-row md:flex-col items-center justify-between md:justify-center text-left md:text-center gap-3 bg-gradient-to-b from-blue-50/20 to-transparent">
+          <div class="flex flex-row md:flex-col items-center gap-3 md:gap-2">
+            <div class="w-12 h-12 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-rose-500 rounded-2xl flex items-center justify-center border border-white shadow-md p-0 overflow-hidden shrink-0">
+              <img src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
             </div>
-            <h3 id="stat-total-penyewa" class="text-2xl md:text-3xl font-black text-rose-600 leading-none">0</h3>
-            <p class="text-[10px] text-slate-500 mt-2 font-semibold"><span id="occupancy-percentage" class="font-extrabold text-blue-600">0%</span> Tingkat Hunian</p>
-          </div>
-
-          <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
-            <div class="flex justify-between items-start mb-2">
-              <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Sisa Saldo Kas</p>
-              <div class="w-7 h-7 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100">
-                <i class="fas fa-wallet text-emerald-600 text-xs"></i>
-              </div>
-            </div>
-            <h3 id="stat-pendapatan" class="text-lg md:text-2xl font-black text-emerald-600 leading-none truncate">Rp 0</h3>
-            <p class="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Arus Kas Bersih (Net)</p>
-          </div>
-        </div>
-
-        <!-- QUICK FINANCIAL SUMMARY BAR -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <div class="bg-emerald-50/50 border border-emerald-100/75 p-4 rounded-2xl flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white"><i class="fas fa-arrow-down"></i></div>
-              <div>
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Pendapatan (Sewa + Ops)</p>
-                <p id="sum-total-pendapatan" class="text-base font-black text-emerald-700">Rp 0</p>
-              </div>
-            </div>
-          </div>
-          <div class="bg-rose-50/50 border border-rose-100/75 p-4 rounded-2xl flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white"><i class="fas fa-arrow-up"></i></div>
-              <div>
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Pengeluaran Ops</p>
-                <p id="sum-total-pengeluaran" class="text-base font-black text-rose-700">Rp 0</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- RECENT TRANSACTIONS TABLE -->
-        <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-          <div class="p-5 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gradient-to-r from-blue-50/10 to-rose-50/10">
             <div>
-              <h3 class="font-extrabold text-slate-900 text-base">Log Pembayaran Terbaru</h3>
-              <p class="text-xs text-slate-400">Arsip billing digital Kost Hade</p>
+              <h1 class="text-base md:text-lg font-black tracking-tight bg-gradient-to-r from-blue-600 to-rose-600 bg-clip-text text-transparent uppercase">Kost Hade</h1>
+              <span class="block text-[10px] font-extrabold text-blue-500 uppercase tracking-widest md:mt-1">PURWOKERTO</span>
             </div>
-            <button onclick="showSection('pembayaran', document.querySelectorAll('#sidebar-nav button')[3])" class="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1.5 transition uppercase tracking-wider">
-              Catat Pembayaran <i class="fas fa-arrow-right text-[10px]"></i>
-            </button>
           </div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-left min-w-[700px] border-collapse">
-              <thead>
-                <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                  <th class="py-3 px-6 text-center w-12">No</th>
-                  <th class="py-3 px-4">Tanggal</th>
-                  <th class="py-3 px-4">Penyewa</th>
-                  <th class="py-3 px-4">Kamar</th>
-                  <th class="py-3 px-4">Total Bayar</th>
-                  <th class="py-3 px-4">Keterangan</th>
-                  <th class="py-3 px-6 text-center">Receipt</th>
-                </tr>
-              </thead>
-              <tbody id="table-transaksi" class="divide-y divide-slate-100">
-                <!-- Loaded dynamically -->
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION: PENYEWA (MANAGEMENT & REGISTRATION) -->
-      <section id="sec-penyewa" class="content-section hidden w-full animate-fade-in">
-        <div class="flex flex-col lg:flex-row gap-8">
           
-          <!-- LEFT SIDE: LIST OF ACTIVE TENANTS -->
-          <div class="flex-1">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
-              <div class="p-6 border-b border-slate-100">
-                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Penyewa Suite</h3>
-                <p class="text-xs text-slate-400 mb-4">Pengelolaan data penghuni yang sedang terdaftar</p>
-                
-                <!-- Search Box for Tenants -->
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                    <i class="fas fa-search text-slate-400 text-sm"></i>
-                  </span>
-                  <input type="text" id="tenant-search" oninput="filterTenants()" placeholder="Cari nama, kamar, atau kontak..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-                </div>
-              </div>
-
-              <!-- Tenant Responsive Table -->
-              <div class="overflow-x-auto">
-                <table class="w-full text-left min-w-[750px] border-collapse">
-                  <thead>
-                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                      <th class="py-3.5 px-6">ID / Penyewa</th>
-                      <th class="py-3.5 px-4">Kamar</th>
-                      <th class="py-3.5 px-4">No HP</th>
-                      <th class="py-3.5 px-4">Mulai Sewa</th>
-                      <th class="py-3.5 px-4">Status</th>
-                      <th class="py-3.5 px-6 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-penyewa-list" class="divide-y divide-slate-100">
-                    <!-- Dynamically Generated -->
-                  </tbody>
-                </table>
-              </div>
-            </div>
+          <!-- Subtle Live Indicator -->
+          <div class="flex items-center gap-1.5 bg-blue-50 px-2.5 py-1 rounded-full border border-blue-100">
+            <span class="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+            <span class="text-[9px] text-blue-600 font-extrabold uppercase tracking-widest">LIVE LEDGER</span>
           </div>
-
-          <!-- RIGHT SIDE: TENANT REGISTRATION FORM -->
-          <div class="w-full lg:w-96 shrink-0">
-            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
-              <div class="mb-6">
-                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-500 text-lg shadow-inner">
-                  <i class="fas fa-user-plus"></i>
-                </div>
-                <h3 class="font-extrabold text-slate-900 text-lg">Registrasi Penghuni</h3>
-                <p class="text-xs text-slate-400">Daftarkan penghuni suite baru ke database</p>
-              </div>
-
-              <form id="form-penyewa" class="space-y-4">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
-                  <input type="text" name="nama" required placeholder="Ahmad Fauzi" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">WhatsApp Handphone</label>
-                  <input type="tel" name="hp" required placeholder="08123456789" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Suite Kamar</label>
-                  <select id="select-kamar" name="kamar" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition bg-white">
-                    <!-- Loaded dynamically -->
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal Check-In</label>
-                  <input type="date" name="tglMasuk" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
-                </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
-                  <i class="fas fa-check"></i> Selesaikan Registrasi
-                </button>
-              </form>
-            </div>
-          </div>
-
         </div>
-      </section>
 
-      <!-- SECTION: DAFTAR KAMAR & TAMBAH KAMAR -->
-      <section id="sec-kamar" class="content-section hidden w-full animate-fade-in">
-        <!-- Room Controls Header -->
-        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
-          <div>
-            <h2 class="text-xl md:text-2xl font-black text-slate-900"><i class="fas fa-bed mr-2 text-rose-500 animate-pulse"></i>Suite & Kamar</h2>
-            <p class="text-xs text-slate-400">Management Status Hunian & Layanan Kamar</p>
-          </div>
-          <div class="flex gap-2 w-full md:w-auto">
-            <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 grow md:grow-0">
-              <button onclick="filterRoomCards('semua')" id="btn-filter-semua" class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition">Semua</button>
-              <button onclick="filterRoomCards('Tersedia')" id="btn-filter-tersedia" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Tersedia</button>
-              <button onclick="filterRoomCards('Terisi')" id="btn-filter-terisi" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Terisi</button>
+        <!-- Navigation Menu -->
+        <ul class="flex flex-row md:flex-col gap-1.5 w-full p-2 md:p-4 overflow-x-auto hide-scrollbar border-b border-slate-100 md:border-none" id="sidebar-nav">
+          <li class="shrink-0 md:shrink">
+            <button onclick="showSection('dashboard', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition nav-btn-active text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-chart-pie w-5 text-center text-base"></i> Dashboard
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink">
+            <button onclick="showSection('penyewa', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-users w-5 text-center text-base"></i> Penyewa
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink">
+            <button onclick="showSection('kamar', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-door-open w-5 text-center text-base"></i> Kamar
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink">
+            <button onclick="showSection('pembayaran', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-receipt w-5 text-center text-base"></i> Pembayaran
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink">
+            <button onclick="showSection('transaksi-ops', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-exchange-alt w-5 text-center text-base"></i> Transaksi
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink">
+            <button onclick="showSection('laporan', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-file-invoice-dollar w-5 text-center text-base"></i> Laporan
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink restricted-user-view">
+            <button onclick="showSection('user', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-user-shield w-5 text-center text-base"></i> User
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink restricted-user-view">
+            <button onclick="showSection('reset', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-trash-restore w-5 text-center text-base"></i> Reset
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Sidebar footer with Interactive Switch Profile Dropdown -->
+      <div class="p-4 border-t border-slate-100 bg-slate-50 relative">
+        <div class="flex items-center justify-between cursor-pointer" onclick="toggleUserDropdown(event)">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-full bg-rose-50 border border-rose-200 flex items-center justify-center shadow-sm">
+              <i class="fas fa-user-shield text-xs text-rose-500" id="user-display-icon"></i>
             </div>
-            <button onclick="toggleRoomForm()" class="bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/10 text-xs flex items-center gap-2">
-              <i class="fas fa-plus"></i> Unit Baru
+            <div class="max-w-[120px]">
+              <p class="text-xs font-black text-slate-800 truncate" id="user-display-name">Administrator</p>
+              <p class="text-[9px] text-slate-400 uppercase font-black truncate" id="user-display-role">Lux Premium Access</p>
+            </div>
+          </div>
+          <i class="fas fa-chevron-up text-xs text-slate-400 transition-transform" id="user-display-chevron"></i>
+        </div>
+
+        <!-- Quick Session Simulator Dropdown menu -->
+        <div id="quick-user-dropdown" class="absolute bottom-16 left-4 right-4 bg-white border border-slate-200/80 rounded-xl shadow-2xl p-2 hidden z-[1000] animate-fade-in">
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2.5 py-1.5">Ganti Sesi Pengguna</p>
+          <div id="quick-user-options" class="space-y-0.5 max-h-40 overflow-y-auto hide-scrollbar">
+            <!-- Dynamically filled with simulated users -->
+          </div>
+          <div class="border-t border-slate-100 mt-1.5 pt-1.5">
+            <button onclick="handleLogout()" class="w-full text-left px-2.5 py-2 rounded-lg hover:bg-rose-50 text-rose-600 transition flex items-center gap-2 text-xs font-extrabold">
+              <i class="fas fa-sign-out-alt"></i> Keluar Sesi (Logout)
             </button>
           </div>
         </div>
-        
-        <!-- Add Room Form Drawer (Collapsible) -->
-        <div id="room-form-container" class="hidden mb-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-md max-w-4xl w-full mx-auto animate-fade-in">
-          <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
-            <h4 class="font-bold text-slate-900 text-sm"><i class="fas fa-plus-circle text-rose-500 mr-1.5"></i>Formulir Tambah Kamar Baru</h4>
-            <button onclick="toggleRoomForm()" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
-          </div>
-          <form id="form-kamar" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      </div>
+    </nav>
+
+    <!-- AREA KONTEN UTAMA -->
+    <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 lg:p-10 bg-slate-50 w-full hide-scrollbar">
+      <div class="max-w-7xl mx-auto w-full pb-16">
+
+        <!-- SECTION: DASHBOARD -->
+        <section id="sec-dashboard" class="content-section w-full animate-fade-in">
+          <!-- Dashboard Header -->
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div>
-              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
-              <input type="text" name="noKamar" required placeholder="105" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+              <p class="text-xs font-black text-rose-500 uppercase tracking-widest mb-1">Eksklusif Guesthouse</p>
+              <h2 class="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">Ringkasan Operasional</h2>
             </div>
-            <div>
-              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Kamar</label>
-              <input type="text" name="tipe" required placeholder="Standar" value="Standar" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-            </div>
-            <div>
-              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Bulanan (Rp)</label>
-              <input type="number" name="hargaBulanan" required value="1100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-            </div>
-            <div>
-              <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Harian (Rp)</label>
-              <input type="number" name="hargaHarian" required value="100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-            </div>
-            <div class="md:col-span-4 mt-2">
-              <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm">
-                Simpan Unit Kamar
+            <div class="flex gap-2 w-full md:w-auto">
+              <button onclick="syncData()" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl border border-slate-200 font-bold text-xs transition shadow-sm">
+                <i class="fas fa-sync text-blue-500 animate-spin-slow"></i> Segarkan
+              </button>
+              <button onclick="showSection('penyewa', document.querySelectorAll('#sidebar-nav button')[1])" class="flex-1 md:flex-initial flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs transition shadow-md shadow-blue-500/20">
+                <i class="fas fa-user-plus"></i> Registrasi Baru
               </button>
             </div>
-          </form>
-        </div>
+          </div>
 
-        <!-- Room Grid Content -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6" id="grid-kamar">
-          <!-- Dynamically Loaded Room Cards -->
-        </div>
-      </section>
-      
-      <!-- SECTION: RECORD PAYMENT & HISTORY -->
-      <section id="sec-pembayaran" class="content-section hidden w-full animate-fade-in">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
-          <!-- LEFT SIDE: FORM RECORD PAYMENT -->
-          <div class="lg:col-span-4">
-            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
-              <div class="mb-6">
-                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg shadow-inner">
-                  <i class="fas fa-file-invoice-dollar"></i>
-                </div>
-                <h3 class="font-extrabold text-slate-900 text-lg">Catat Pembayaran</h3>
-                <p class="text-xs text-slate-400">Pembukuan billing sewa bulanan & harian</p>
+          <!-- ALERT JATUH TEMPO DAN TUNGGAKAN -->
+          <div id="billing-alerts-container" class="hidden mb-8 animate-fade-in">
+            <div class="bg-white border border-slate-200/80 rounded-3xl p-6 shadow-sm">
+              <div class="flex items-center gap-2 mb-4">
+                <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+                <h3 class="text-base font-black text-slate-900 uppercase tracking-tight">Pemberitahuan Billing & Jatuh Tempo</h3>
               </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="billing-alerts-list">
+                <!-- Dynamically rendered alerting banners -->
+              </div>
+            </div>
+          </div>
+          
+          <!-- DASHBOARD GRID ANALYTICS -->
+          <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+              <div class="flex justify-between items-start mb-2">
+                <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Total Suite</p>
+                <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
+                  <i class="fas fa-door-open text-blue-600 text-xs"></i>
+                </div>
+              </div>
+              <h3 id="stat-total-kamar" class="text-2xl md:text-3xl font-black text-slate-900 leading-none">0</h3>
+              <p class="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Unit Kamar Terdaftar</p>
+            </div>
 
-              <form id="form-pembayaran" class="space-y-4">
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+              <div class="flex justify-between items-start mb-2">
+                <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Kamar Terisi</p>
+                <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
+                  <i class="fas fa-bed text-blue-600 text-xs"></i>
+                </div>
+              </div>
+              <h3 id="stat-kamar-terisi" class="text-2xl md:text-3xl font-black text-blue-600 leading-none">0</h3>
+              <div class="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
+                <div id="occupancy-bar" class="bg-gradient-to-r from-blue-600 to-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+              <div class="flex justify-between items-start mb-2">
+                <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Penyewa Aktif</p>
+                <div class="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center border border-rose-100">
+                  <i class="fas fa-user-check text-rose-600 text-xs"></i>
+                </div>
+              </div>
+              <h3 id="stat-total-penyewa" class="text-2xl md:text-3xl font-black text-rose-600 leading-none">0</h3>
+              <p class="text-[10px] text-slate-500 mt-2 font-semibold"><span id="occupancy-percentage" class="font-extrabold text-blue-600">0%</span> Tingkat Hunian</p>
+            </div>
+
+            <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
+              <div class="flex justify-between items-start mb-2">
+                <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Sisa Saldo Kas</p>
+                <div class="w-7 h-7 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100">
+                  <i class="fas fa-wallet text-emerald-600 text-xs"></i>
+                </div>
+              </div>
+              <h3 id="stat-pendapatan" class="text-lg md:text-2xl font-black text-emerald-600 leading-none truncate">Rp 0</h3>
+              <p class="text-[9px] text-slate-400 mt-2 font-bold uppercase tracking-wider">Arus Kas Bersih (Net)</p>
+            </div>
+          </div>
+
+          <!-- QUICK FINANCIAL SUMMARY BAR -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div class="bg-emerald-50/50 border border-emerald-100/75 p-4 rounded-2xl flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500 flex items-center justify-center text-white"><i class="fas fa-arrow-down"></i></div>
                 <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Penyewa</label>
-                  <select id="select-penyewa" name="nama" onchange="handlePenyewaChange()" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition bg-white">
-                    <!-- Dynamically Loaded Tenants -->
-                  </select>
+                  <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Pendapatan (Sewa + Ops)</p>
+                  <p id="sum-total-pendapatan" class="text-base font-black text-emerald-700">Rp 0</p>
                 </div>
-                
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
-                    <input type="text" id="input-kamar-pembayaran" name="kamar" required class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 text-sm outline-none" readonly placeholder="Terpilih otomatis">
-                  </div>
-                  <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Pembayaran</label>
-                    <input type="date" id="input-tgl-pembayaran" name="tglBayar" required onchange="calculateBilling()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+              </div>
+            </div>
+            <div class="bg-rose-50/50 border border-rose-100/75 p-4 rounded-2xl flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white"><i class="fas fa-arrow-up"></i></div>
+                <div>
+                  <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider">Total Pengeluaran Ops</p>
+                  <p id="sum-total-pengeluaran" class="text-base font-black text-rose-700">Rp 0</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- RECENT TRANSACTIONS TABLE -->
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+            <div class="p-5 md:p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-3 bg-gradient-to-r from-blue-50/10 to-rose-50/10">
+              <div>
+                <h3 class="font-extrabold text-slate-900 text-base">Log Pembayaran Terbaru</h3>
+                <p class="text-xs text-slate-400">Arsip billing digital Kost Hade</p>
+              </div>
+              <button onclick="showSection('pembayaran', document.querySelectorAll('#sidebar-nav button')[3])" class="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1.5 transition uppercase tracking-wider">
+                Catat Pembayaran <i class="fas fa-arrow-right text-[10px]"></i>
+              </button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left min-w-[700px] border-collapse">
+                <thead>
+                  <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                    <th class="py-3 px-6 text-center w-12">No</th>
+                    <th class="py-3 px-4">Tanggal</th>
+                    <th class="py-3 px-4">Penyewa</th>
+                    <th class="py-3 px-4">Kamar</th>
+                    <th class="py-3 px-4">Total Bayar</th>
+                    <th class="py-3 px-4">Keterangan</th>
+                    <th class="py-3 px-6 text-center">Receipt</th>
+                  </tr>
+                </thead>
+                <tbody id="table-transaksi" class="divide-y divide-slate-100">
+                  <!-- Loaded dynamically -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION: PENYEWA (MANAGEMENT & REGISTRATION) -->
+        <section id="sec-penyewa" class="content-section hidden w-full animate-fade-in">
+          <div class="flex flex-col lg:flex-row gap-8">
+            
+            <!-- LEFT SIDE: LIST OF ACTIVE TENANTS -->
+            <div class="flex-1">
+              <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                <div class="p-6 border-b border-slate-100">
+                  <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Penyewa Suite</h3>
+                  <p class="text-xs text-slate-400 mb-4">Pengelolaan data penghuni yang sedang terdaftar</p>
+                  
+                  <!-- Search Box for Tenants -->
+                  <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                      <i class="fas fa-search text-slate-400 text-sm"></i>
+                    </span>
+                    <input type="text" id="tenant-search" oninput="filterTenants()" placeholder="Cari nama, kamar, atau kontak..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
                   </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <!-- Tenant Responsive Table -->
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left min-w-[750px] border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-3.5 px-6">ID / Penyewa</th>
+                        <th class="py-3.5 px-4">Kamar</th>
+                        <th class="py-3.5 px-4">No HP</th>
+                        <th class="py-3.5 px-4">Mulai Sewa</th>
+                        <th class="py-3.5 px-4">Status</th>
+                        <th class="py-3.5 px-6 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-penyewa-list" class="divide-y divide-slate-100">
+                      <!-- Dynamically Generated -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT SIDE: TENANT REGISTRATION FORM -->
+            <div class="w-full lg:w-96 shrink-0">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-500 text-lg shadow-inner">
+                    <i class="fas fa-user-plus"></i>
+                  </div>
+                  <h3 class="font-extrabold text-slate-900 text-lg">Registrasi Penghuni</h3>
+                  <p class="text-xs text-slate-400">Daftarkan penghuni suite baru ke database</p>
+                </div>
+
+                <form id="form-penyewa" class="space-y-4">
                   <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Sewa</label>
-                    <select id="select-tipe-sewa" name="tipeSewa" onchange="handleTipeSewaChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition bg-white">
-                      <option value="Bulanan">Bulanan</option>
-                      <option value="Harian">Harian</option>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+                    <input type="text" name="nama" required placeholder="Ahmad Fauzi" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">WhatsApp Handphone</label>
+                    <input type="tel" name="hp" required placeholder="08123456789" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Suite Kamar</label>
+                    <select id="select-kamar" name="kamar" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition bg-white">
+                      <!-- Loaded dynamically -->
                     </select>
                   </div>
                   <div>
-                    <label id="label-durasi-sewa" class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jumlah Bulan Sewa</label>
-                    <input type="number" id="input-durasi-sewa" name="durasi" required min="1" value="1" oninput="calculateBilling()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal Check-In</label>
+                    <input type="date" name="tglMasuk" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
                   </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-4">
-                  <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Total Bayar (Rp)</label>
-                    <input type="number" id="input-jumlah-pembayaran" name="jumlah" required placeholder="1100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
-                  </div>
-                  <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Jatuh Tempo</label>
-                    <input type="text" id="input-jatuh-tempo" name="jatuhTempo" readonly class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 text-sm outline-none font-bold" placeholder="Terhitung otomatis">
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Keterangan / Periode</label>
-                  <input type="text" id="input-keterangan-pembayaran" name="keterangan" required placeholder="Pembayaran Sewa Bulanan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
-                </div>
-                
-                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/15 text-sm mt-2 flex items-center justify-center gap-2">
-                  <i class="fas fa-cloud-upload-alt"></i> Simpan Transaksi
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <!-- RIGHT SIDE: ALL TRANSACTIONS HISTORY WITH DETAILED ACTIONS -->
-          <div class="lg:col-span-8">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
-              <div class="p-6 border-b border-slate-100">
-                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Arsip Sejarah Keuangan</h3>
-                <p class="text-xs text-slate-400 mb-4">Daftar rekapan transaksi pembayaran digital</p>
-                
-                <!-- Search Box for Payments -->
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                    <i class="fas fa-search text-slate-400 text-sm"></i>
-                  </span>
-                  <input type="text" id="payment-search" oninput="filterPayments()" placeholder="Cari transaksi berdasarkan nama, kamar, atau deskripsi..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
-                </div>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="w-full text-left min-w-[650px] border-collapse">
-                  <thead>
-                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                      <th class="py-3.5 px-6">Tanggal</th>
-                      <th class="py-3.5 px-4">Nama Penyewa</th>
-                      <th class="py-3.5 px-4">Kamar</th>
-                      <th class="py-3.5 px-4">Jumlah</th>
-                      <th class="py-3.5 px-4">Keterangan</th>
-                      <th class="py-3.5 px-6 text-center">Receipt</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-pembayaran-history" class="divide-y divide-slate-100">
-                    <!-- Dynamically Loaded -->
-                  </tbody>
-                </table>
+                  <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                    <i class="fas fa-check"></i> Selesaikan Registrasi
+                  </button>
+                </form>
               </div>
             </div>
+
           </div>
+        </section>
 
-        </div>
-      </section>
-
-      <!-- SECTION: TRANSAKSI OPERASIONAL (PENDAPATAN & PENGELUARAN) -->
-      <section id="sec-transaksi-ops" class="content-section hidden w-full animate-fade-in">
-        <!-- Sub-Menu Tabs -->
-        <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-md mb-6 shadow-inner">
-          <button onclick="switchOpsSubTab('ledger')" id="tab-subops-ledger" class="flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
-            <i class="fas fa-book-open mr-1.5"></i> Ledger Buku
-          </button>
-          <button onclick="switchOpsSubTab('kategorisasi')" id="tab-subops-kategorisasi" class="flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
-            <i class="fas fa-tags mr-1.5"></i> Kategorisasi
-          </button>
-        </div>
-
-        <!-- SUBTAB 1: LEDGER CONTENT -->
-        <div id="subops-ledger-container" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <!-- LEFT SIDE: FORM RECORD GENERAL TRANSACTION -->
-          <div class="lg:col-span-4">
-            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
-              <div class="mb-6">
-                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-600 text-lg shadow-inner">
-                  <i class="fas fa-hand-holding-usd"></i>
-                </div>
-                <h3 class="font-extrabold text-slate-900 text-lg">Catat Transaksi</h3>
-                <p class="text-xs text-slate-400">Pencatatan pemasukan tambahan & pengeluaran operasional</p>
-              </div>
-
-              <form id="form-transaksi" class="space-y-4">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jenis Transaksi</label>
-                  <select id="trans-jenis" name="jenis" onchange="handleTransTypeChange()" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
-                    <option value="Pengeluaran" class="text-rose-600">Pengeluaran (Operasional)</option>
-                    <option value="Pendapatan" class="text-emerald-600">Pendapatan (Lain-lain)</option>
-                    <option value="Neraca" class="text-blue-600">Neraca (Aset/Kewajiban/Ekuitas)</option>
-                  </select>
-                </div>
-                
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal</label>
-                  <input type="date" id="trans-tanggal" name="tanggal" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-                </div>
-
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kategori</label>
-                  <select id="trans-kategori" name="kategori" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white">
-                    <!-- Loaded dynamically via JS depending on selection -->
-                  </select>
-                </div>
-
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jumlah (Rp)</label>
-                  <input type="number" id="trans-jumlah" name="jumlah" required placeholder="500000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition font-bold text-slate-900">
-                </div>
-
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Keterangan / Deskripsi</label>
-                  <input type="text" id="trans-keterangan" name="keterangan" required placeholder="Contoh: Beli token listrik utama" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-                </div>
-                
-                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
-                  <i class="fas fa-plus-circle"></i> Tambah Transaksi
-                </button>
-              </form>
+        <!-- SECTION: DAFTAR KAMAR & TAMBAH KAMAR -->
+        <section id="sec-kamar" class="content-section hidden w-full animate-fade-in">
+          <!-- Room Controls Header -->
+          <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+              <h2 class="text-xl md:text-2xl font-black text-slate-900"><i class="fas fa-bed mr-2 text-rose-500 animate-pulse"></i>Suite & Kamar</h2>
+              <p class="text-xs text-slate-400">Management Status Hunian & Layanan Kamar</p>
             </div>
-          </div>
-
-          <!-- RIGHT SIDE: ALL OPERATIONAL TRANSACTIONS HISTORY -->
-          <div class="lg:col-span-8">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
-              <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div>
-                  <h3 class="font-extrabold text-slate-900 text-lg mb-1">Buku Ledger Operasional</h3>
-                  <p class="text-xs text-slate-400">Histori terperinci pemasukan non-sewa dan pengeluaran berkala</p>
-                </div>
-                <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
-                  <button onclick="filterOpsLedger('Semua')" id="btn-ops-all" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition">Semua</button>
-                  <button onclick="filterOpsLedger('Pendapatan')" id="btn-ops-income" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Pendapatan</button>
-                  <button onclick="filterOpsLedger('Pengeluaran')" id="btn-ops-expense" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Pengeluaran</button>
-                  <button onclick="filterOpsLedger('Neraca')" id="btn-ops-neraca" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Neraca</button>
-                </div>
+            <div class="flex gap-2 w-full md:w-auto">
+              <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 grow md:grow-0">
+                <button onclick="filterRoomCards('semua')" id="btn-filter-semua" class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition">Semua</button>
+                <button onclick="filterRoomCards('Tersedia')" id="btn-filter-tersedia" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Tersedia</button>
+                <button onclick="filterRoomCards('Terisi')" id="btn-filter-terisi" class="px-3.5 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Terisi</button>
               </div>
-
-              <!-- Search Ledger -->
-              <div class="p-6 pb-2 border-b border-slate-100/50 bg-slate-50/30">
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                    <i class="fas fa-search text-slate-400 text-sm"></i>
-                  </span>
-                  <input type="text" id="ops-search" oninput="filterLedgerData()" placeholder="Cari berdasarkan kategori atau keterangan..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition shadow-sm">
-                </div>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="w-full text-left min-w-[650px] border-collapse">
-                  <thead>
-                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                      <th class="py-3.5 px-6">Tanggal</th>
-                      <th class="py-3.5 px-4">Tipe</th>
-                      <th class="py-3.5 px-4">Kategori</th>
-                      <th class="py-3.5 px-4">Jumlah</th>
-                      <th class="py-3.5 px-4">Keterangan</th>
-                      <th class="py-3.5 px-6 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-ops-ledger" class="divide-y divide-slate-100">
-                    <!-- Dynamically Loaded -->
-                  </tbody>
-                </table>
-              </div>
+              <button onclick="toggleRoomForm()" class="bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white font-bold px-4 py-2.5 rounded-xl transition shadow-md shadow-blue-500/10 text-xs flex items-center gap-2">
+                <i class="fas fa-plus"></i> Unit Baru
+              </button>
             </div>
-          </div>
-        </div>
-
-        <!-- SUBTAB 2: KATEGORISASI CONTENT -->
-        <div id="subops-kategorisasi-container" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <!-- LEFT SIDE: FORM CATEGORY -->
-          <div class="lg:col-span-4">
-            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
-              <div class="mb-6">
-                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-600 text-lg shadow-inner">
-                  <i class="fas fa-tags"></i>
-                </div>
-                <h3 id="category-form-title" class="font-extrabold text-slate-900 text-lg">Kelola Kategori</h3>
-                <p id="category-form-desc" class="text-xs text-slate-400">Atur pengelompokan jenis akun akuntansi guesthouse</p>
-              </div>
-
-              <form id="form-kategori" class="space-y-4">
-                <input type="hidden" id="category-edit-id">
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jenis Transaksi</label>
-                  <select id="category-jenis" name="jenis" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
-                    <option value="Pengeluaran" class="text-rose-600">Pengeluaran (Operasional)</option>
-                    <option value="Pendapatan" class="text-emerald-600">Pendapatan (Lain-lain)</option>
-                    <option value="Neraca" class="text-blue-600">Neraca (Aset/Kewajiban/Ekuitas)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Kategori</label>
-                  <input type="text" id="category-nama" name="nama" required placeholder="Contoh: Operasional Dapur" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-                </div>
-                <div>
-                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Saldo Normal</label>
-                  <select id="category-saldoNormal" name="saldoNormal" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
-                    <option value="Debet">Debet (D)</option>
-                    <option value="Kredit">Kredit (K)</option>
-                  </select>
-                </div>
-                <button type="submit" id="btn-save-category" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
-                  <i class="fas fa-plus-circle"></i> Simpan Kategori
-                </button>
-                <button type="button" id="btn-cancel-edit-category" onclick="cancelEditCategory()" class="hidden w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-xl font-bold text-xs transition">
-                  Batal Edit
-                </button>
-              </form>
-            </div>
-          </div>
-
-          <!-- RIGHT SIDE: ALL CATEGORIES TABLE -->
-          <div class="lg:col-span-8">
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
-              <div class="p-6 border-b border-slate-100">
-                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Kategori Terdaftar</h3>
-                <p class="text-xs text-slate-400 mb-4">Pemetaan kategori transaksi ke dalam format akun akuntansi</p>
-                <!-- Search Box for Categories -->
-                <div class="relative">
-                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
-                    <i class="fas fa-search text-slate-400 text-sm"></i>
-                  </span>
-                  <input type="text" id="category-search" oninput="filterCategoriesTable()" placeholder="Cari nama kategori atau jenis..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
-                </div>
-              </div>
-
-              <div class="overflow-x-auto">
-                <table class="w-full text-left min-w-[550px] border-collapse">
-                  <thead>
-                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
-                      <th class="py-3.5 px-6 w-16 text-center">No</th>
-                      <th class="py-3.5 px-4">Jenis Transaksi</th>
-                      <th class="py-3.5 px-4">Nama Kategori</th>
-                      <th class="py-3.5 px-4 text-center">Saldo Normal</th>
-                      <th class="py-3.5 px-6 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-category-list" class="divide-y divide-slate-100">
-                    <!-- Dynamically Loaded -->
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- SECTION: LAPORAN KEUANGAN (NERACA, RUGI LABA, ARUS KAS) -->
-      <section id="sec-laporan" class="content-section hidden w-full animate-fade-in">
-        <!-- Report Header & Month Filter -->
-        <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
-          <div>
-            <h2 class="text-xl md:text-2xl font-black text-slate-900 flex items-center gap-2">
-              <i class="fas fa-file-invoice-dollar text-rose-500"></i> Laporan Keuangan Berkala
-            </h2>
-            <p class="text-xs text-slate-400">Pembukuan standard akuntansi guesthouse komparatif</p>
           </div>
           
-          <!-- Month/Year Filters -->
-          <div class="flex items-center gap-3 w-full md:w-auto">
-            <div class="flex flex-col gap-1 w-full md:w-40">
-              <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter Bulan</label>
-              <select id="filter-laporan-bulan" onchange="generateSelectedReport()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition">
-                <option value="1">Januari</option>
-                <option value="2">Februari</option>
-                <option value="3">Maret</option>
-                <option value="4">April</option>
-                <option value="5" selected>Mei</option>
-                <option value="6">Juni</option>
-                <option value="7">Juli</option>
-                <option value="8">Agustus</option>
-                <option value="9">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
+          <!-- Add Room Form Drawer (Collapsible) -->
+          <div id="room-form-container" class="hidden mb-8 bg-white p-6 rounded-2xl border border-slate-200 shadow-md max-w-4xl w-full mx-auto animate-fade-in">
+            <div class="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+              <h4 class="font-bold text-slate-900 text-sm"><i class="fas fa-plus-circle text-rose-500 mr-1.5"></i>Formulir Tambah Kamar Baru</h4>
+              <button onclick="toggleRoomForm()" class="text-slate-400 hover:text-slate-600"><i class="fas fa-times"></i></button>
             </div>
-            <div class="flex flex-col gap-1 w-full md:w-28">
-              <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tahun</label>
-              <select id="filter-laporan-tahun" onchange="generateSelectedReport()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition">
-                <option value="2026" selected>2026</option>
-                <option value="2027">2027</option>
-              </select>
+            <form id="form-kamar" class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
+                <input type="text" name="noKamar" required placeholder="105" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Kamar</label>
+                <input type="text" name="tipe" required placeholder="Standar" value="Standar" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Bulanan (Rp)</label>
+                <input type="number" name="hargaBulanan" required value="1100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tarif Harian (Rp)</label>
+                <input type="number" name="hargaHarian" required value="100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+              </div>
+              <div class="md:col-span-4 mt-2">
+                <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm">
+                  Simpan Unit Kamar
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Room Grid Content -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6" id="grid-kamar">
+            <!-- Dynamically Loaded Room Cards -->
+          </div>
+        </section>
+        
+        <!-- SECTION: RECORD PAYMENT & HISTORY -->
+        <section id="sec-pembayaran" class="content-section hidden w-full animate-fade-in">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- LEFT SIDE: FORM RECORD PAYMENT -->
+            <div class="lg:col-span-4">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg shadow-inner">
+                    <i class="fas fa-file-invoice-dollar"></i>
+                  </div>
+                  <h3 class="font-extrabold text-slate-900 text-lg">Catat Pembayaran</h3>
+                  <p class="text-xs text-slate-400">Pembukuan billing sewa bulanan & harian</p>
+                </div>
+
+                <form id="form-pembayaran" class="space-y-4">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Penyewa</label>
+                    <select id="select-penyewa" name="nama" onchange="handlePenyewaChange()" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition bg-white">
+                      <!-- Dynamically Loaded Tenants -->
+                    </select>
+                  </div>
+                  
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No Kamar</label>
+                      <input type="text" id="input-kamar-pembayaran" name="kamar" required class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 text-sm outline-none" readonly placeholder="Terpilih otomatis">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Pembayaran</label>
+                      <input type="date" id="input-tgl-pembayaran" name="tglBayar" required onchange="calculateBilling()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tipe Sewa</label>
+                      <select id="select-tipe-sewa" name="tipeSewa" onchange="handleTipeSewaChange()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition bg-white">
+                        <option value="Bulanan">Bulanan</option>
+                        <option value="Harian">Harian</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label id="label-durasi-sewa" class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jumlah Bulan Sewa</label>
+                      <input type="number" id="input-durasi-sewa" name="durasi" required min="1" value="1" oninput="calculateBilling()" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Total Bayar (Rp)</label>
+                      <input type="number" id="input-jumlah-pembayaran" name="jumlah" required placeholder="1100000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tgl Jatuh Tempo</label>
+                      <input type="text" id="input-jatuh-tempo" name="jatuhTempo" readonly class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 text-sm outline-none font-bold" placeholder="Terhitung otomatis">
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Keterangan / Periode</label>
+                    <input type="text" id="input-keterangan-pembayaran" name="keterangan" required placeholder="Pembayaran Sewa Bulanan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                  </div>
+                  
+                  <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/15 text-sm mt-2 flex items-center justify-center gap-2">
+                    <i class="fas fa-cloud-upload-alt"></i> Simpan Transaksi
+                  </button>
+                </form>
+              </div>
             </div>
+
+            <!-- RIGHT SIDE: ALL TRANSACTIONS HISTORY WITH DETAILED ACTIONS -->
+            <div class="lg:col-span-8">
+              <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                <div class="p-6 border-b border-slate-100">
+                  <h3 class="font-extrabold text-slate-900 text-lg mb-1">Arsip Sejarah Keuangan</h3>
+                  <p class="text-xs text-slate-400 mb-4">Daftar rekapan transaksi pembayaran digital</p>
+                  
+                  <!-- Search Box for Payments -->
+                  <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                      <i class="fas fa-search text-slate-400 text-sm"></i>
+                    </span>
+                    <input type="text" id="payment-search" oninput="filterPayments()" placeholder="Cari transaksi berdasarkan nama, kamar, atau deskripsi..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left min-w-[650px] border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-3.5 px-6">Tanggal</th>
+                        <th class="py-3.5 px-4">Nama Penyewa</th>
+                        <th class="py-3.5 px-4">Kamar</th>
+                        <th class="py-3.5 px-4">Jumlah</th>
+                        <th class="py-3.5 px-4">Keterangan</th>
+                        <th class="py-3.5 px-6 text-center">Receipt</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-pembayaran-history" class="divide-y divide-slate-100">
+                      <!-- Dynamically Loaded -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
           </div>
-        </div>
+        </section>
 
-        <!-- Subtabs Navigation inside Reports -->
-        <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-lg mb-6 shadow-inner">
-          <button onclick="switchReportTab('rugi-laba')" id="tab-rep-rugi-laba" class="flex-1 py-3 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
-            <i class="fas fa-chart-line mr-1.5"></i> Rugi Laba
-          </button>
-          <button onclick="switchReportTab('arus-kas')" id="tab-rep-arus-kas" class="flex-1 py-3 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
-            <i class="fas fa-funnel-dollar mr-1.5"></i> Arus Kas
-          </button>
-          <button onclick="switchReportTab('neraca')" id="tab-rep-neraca" class="flex-1 py-3 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
-            <i class="fas fa-balance-scale mr-1.5"></i> Neraca
-          </button>
-        </div>
-
-        <!-- REPORT DISPLAY PANEL -->
-        <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 md:p-8 relative">
-          <!-- Decorative Stamp / Watermark -->
-          <div class="absolute top-6 right-6 flex items-center gap-1 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full pointer-events-none">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span class="text-[9px] text-blue-600 font-extrabold uppercase tracking-widest">E-Report Valid</span>
-          </div>
-
-          <!-- Dynamic Report Content Area (Prints perfectly) -->
-          <div id="financial-report-content" class="text-slate-800 max-w-4xl mx-auto">
-            <!-- Loaded dynamically depending on tab -->
-          </div>
-
-          <!-- Action Buttons -->
-          <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
-            <button onclick="printFinancialReport()" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-xl font-bold text-xs transition shadow-md shadow-slate-800/10">
-              <i class="fas fa-print"></i> Cetak Laporan Keuangan
+        <!-- SECTION: TRANSAKSI OPERASIONAL (PENDAPATAN & PENGELUARAN) -->
+        <section id="sec-transaksi-ops" class="content-section hidden w-full animate-fade-in">
+          <!-- Sub-Menu Tabs -->
+          <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-md mb-6 shadow-inner">
+            <button onclick="switchOpsSubTab('ledger')" id="tab-subops-ledger" class="flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
+              <i class="fas fa-book-open mr-1.5"></i> Ledger Buku
+            </button>
+            <button onclick="switchOpsSubTab('kategorisasi')" id="tab-subops-kategorisasi" class="flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
+              <i class="fas fa-tags mr-1.5"></i> Kategorisasi
             </button>
           </div>
-        </div>
-      </section>
 
-    </div>
-  </main>
+          <!-- SUBTAB 1: LEDGER CONTENT -->
+          <div id="subops-ledger-container" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- LEFT SIDE: FORM RECORD GENERAL TRANSACTION -->
+            <div class="lg:col-span-4">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-600 text-lg shadow-inner">
+                    <i class="fas fa-hand-holding-usd"></i>
+                  </div>
+                  <h3 class="font-extrabold text-slate-900 text-lg">Catat Transaksi</h3>
+                  <p class="text-xs text-slate-400">Pencatatan pemasukan tambahan & pengeluaran operasional</p>
+                </div>
+
+                <form id="form-transaksi" class="space-y-4">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jenis Transaksi</label>
+                    <select id="trans-jenis" name="jenis" onchange="handleTransTypeChange()" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                      <option value="Pengeluaran" class="text-rose-600">Pengeluaran (Operasional)</option>
+                      <option value="Pendapatan" class="text-emerald-600">Pendapatan (Lain-lain)</option>
+                      <option value="Neraca" class="text-blue-600">Neraca (Aset/Kewajiban/Ekuitas)</option>
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal</label>
+                    <input type="date" id="trans-tanggal" name="tanggal" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kategori</label>
+                    <select id="trans-kategori" name="kategori" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white">
+                      <!-- Loaded dynamically via JS depending on selection -->
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jumlah (Rp)</label>
+                    <input type="number" id="trans-jumlah" name="jumlah" required placeholder="500000" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition font-bold text-slate-900">
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Keterangan / Deskripsi</label>
+                    <input type="text" id="trans-keterangan" name="keterangan" required placeholder="Contoh: Beli token listrik utama" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  
+                  <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                    <i class="fas fa-plus-circle"></i> Tambah Transaksi
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- RIGHT SIDE: ALL OPERATIONAL TRANSACTIONS HISTORY -->
+            <div class="lg:col-span-8">
+              <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h3 class="font-extrabold text-slate-900 text-lg mb-1">Buku Ledger Operasional</h3>
+                    <p class="text-xs text-slate-400">Histori terperinci pemasukan non-sewa dan pengeluaran berkala</p>
+                  </div>
+                  <div class="flex bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+                    <button onclick="filterOpsLedger('Semua')" id="btn-ops-all" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition">Semua</button>
+                    <button onclick="filterOpsLedger('Pendapatan')" id="btn-ops-income" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Pendapatan</button>
+                    <button onclick="filterOpsLedger('Pengeluaran')" id="btn-ops-expense" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Pengeluaran</button>
+                    <button onclick="filterOpsLedger('Neraca')" id="btn-ops-neraca" class="px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition">Neraca</button>
+                  </div>
+                </div>
+
+                <!-- Search Ledger -->
+                <div class="p-6 pb-2 border-b border-slate-100/50 bg-slate-50/30">
+                  <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                      <i class="fas fa-search text-slate-400 text-sm"></i>
+                    </span>
+                    <input type="text" id="ops-search" oninput="filterLedgerData()" placeholder="Cari berdasarkan kategori atau keterangan..." class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition shadow-sm">
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left min-w-[650px] border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-3.5 px-6">Tanggal</th>
+                        <th class="py-3.5 px-4">Tipe</th>
+                        <th class="py-3.5 px-4">Kategori</th>
+                        <th class="py-3.5 px-4">Jumlah</th>
+                        <th class="py-3.5 px-4">Keterangan</th>
+                        <th class="py-3.5 px-6 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-ops-ledger" class="divide-y divide-slate-100">
+                      <!-- Dynamically Loaded -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SUBTAB 2: KATEGORISASI CONTENT -->
+          <div id="subops-kategorisasi-container" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <!-- LEFT SIDE: FORM CATEGORY -->
+            <div class="lg:col-span-4">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-600 text-lg shadow-inner">
+                    <i class="fas fa-tags"></i>
+                  </div>
+                  <h3 id="category-form-title" class="font-extrabold text-slate-900 text-lg">Kelola Kategori</h3>
+                  <p id="category-form-desc" class="text-xs text-slate-400">Atur pengelompokan jenis akun akuntansi guesthouse</p>
+                </div>
+
+                <form id="form-kategori" class="space-y-4">
+                  <input type="hidden" id="category-edit-id">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jenis Transaksi</label>
+                    <select id="category-jenis" name="jenis" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                      <option value="Pengeluaran" class="text-rose-600">Pengeluaran (Operasional)</option>
+                      <option value="Pendapatan" class="text-emerald-600">Pendapatan (Lain-lain)</option>
+                      <option value="Neraca" class="text-blue-600">Neraca (Aset/Kewajiban/Ekuitas)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Kategori</label>
+                    <input type="text" id="category-nama" name="nama" required placeholder="Contoh: Operasional Dapur" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Saldo Normal</label>
+                    <select id="category-saldoNormal" name="saldoNormal" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                      <option value="Debet">Debet (D)</option>
+                      <option value="Kredit">Kredit (K)</option>
+                    </select>
+                  </div>
+                  <button type="submit" id="btn-save-category" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                    <i class="fas fa-plus-circle"></i> Simpan Kategori
+                  </button>
+                  <button type="button" id="btn-cancel-edit-category" onclick="cancelEditCategory()" class="hidden w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-xl font-bold text-xs transition">
+                    Batal Edit
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- RIGHT SIDE: ALL CATEGORIES TABLE -->
+            <div class="lg:col-span-8">
+              <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                <div class="p-6 border-b border-slate-100">
+                  <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Kategori Terdaftar</h3>
+                  <p class="text-xs text-slate-400 mb-4">Pemetaan kategori transaksi ke dalam format akun akuntansi</p>
+                  <!-- Search Box for Categories -->
+                  <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                      <i class="fas fa-search text-slate-400 text-sm"></i>
+                    </span>
+                    <input type="text" id="category-search" oninput="filterCategoriesTable()" placeholder="Cari nama kategori atau jenis..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left min-w-[550px] border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-3.5 px-6 w-16 text-center">No</th>
+                        <th class="py-3.5 px-4">Jenis Transaksi</th>
+                        <th class="py-3.5 px-4">Nama Kategori</th>
+                        <th class="py-3.5 px-4 text-center">Saldo Normal</th>
+                        <th class="py-3.5 px-6 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-category-list" class="divide-y divide-slate-100">
+                      <!-- Dynamically Loaded -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION: LAPORAN KEUANGAN (NERACA, RUGI LABA, ARUS KAS) -->
+        <section id="sec-laporan" class="content-section hidden w-full animate-fade-in">
+          <!-- Report Header & Month Filter -->
+          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div>
+              <h2 class="text-xl md:text-2xl font-black text-slate-900 flex items-center gap-2">
+                <i class="fas fa-file-invoice-dollar text-rose-500"></i> Laporan Keuangan Berkala
+              </h2>
+              <p class="text-xs text-slate-400">Pembukuan standard akuntansi guesthouse komparatif</p>
+            </div>
+            
+            <!-- Month/Year Filters -->
+            <div class="flex items-center gap-3 w-full md:w-auto">
+              <div class="flex flex-col gap-1 w-full md:w-40">
+                <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Filter Bulan</label>
+                <select id="filter-laporan-bulan" onchange="generateSelectedReport()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition">
+                  <option value="1">Januari</option>
+                  <option value="2">Februari</option>
+                  <option value="3">Maret</option>
+                  <option value="4">April</option>
+                  <option value="5" selected>Mei</option>
+                  <option value="6">Juni</option>
+                  <option value="7">Juli</option>
+                  <option value="8">Agustus</option>
+                  <option value="9">September</option>
+                  <option value="10">Oktober</option>
+                  <option value="11">November</option>
+                  <option value="12">Desember</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1 w-full md:w-28">
+                <label class="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tahun</label>
+                <select id="filter-laporan-tahun" onchange="generateSelectedReport()" class="p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-xs font-bold transition">
+                  <option value="2026" selected>2026</option>
+                  <option value="2027">2027</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Subtabs Navigation inside Reports -->
+          <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-lg mb-6 shadow-inner">
+            <button onclick="switchReportTab('rugi-laba')" id="tab-rep-rugi-laba" class="flex-1 py-3 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
+              <i class="fas fa-chart-line mr-1.5"></i> Rugi Laba
+            </button>
+            <button onclick="switchReportTab('arus-kas')" id="tab-rep-arus-kas" class="flex-1 py-3 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
+              <i class="fas fa-funnel-dollar mr-1.5"></i> Arus Kas
+            </button>
+            <button onclick="switchReportTab('neraca')" id="tab-rep-neraca" class="flex-1 py-3 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
+              <i class="fas fa-balance-scale mr-1.5"></i> Neraca
+            </button>
+          </div>
+
+          <!-- REPORT DISPLAY PANEL -->
+          <div class="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 md:p-8 relative">
+            <!-- Decorative Stamp / Watermark -->
+            <div class="absolute top-6 right-6 flex items-center gap-1 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full pointer-events-none">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span class="text-[9px] text-blue-600 font-extrabold uppercase tracking-widest">E-Report Valid</span>
+            </div>
+
+            <!-- Dynamic Report Content Area (Prints perfectly) -->
+            <div id="financial-report-content" class="text-slate-800 max-w-4xl mx-auto">
+              <!-- Loaded dynamically depending on tab -->
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
+              <button onclick="printFinancialReport()" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-xl font-bold text-xs transition shadow-md shadow-slate-800/10">
+                <i class="fas fa-print"></i> Cetak Laporan Keuangan
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECTION: USER MANAGEMENT -->
+        <section id="sec-user" class="content-section hidden w-full animate-fade-in restricted-user-view">
+          <div class="flex flex-col lg:flex-row gap-8">
+            
+            <!-- LEFT SIDE: USER LIST -->
+            <div class="flex-1">
+              <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                <div class="p-6 border-b border-slate-100">
+                  <h3 class="font-extrabold text-slate-900 text-lg mb-1">Manajemen Pengguna</h3>
+                  <p class="text-xs text-slate-400 mb-4">Pengaturan user operasional dan level otorisasi sistem</p>
+                  
+                  <!-- Search Box for Users -->
+                  <div class="relative">
+                    <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                      <i class="fas fa-search text-slate-400 text-sm"></i>
+                    </span>
+                    <input type="text" id="user-search" oninput="filterUsersTable()" placeholder="Cari nama atau username..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                </div>
+
+                <!-- User Responsive Table -->
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left min-w-[550px] border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-3.5 px-6">Nama Pengguna (Username)</th>
+                        <th class="py-3.5 px-4">Nama Lengkap</th>
+                        <th class="py-3.5 px-4">Role / Hak Akses</th>
+                        <th class="py-3.5 px-6 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-user-list" class="divide-y divide-slate-100">
+                      <!-- Loaded dynamically via JS -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- RIGHT SIDE: USER REGISTRATION / UPDATE FORM -->
+            <div class="w-full lg:w-96 shrink-0">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg shadow-inner">
+                    <i class="fas fa-user-shield"></i>
+                  </div>
+                  <h3 id="user-form-title" class="font-extrabold text-slate-900 text-lg">Tambah Pengguna</h3>
+                  <p id="user-form-desc" class="text-xs text-slate-400">Daftarkan operator atau admin baru ke database</p>
+                </div>
+
+                <form id="form-user" class="space-y-4">
+                  <input type="hidden" id="user-edit-id">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Username</label>
+                    <input type="text" id="user-username" required placeholder="Contoh: andi_hade" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+                    <input type="text" id="user-fullname" required placeholder="Contoh: Ade Vera" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kata Sandi (Password)</label>
+                    <input type="password" id="user-password" required placeholder="••••••••" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Level Otoritas (Role)</label>
+                    <select id="user-role" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                      <option value="User">User (Akses Terbatas & No Delete)</option>
+                      <option value="Administrator">Administrator (Akses Penuh)</option>
+                    </select>
+                  </div>
+                  
+                  <button type="submit" id="btn-save-user" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                    <i class="fas fa-check"></i> Simpan User
+                  </button>
+                  <button type="button" id="btn-cancel-edit-user" onclick="cancelEditUser()" class="hidden w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-xl font-bold text-xs transition">
+                    Batal Edit
+                  </button>
+                </form>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION: RESET DATABASE -->
+        <section id="sec-reset" class="content-section hidden w-full animate-fade-in restricted-user-view">
+          <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm max-w-2xl mx-auto">
+            <div class="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
+              <div class="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center border border-rose-100 text-rose-600 text-lg shadow-inner">
+                <i class="fas fa-trash-restore"></i>
+              </div>
+              <div>
+                <h2 class="text-xl font-black text-slate-900">Pusat Pembersihan & Reset Data</h2>
+                <p class="text-xs text-slate-400">Kelola kondisi log keuangan guesthouse secara aman</p>
+              </div>
+            </div>
+
+            <div class="space-y-6">
+              <!-- OPTION 1: LOGS RESTORATION -->
+              <div class="p-5 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div class="max-w-md">
+                  <h4 class="font-extrabold text-slate-800 text-sm mb-1">Kosongkan Semua Log Transaksi</h4>
+                  <p class="text-xs text-slate-400 leading-relaxed">Menghapus seluruh history Pembayaran Penghuni dan Buku Ledger Operasional. Unit Kamar dan Kategori akun Anda tetap aman, namun seluruh kamar otomatis dikosongkan (Tersedia).</p>
+                </div>
+                <button onclick="confirmReset('transaksi')" class="w-full md:w-auto px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs transition whitespace-nowrap">
+                  Reset Transaksi
+                </button>
+              </div>
+
+              <!-- OPTION 2: FULL DATA FACTORY RESET -->
+              <div class="p-5 rounded-2xl border border-red-100 bg-red-50/20 hover:bg-red-50/40 transition flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div class="max-w-md">
+                  <h4 class="font-extrabold text-rose-800 text-sm mb-1">Setelan Pabrik (Full Factory Reset)</h4>
+                  <p class="text-xs text-rose-400 leading-relaxed">Menghapus mutlak seluruh database lokal Kost Hade (Kategori, Unit Kamar, Penyewa, & Transaksi) dan menyetel ulang guesthouse ke kondisi demo bawaan awal aplikasi.</p>
+                </div>
+                <button onclick="confirmReset('total')" class="w-full md:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs transition whitespace-nowrap shadow-md shadow-red-500/10">
+                  Factory Reset
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </main>
+  </div>
 
   <!-- MODAL: EDIT KAMAR -->
   <div id="edit-room-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
@@ -960,6 +1179,10 @@
     let selectedOpsFilter = 'Semua';
     let activeReportTab = 'rugi-laba';
     
+    // Active User Role state management
+    let activeUser = null;
+    let usersList = [];
+    
     // Custom Callback Placeholder for Confirmation Modal Actions
     let modalConfirmCallback = null;
 
@@ -1031,6 +1254,189 @@
     // Run dynamic category init
     refreshCategoryOptions();
 
+    function togglePasswordVisibility() {
+      const passwordInput = document.getElementById('login-password');
+      const icon = document.getElementById('toggle-password-icon');
+      if (passwordInput.type === 'password') {
+        passwordInput.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+      } else {
+        passwordInput.type = 'password';
+        icon.className = 'fas fa-eye';
+      }
+    }
+
+    function handleLoginSubmit(event) {
+      event.preventDefault();
+      const uName = document.getElementById('login-username').value.trim().toLowerCase();
+      const pWord = document.getElementById('login-password').value;
+
+      // Force refresh user database from storage
+      const storedUsers = localStorage.getItem('kost_hade_users');
+      if (storedUsers) {
+        usersList = JSON.parse(storedUsers);
+      } else {
+        usersList = [
+          { id: "usr_1", username: "admin", fullname: "Administrator Utama", role: "Administrator", password: "admin" },
+          { id: "usr_2", username: "user_operasional", fullname: "Ade Vera Kurnia", role: "User", password: "user" }
+        ];
+        localStorage.setItem('kost_hade_users', JSON.stringify(usersList));
+      }
+
+      const matchedUser = usersList.find(u => u.username === uName && u.password === pWord);
+      if (matchedUser) {
+        localStorage.setItem('kost_hade_logged_in', 'true');
+        localStorage.setItem('kost_hade_active_user', JSON.stringify(matchedUser));
+        
+        // Hide login and show main app
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('app-container').classList.remove('hidden');
+        document.getElementById('app-container').classList.add('flex');
+        
+        initUserSession();
+        loadDashboard();
+        showCustomAlert("Akses Diberikan", `Selamat datang kembali, ${matchedUser.fullname}!`, true);
+      } else {
+        showCustomAlert("Akses Ditolak", "Kombinasi nama pengguna atau kata sandi tidak sesuai.", false);
+      }
+    }
+
+    function handleLogout() {
+      localStorage.setItem('kost_hade_logged_in', 'false');
+      localStorage.removeItem('kost_hade_active_user');
+      
+      // Reset Login form inputs
+      document.getElementById('form-login').reset();
+      document.getElementById('login-password').type = 'password';
+      document.getElementById('toggle-password-icon').className = 'fas fa-eye';
+      
+      initUserSession();
+    }
+
+    // USER SESSIONS MANAGEMENT & INITIALIZATION
+    function initUserSession() {
+      // Load or seed users database
+      const storedUsers = localStorage.getItem('kost_hade_users');
+      if (storedUsers) {
+        usersList = JSON.parse(storedUsers);
+        
+        // Auto-migrate legacy simulation name to "Ade Vera Kurnia" if found in localStorage
+        let updated = false;
+        usersList = usersList.map(u => {
+          if (u.fullname === "Asep Surasep") {
+            u.fullname = "Ade Vera Kurnia";
+            updated = true;
+          }
+          return u;
+        });
+        
+        if (updated) {
+          localStorage.setItem('kost_hade_users', JSON.stringify(usersList));
+          // Also update active session if it was currently logged in as Asep
+          const activeSession = localStorage.getItem('kost_hade_active_user');
+          if (activeSession) {
+            const parsedActive = JSON.parse(activeSession);
+            if (parsedActive.fullname === "Asep Surasep") {
+              parsedActive.fullname = "Ade Vera Kurnia";
+              localStorage.setItem('kost_hade_active_user', JSON.stringify(parsedActive));
+            }
+          }
+        }
+      } else {
+        usersList = [
+          { id: "usr_1", username: "admin", fullname: "Administrator Utama", role: "Administrator", password: "admin" },
+          { id: "usr_2", username: "user_operasional", fullname: "Ade Vera Kurnia", role: "User", password: "user" }
+        ];
+        localStorage.setItem('kost_hade_users', JSON.stringify(usersList));
+      }
+
+      // Check if session is logged in
+      const isLoggedIn = localStorage.getItem('kost_hade_logged_in') === 'true';
+      if (isLoggedIn) {
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('app-container').classList.remove('hidden');
+        document.getElementById('app-container').classList.add('flex');
+        
+        // Load active user session
+        const activeSession = localStorage.getItem('kost_hade_active_user');
+        if (activeSession) {
+          activeUser = JSON.parse(activeSession);
+        } else {
+          activeUser = usersList[0]; // Default to first user (Admin)
+          localStorage.setItem('kost_hade_active_user', JSON.stringify(activeUser));
+        }
+        applyUserRoleUI();
+      } else {
+        document.getElementById('login-screen').classList.remove('hidden');
+        document.getElementById('app-container').classList.add('hidden');
+        document.getElementById('app-container').classList.remove('flex');
+      }
+    }
+
+    // Apply permissions dynamically on the UI
+    function applyUserRoleUI() {
+      const body = document.body;
+      const isUser = activeUser.role === 'User';
+
+      // Toggle root role class
+      if (isUser) {
+        body.className = ''; // Reset classes
+        body.className = 'bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row role-user';
+      } else {
+        body.className = ''; // Reset classes
+        body.className = 'bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row role-admin';
+      }
+
+      // Update sidebar session details
+      document.getElementById('user-display-name').innerText = activeUser.fullname;
+      document.getElementById('user-display-role').innerText = activeUser.role === 'Administrator' ? 'Administrator' : 'User Operasional';
+      document.getElementById('user-display-icon').className = activeUser.role === 'Administrator' ? 'fas fa-user-shield text-xs text-rose-500' : 'fas fa-user-circle text-xs text-blue-500';
+
+      // Build quick switcher dropdown choices
+      const switcherContainer = document.getElementById('quick-user-options');
+      switcherContainer.innerHTML = usersList.map(u => `
+        <button onclick="switchUserSession('${u.id}')" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 flex items-center justify-between text-xs font-semibold ${u.id === activeUser.id ? 'bg-blue-50/50 text-blue-600' : 'text-slate-600'} transition">
+          <span class="truncate">${u.fullname} (${u.role})</span>
+          ${u.id === activeUser.id ? '<i class="fas fa-check text-[9px]"></i>' : ''}
+        </button>
+      `).join('');
+    }
+
+    // Toggle simulator user sessions menu
+    function toggleUserDropdown(event) {
+      event.stopPropagation();
+      const dropdown = document.getElementById('quick-user-dropdown');
+      const chevron = document.getElementById('user-display-chevron');
+      dropdown.classList.toggle('hidden');
+      chevron.classList.toggle('rotate-180');
+    }
+
+    // Close dropdowns on outer click
+    document.addEventListener('click', () => {
+      const dropdown = document.getElementById('quick-user-dropdown');
+      const chevron = document.getElementById('user-display-chevron');
+      if (dropdown && !dropdown.classList.contains('hidden')) {
+        dropdown.classList.add('hidden');
+        chevron.classList.remove('rotate-180');
+      }
+    });
+
+    function switchUserSession(userId) {
+      const targetUser = usersList.find(u => u.id === userId);
+      if (targetUser) {
+        activeUser = targetUser;
+        localStorage.setItem('kost_hade_active_user', JSON.stringify(activeUser));
+        applyUserRoleUI();
+        
+        // Notify role switched and redirect safely
+        showCustomAlert("Sesi Diperbarui", `Anda sekarang masuk sebagai ${targetUser.fullname} (${targetUser.role})`, true);
+        showSection('dashboard', document.querySelector('#sidebar-nav button'));
+      }
+    }
+
+    // Initialize user session on scripts boot
+    initUserSession();
+
     // CUSTOM ALERT SYSTEM WITH SUCCESS/ERROR/CONFIRM FLAVORS
     function showCustomAlert(title, message, isSuccess = true, isConfirm = false, onConfirm = null) {
       const modal = document.getElementById('custom-modal');
@@ -1050,7 +1456,7 @@
         icon.className = "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl bg-blue-50 text-blue-500 border border-blue-100 shadow-inner";
         icon.innerHTML = '<i class="fas fa-exclamation-triangle text-rose-500"></i>';
         cancelBtn.classList.remove('hidden');
-        confirmBtn.className = "flex-1 bg-gradient-to-r from-blue-600 to-rose-600 text-white py-3 px-4 rounded-xl font-bold hover:from-blue-700 hover:to-rose-700 transition shadow-lg shadow-blue-500/10";
+        confirmBtn.className = "flex-1 bg-gradient-to-r from-blue-600 to-rose-600 text-white py-3 px-4 rounded-xl font-bold hover:from-blue-700 hover:to-rose-700 transition shadow-lg shadow-blue-500/20";
         confirmBtn.innerText = "Konfirmasi";
       } else if (isSuccess) {
         decor.className = "absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500";
@@ -1144,6 +1550,12 @@
     }
 
     function showSection(sectionId, btn) {
+      // BLOCK USER ACCESS TO RESTRICTED PAGES
+      if (activeUser.role === 'User' && (sectionId === 'reset' || sectionId === 'user')) {
+        showCustomAlert("Akses Ditolak", "Maaf, User Operasional tidak diberikan izin mengakses modul manajemen sensitif.", false);
+        return;
+      }
+
       document.querySelectorAll('.content-section').forEach(s => s.classList.add('hidden'));
       document.getElementById('sec-' + sectionId).classList.remove('hidden');
       
@@ -1173,6 +1585,9 @@
       }
       if(sectionId === 'laporan') {
         generateSelectedReport();
+      }
+      if(sectionId === 'user') {
+        loadUsersData();
       }
     }
 
@@ -1831,7 +2246,7 @@
                 <button onclick="openEditRoomModal('${k[0]}', '${k[1]}', '${k[2]}', '${k[3]}')" class="w-7 h-7 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Edit Kamar">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteRoom('${k[0]}', '${k[4]}')" class="w-7 h-7 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Hapus Kamar">
+                <button onclick="promptDeleteRoom('${k[0]}', '${k[4]}')" class="w-7 h-7 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100 btn-delete-action" title="Hapus Kamar">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -1947,11 +2362,11 @@
                 <button onclick="openEditTenantModal('${p[0]}', '${p[1]}', '${p[2]}', '${p[3]}', '${p[4]}', '${p[5]}', '${p[6] || ''}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Penyewa">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteTenant('${p[0]}', '${p[1]}', '${p[3]}', '${p[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition" title="Hapus Penyewa">
+                <button onclick="promptDeleteTenant('${p[0]}', '${p[1]}', '${p[3]}', '${p[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Penyewa">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
                 ${statusActive ? `
-                  <button onclick="promptTenantCheckout('${p[0]}', '${p[1]}', '${p[3]}')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 text-[9px] font-black tracking-widest uppercase transition" title="Keluarkan Penyewa / Check-out">
+                  <button onclick="promptTenantCheckout('${p[0]}', '${p[1]}', '${p[3]}')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 text-[9px] font-black tracking-widest uppercase transition btn-delete-action" title="Keluarkan Penyewa / Check-out">
                     Checkout
                   </button>
                 ` : ''}
@@ -2274,7 +2689,7 @@
             </td>
             <td class="py-4 px-4 text-slate-500 font-medium max-w-[200px] truncate" title="${item[5]}">${item[5]}</td>
             <td class="py-4 px-6 text-center">
-              <button onclick="promptDeleteOpsTransaction('${item[0]}', '${item[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition" title="Hapus Transaksi">
+              <button onclick="promptDeleteOpsTransaction('${item[0]}', '${item[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition btn-delete-action" title="Hapus Transaksi">
                 <i class="fas fa-trash-alt text-[10px]"></i>
               </button>
             </td>
@@ -2325,6 +2740,115 @@
               showCustomAlert("Berhasil Dihapus", msg, true);
               loadLedgerData();
             }).deleteOpsTransaction(id);
+        }
+      );
+    }
+
+    // USER MAINTENANCE FUNCTIONS (CRUD)
+    function loadUsersData() {
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          usersList = JSON.parse(responseString);
+          localStorage.setItem('kost_hade_users', responseString);
+          renderUsersTable(usersList);
+          showLoading(false);
+        }).getUsers();
+    }
+
+    function renderUsersTable(items) {
+      const tbody = document.getElementById('table-user-list');
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="py-12 text-center text-slate-400 text-sm italic">Belum ada pengguna terdaftar.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map(u => {
+        const isAdmin = u.role === 'Administrator';
+        return `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
+            <td class="py-4 px-6 font-bold text-slate-800">${u.username}</td>
+            <td class="py-4 px-4 font-semibold">${u.fullname}</td>
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isAdmin ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}">
+                ${u.role}
+              </span>
+            </td>
+            <td class="py-4 px-6 text-center">
+              <div class="flex items-center justify-center gap-1.5">
+                <button onclick="startEditUser('${u.id}', '${u.username}', '${u.fullname}', '${u.role}', '${u.password}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                  <i class="fas fa-edit text-[10px]"></i>
+                </button>
+                <button onclick="promptDeleteUser('${u.id}', '${u.fullname}', '${u.username}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
+                  <i class="fas fa-trash-alt text-[10px]"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterUsersTable() {
+      const q = document.getElementById('user-search').value.toLowerCase().trim();
+      const filtered = usersList.filter(u => {
+        return u.username.toLowerCase().includes(q) || u.fullname.toLowerCase().includes(q);
+      });
+      renderUsersTable(filtered);
+    }
+
+    function startEditUser(id, username, fullname, role, password) {
+      document.getElementById('user-edit-id').value = id;
+      document.getElementById('user-username').value = username;
+      document.getElementById('user-fullname').value = fullname;
+      document.getElementById('user-password').value = password;
+      document.getElementById('user-role').value = role;
+
+      document.getElementById('user-form-title').innerText = "Ubah Pengguna";
+      document.getElementById('user-form-desc').innerText = "Sesuaikan kata sandi, nama, atau wewenang";
+      document.getElementById('btn-save-user').innerHTML = '<i class="fas fa-check-circle"></i> Simpan Perubahan';
+      document.getElementById('btn-cancel-edit-user').classList.remove('hidden');
+    }
+
+    function cancelEditUser() {
+      document.getElementById('user-edit-id').value = "";
+      document.getElementById('form-user').reset();
+
+      document.getElementById('user-form-title').innerText = "Tambah Pengguna";
+      document.getElementById('user-form-desc').innerText = "Daftarkan operator atau admin baru ke database";
+      document.getElementById('btn-save-user').innerHTML = '<i class="fas fa-check"></i> Simpan User';
+      document.getElementById('btn-cancel-edit-user').classList.add('hidden');
+    }
+
+    function promptDeleteUser(id, fullname, username) {
+      // SECURITY VERIFICATIONS
+      if (id === activeUser.id) {
+        showCustomAlert("Aksi Ditolak", "Anda tidak diperkenankan menghapus akun sendiri yang sedang digunakan dalam sesi aktif ini.", false);
+        return;
+      }
+
+      const adminCount = usersList.filter(u => u.role === 'Administrator').length;
+      const targetUser = usersList.find(u => u.id === id);
+      if (targetUser && targetUser.role === 'Administrator' && adminCount <= 1) {
+        showCustomAlert("Proteksi Sistem", "Aksi gagal. Sistem wajib mempertahankan minimal satu akun level Administrator untuk mencegah penguncian sistem (system lockout).", false);
+        return;
+      }
+
+      showCustomAlert(
+        "Hapus Pengguna?",
+        `Apakah Anda yakin ingin menghapus user "${fullname}" (@${username})? Akun ini tidak akan dapat digunakan lagi untuk mengelola guesthouse.`,
+        false,
+        true,
+        () => {
+          showLoading(true);
+          google.script.run
+            .withFailureHandler(handleError)
+            .withSuccessHandler(msg => {
+              showLoading(false);
+              showCustomAlert("Berhasil Dihapus", msg, true);
+              loadUsersData();
+            }).deleteUser(id);
         }
       );
     }
@@ -2389,7 +2913,7 @@
                 <button onclick="startEditCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}', '${item.saldoNormal}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition" title="Hapus Kategori">
+                <button onclick="promptDeleteCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -2457,6 +2981,43 @@
     }
 
     // SUBMISSIONS
+    document.getElementById('form-user').onsubmit = function(e) {
+      e.preventDefault();
+      showLoading(true);
+      const editId = document.getElementById('user-edit-id').value;
+      const username = document.getElementById('user-username').value.trim().toLowerCase();
+      const fullname = document.getElementById('user-fullname').value.trim();
+      const password = document.getElementById('user-password').value;
+      const role = document.getElementById('user-role').value;
+
+      if (editId) {
+        google.script.run
+          .withFailureHandler(handleError)
+          .withSuccessHandler(msg => {
+            showLoading(false);
+            showCustomAlert("Sukses", msg, true);
+            cancelEditUser();
+            loadUsersData();
+            // If editing current user, reload active session
+            if (editId === activeUser.id) {
+              const updatedUser = { id: editId, username, fullname, role, password };
+              activeUser = updatedUser;
+              localStorage.setItem('kost_hade_active_user', JSON.stringify(activeUser));
+              applyUserRoleUI();
+            }
+          }).editUser({ id: editId, username, fullname, password, role });
+      } else {
+        google.script.run
+          .withFailureHandler(handleError)
+          .withSuccessHandler(msg => {
+            showLoading(false);
+            showCustomAlert("Sukses", msg, true);
+            this.reset();
+            loadUsersData();
+          }).addUser({ username, fullname, password, role });
+      }
+    };
+
     document.getElementById('form-kategori').onsubmit = function(e) {
       e.preventDefault();
       showLoading(true);
@@ -2649,7 +3210,7 @@
           <head>
             <title>Cetak Receipt Kost Hade Premium</title>
             <style>
-              body { font-family: 'Courier New', Courier, monospace; padding: 20px; font-size: 13px; color: #000; background: #fff; }
+              body { font-family: 'Plus Jakarta Sans', sans-serif; padding: 20px; font-size: 13px; color: #000; background: #fff; }
               .text-center { text-align: center; }
               .pb-4 { padding-bottom: 12px; }
               .border-b { border-bottom: 1px dashed #000; }
@@ -2709,6 +3270,63 @@
             }).deleteTenant(tenantId, roomNo);
         }
       );
+    }
+
+    // DATABASE WIPING AND RECONCILIATION LOGICS
+    function confirmReset(type) {
+      if (type === 'transaksi') {
+        showCustomAlert(
+          "Kosongkan Log Keuangan?",
+          "Apakah Anda yakin ingin menghapus seluruh log transaksi pembayaran penyewa & operasional ledger? Seluruh kamar akan dikosongkan (Tersedia).",
+          false,
+          true,
+          () => {
+            showLoading(true);
+            
+            // Clear simulated local storage keys
+            localStorage.setItem('kost_hade_transaksi', JSON.stringify([]));
+            localStorage.setItem('kost_hade_ops_transaksi', JSON.stringify([]));
+            localStorage.setItem('kost_hade_penyewa', JSON.stringify([]));
+            
+            // Force reset all default rooms to "Tersedia"
+            const rooms = JSON.parse(localStorage.getItem('kost_hade_kamar')) || [];
+            const resetRooms = rooms.map(k => [k[0], k[1], k[2], k[3], 'Tersedia', '']);
+            localStorage.setItem('kost_hade_kamar', JSON.stringify(resetRooms));
+
+            cachedData = null;
+            setTimeout(() => {
+              showLoading(false);
+              showCustomAlert("Reset Berhasil", "Arsip log keuangan dikosongkan dan status hunian kamar di-reset.", true);
+              showSection('dashboard', document.querySelector('#sidebar-nav button'));
+            }, 600);
+          }
+        );
+      } else if (type === 'total') {
+        showCustomAlert(
+          "Peringatan Setelan Pabrik",
+          "Tindakan ini menghapus seluruh database lokal Kost Hade (Kamar, Kategori kustom, Transaksi, Penyewa) dan menyetel ulang sistem ke data bawaan awal. Lanjutkan?",
+          false,
+          true,
+          () => {
+            showLoading(true);
+            
+            // Destroy all storage elements
+            localStorage.removeItem('kost_hade_kamar');
+            localStorage.removeItem('kost_hade_penyewa');
+            localStorage.removeItem('kost_hade_transaksi');
+            localStorage.removeItem('kost_hade_ops_transaksi');
+            localStorage.removeItem('kost_hade_kategori_v2');
+            localStorage.removeItem('kost_hade_users');
+            localStorage.removeItem('kost_hade_active_user');
+
+            cachedData = null;
+            setTimeout(() => {
+              showLoading(false);
+              location.reload(); // Hard refresh to trigger re-seeding script on load
+            }, 800);
+          }
+        );
+      }
     }
 
     // INTERACTIVE DELETE ROOM PROMPTER
@@ -3113,6 +3731,45 @@
               const filtered = opsTrans.filter(t => t[0] !== id);
               localStorage.setItem('kost_hade_ops_transaksi', JSON.stringify(filtered));
               setTimeout(() => this.success(`Transaksi berhasil dihapus dari Buku Ledger.`), 400);
+            },
+            
+            getUsers: function() {
+              const users = localStorage.getItem('kost_hade_users') || "[]";
+              setTimeout(() => this.success(users), 300);
+            },
+            addUser: function(u) {
+              const users = JSON.parse(localStorage.getItem('kost_hade_users') || "[]");
+              if (users.some(item => item.username === u.username)) {
+                setTimeout(() => this.fail(`Username @${u.username} sudah terdaftar, gunakan username unik lainnya.`), 300);
+                return;
+              }
+              const newUser = {
+                id: "usr_" + Math.floor(1000 + Math.random() * 9000),
+                username: u.username,
+                fullname: u.fullname,
+                role: u.role,
+                password: u.password
+              };
+              users.push(newUser);
+              localStorage.setItem('kost_hade_users', JSON.stringify(users));
+              setTimeout(() => this.success(`User baru "${u.fullname}" (@${u.username}) berhasil ditambahkan!`), 400);
+            },
+            editUser: function(u) {
+              const users = JSON.parse(localStorage.getItem('kost_hade_users') || "[]");
+              const updated = users.map(item => {
+                if (item.id === u.id) {
+                  return { id: u.id, username: u.username, fullname: u.fullname, password: u.password, role: u.role };
+                }
+                return item;
+              });
+              localStorage.setItem('kost_hade_users', JSON.stringify(updated));
+              setTimeout(() => this.success(`Data user "${u.fullname}" berhasil diperbarui.`), 400);
+            },
+            deleteUser: function(id) {
+              const users = JSON.parse(localStorage.getItem('kost_hade_users') || "[]");
+              const filtered = users.filter(item => item.id !== id);
+              localStorage.setItem('kost_hade_users', JSON.stringify(filtered));
+              setTimeout(() => this.success("Akun user berhasil dihapus dari database."), 400);
             }
           }
         }
@@ -3121,7 +3778,11 @@
 
     // Auto-bootstrap dashboard analytics on load
     window.onload = () => { 
-      setTimeout(loadDashboard, 400); 
+      initUserSession();
+      const isLoggedIn = localStorage.getItem('kost_hade_logged_in') === 'true';
+      if (isLoggedIn) {
+        setTimeout(loadDashboard, 400); 
+      }
     };
   </script>
 </body>
