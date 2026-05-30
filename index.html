@@ -547,8 +547,18 @@
 
       <!-- SECTION: TRANSAKSI OPERASIONAL (PENDAPATAN & PENGELUARAN) -->
       <section id="sec-transaksi-ops" class="content-section hidden w-full animate-fade-in">
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
+        <!-- Sub-Menu Tabs -->
+        <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-md mb-6 shadow-inner">
+          <button onclick="switchOpsSubTab('ledger')" id="tab-subops-ledger" class="flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
+            <i class="fas fa-book-open mr-1.5"></i> Ledger Buku
+          </button>
+          <button onclick="switchOpsSubTab('kategorisasi')" id="tab-subops-kategorisasi" class="flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">
+            <i class="fas fa-tags mr-1.5"></i> Kategorisasi
+          </button>
+        </div>
+
+        <!-- SUBTAB 1: LEDGER CONTENT -->
+        <div id="subops-ledger-container" class="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <!-- LEFT SIDE: FORM RECORD GENERAL TRANSACTION -->
           <div class="lg:col-span-4">
             <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
@@ -638,6 +648,85 @@
                     </tr>
                   </thead>
                   <tbody id="table-ops-ledger" class="divide-y divide-slate-100">
+                    <!-- Dynamically Loaded -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SUBTAB 2: KATEGORISASI CONTENT -->
+        <div id="subops-kategorisasi-container" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-8">
+          <!-- LEFT SIDE: FORM CATEGORY -->
+          <div class="lg:col-span-4">
+            <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+              <div class="mb-6">
+                <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-600 text-lg shadow-inner">
+                  <i class="fas fa-tags"></i>
+                </div>
+                <h3 id="category-form-title" class="font-extrabold text-slate-900 text-lg">Kelola Kategori</h3>
+                <p id="category-form-desc" class="text-xs text-slate-400">Atur pengelompokan jenis akun akuntansi guesthouse</p>
+              </div>
+
+              <form id="form-kategori" class="space-y-4">
+                <input type="hidden" id="category-edit-id">
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Jenis Transaksi</label>
+                  <select id="category-jenis" name="jenis" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                    <option value="Pengeluaran" class="text-rose-600">Pengeluaran (Operasional)</option>
+                    <option value="Pendapatan" class="text-emerald-600">Pendapatan (Lain-lain)</option>
+                    <option value="Neraca" class="text-blue-600">Neraca (Aset/Kewajiban/Ekuitas)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Kategori</label>
+                  <input type="text" id="category-nama" name="nama" required placeholder="Contoh: Operasional Dapur" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                </div>
+                <div>
+                  <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Saldo Normal</label>
+                  <select id="category-saldoNormal" name="saldoNormal" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
+                    <option value="Debet">Debet (D)</option>
+                    <option value="Kredit">Kredit (K)</option>
+                  </select>
+                </div>
+                <button type="submit" id="btn-save-category" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-2 flex items-center justify-center gap-2">
+                  <i class="fas fa-plus-circle"></i> Simpan Kategori
+                </button>
+                <button type="button" id="btn-cancel-edit-category" onclick="cancelEditCategory()" class="hidden w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-xl font-bold text-xs transition">
+                  Batal Edit
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <!-- RIGHT SIDE: ALL CATEGORIES TABLE -->
+          <div class="lg:col-span-8">
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+              <div class="p-6 border-b border-slate-100">
+                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Kategori Terdaftar</h3>
+                <p class="text-xs text-slate-400 mb-4">Pemetaan kategori transaksi ke dalam format akun akuntansi</p>
+                <!-- Search Box for Categories -->
+                <div class="relative">
+                  <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none">
+                    <i class="fas fa-search text-slate-400 text-sm"></i>
+                  </span>
+                  <input type="text" id="category-search" oninput="filterCategoriesTable()" placeholder="Cari nama kategori atau jenis..." class="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                </div>
+              </div>
+
+              <div class="overflow-x-auto">
+                <table class="w-full text-left min-w-[550px] border-collapse">
+                  <thead>
+                    <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                      <th class="py-3.5 px-6 w-16 text-center">No</th>
+                      <th class="py-3.5 px-4">Jenis Transaksi</th>
+                      <th class="py-3.5 px-4">Nama Kategori</th>
+                      <th class="py-3.5 px-4 text-center">Saldo Normal</th>
+                      <th class="py-3.5 px-6 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-category-list" class="divide-y divide-slate-100">
                     <!-- Dynamically Loaded -->
                   </tbody>
                 </table>
@@ -874,34 +963,73 @@
     // Custom Callback Placeholder for Confirmation Modal Actions
     let modalConfirmCallback = null;
 
-    // Categories for general Ledger
-    const categoryOptions = {
-      Pengeluaran: [
-        "Listrik & Air",
-        "Gaji Karyawan",
-        "Wifi & Internet",
-        "Perawatan Kamar (Maintenance)",
-        "Kebersihan & Peralatan",
-        "Air Minum & Sembako",
-        "Pajak & Perizinan",
-        "Biaya Lain-lain"
-      ],
-      Pendapatan: [
-        "Kantin / Vending Machine",
-        "Penjualan Barang Bekas",
-        "Deposit Hangus",
-        "Kemitraan Jasa Laundry",
-        "Pemasukan Lain-lain"
-      ],
-      Neraca: [
-        "Pembelian Aset Tetap",
-        "Penyusutan Aset Tetap",
-        "Penerimaan Deposit Jaminan",
-        "Pengembalian Deposit Jaminan",
-        "Setoran Modal Pemilik",
-        "Penarikan Prive Pemilik"
-      ]
+    // Categories structure loaded dynamically
+    let categoryOptions = {
+      Pengeluaran: [],
+      Pendapatan: [],
+      Neraca: []
     };
+
+    function refreshCategoryOptions() {
+      const stored = localStorage.getItem('kost_hade_kategori_v2');
+      if (stored) {
+        categoryOptions = JSON.parse(stored);
+        
+        // Auto-migrate if stored format is old array of strings
+        let needsMigration = false;
+        if (categoryOptions.Pengeluaran && categoryOptions.Pengeluaran.length > 0 && typeof categoryOptions.Pengeluaran[0] === 'string') {
+          needsMigration = true;
+        }
+        
+        if (needsMigration) {
+          const migrated = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
+          categoryOptions.Pengeluaran.forEach(cat => migrated.Pengeluaran.push({ nama: cat, saldoNormal: "Debet" }));
+          categoryOptions.Pendapatan.forEach(cat => migrated.Pendapatan.push({ nama: cat, saldoNormal: "Kredit" }));
+          categoryOptions.Neraca.forEach(cat => {
+            let sn = "Debet";
+            if (cat.includes("Penyusutan") || cat.includes("Penerimaan Deposit") || cat.includes("Setoran Modal")) {
+              sn = "Kredit";
+            }
+            migrated.Neraca.push({ nama: cat, saldoNormal: sn });
+          });
+          localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(migrated));
+          categoryOptions = migrated;
+        }
+      } else {
+        const defaults = {
+          Pengeluaran: [
+            { nama: "Listrik & Air", saldoNormal: "Debet" },
+            { nama: "Gaji Karyawan", saldoNormal: "Debet" },
+            { nama: "Wifi & Internet", saldoNormal: "Debet" },
+            { nama: "Perawatan Kamar (Maintenance)", saldoNormal: "Debet" },
+            { nama: "Kebersihan & Peralatan", saldoNormal: "Debet" },
+            { nama: "Air Minum & Sembako", saldoNormal: "Debet" },
+            { nama: "Pajak & Perizinan", saldoNormal: "Debet" },
+            { nama: "Biaya Lain-lain", saldoNormal: "Debet" }
+          ],
+          Pendapatan: [
+            { nama: "Kantin / Vending Machine", saldoNormal: "Kredit" },
+            { nama: "Penjualan Barang Bekas", saldoNormal: "Kredit" },
+            { nama: "Deposit Hangus", saldoNormal: "Kredit" },
+            { nama: "Kemitraan Jasa Laundry", saldoNormal: "Kredit" },
+            { nama: "Pemasukan Lain-lain", saldoNormal: "Kredit" }
+          ],
+          Neraca: [
+            { nama: "Pembelian Aset Tetap", saldoNormal: "Debet" },
+            { nama: "Penyusutan Aset Tetap", saldoNormal: "Kredit" },
+            { nama: "Penerimaan Deposit Jaminan", saldoNormal: "Kredit" },
+            { nama: "Pengembalian Deposit Jaminan", saldoNormal: "Debet" },
+            { nama: "Setoran Modal Pemilik", saldoNormal: "Kredit" },
+            { nama: "Penarikan Prive Pemilik", saldoNormal: "Debet" }
+          ]
+        };
+        localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(defaults));
+        categoryOptions = defaults;
+      }
+    }
+
+    // Run dynamic category init
+    refreshCategoryOptions();
 
     // CUSTOM ALERT SYSTEM WITH SUCCESS/ERROR/CONFIRM FLAVORS
     function showCustomAlert(title, message, isSuccess = true, isConfirm = false, onConfirm = null) {
@@ -986,9 +1114,33 @@
 
     // POPULATE CATEGORY DROPDOWN DYNAMICALLY
     function handleTransTypeChange() {
+      refreshCategoryOptions(); // Sync latest category lists
       const type = document.getElementById('trans-jenis').value;
       const selectKategori = document.getElementById('trans-kategori');
-      selectKategori.innerHTML = categoryOptions[type].map(cat => `<option value="${cat}">${cat}</option>`).join('');
+      if (categoryOptions[type]) {
+        selectKategori.innerHTML = categoryOptions[type].map(cat => `<option value="${cat.nama}">${cat.nama} (${cat.saldoNormal === 'Debet' ? 'D' : 'K'})</option>`).join('');
+      } else {
+        selectKategori.innerHTML = `<option value="">-- Tidak ada kategori --</option>`;
+      }
+    }
+
+    // SUB-TAB TRANS-OPS SWITCHER
+    function switchOpsSubTab(subTab) {
+      document.getElementById('subops-ledger-container').classList.add('hidden');
+      document.getElementById('subops-kategorisasi-container').classList.add('hidden');
+      
+      document.getElementById('tab-subops-ledger').className = "flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all";
+      document.getElementById('tab-subops-kategorisasi').className = "flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all";
+
+      if (subTab === 'ledger') {
+        document.getElementById('subops-ledger-container').classList.remove('hidden');
+        document.getElementById('tab-subops-ledger').className = "flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all";
+        loadLedgerData();
+      } else if (subTab === 'kategorisasi') {
+        document.getElementById('subops-kategorisasi-container').classList.remove('hidden');
+        document.getElementById('tab-subops-kategorisasi').className = "flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all";
+        loadCategoriesData();
+      }
     }
 
     function showSection(sectionId, btn) {
@@ -1010,8 +1162,8 @@
       if(sectionId === 'transaksi-ops') {
         // Default values for Transaction page
         document.getElementById('trans-tanggal').value = new Date().toISOString().split('T')[0];
+        switchOpsSubTab('ledger');
         handleTransTypeChange();
-        loadLedgerData();
       }
       if(sectionId === 'dashboard') {
         loadDashboard();
@@ -1064,7 +1216,6 @@
 
     // Date parsing helper to extract standard JavaScript Date Month and Year indices
     function parseDateObj(dateStr) {
-      // Handles formats like: "28/05/2026", "2026-05-28", "28-05-2026"
       if (!dateStr) return { month: 0, year: 0 };
       let dParts = [];
       if (dateStr.includes('/')) {
@@ -1177,12 +1328,14 @@
       if (activeReportTab === 'rugi-laba') {
         // --- 1. LAPORAN RUGI LABA ---
         // Group Expenses by Categories
+        refreshCategoryOptions();
         const expenseGroups = {};
-        categoryOptions.Pengeluaran.forEach(cat => expenseGroups[cat] = 0);
+        categoryOptions.Pengeluaran.forEach(cat => expenseGroups[cat.nama] = 0);
         monthlyOps.filter(o => o[2] === 'Pengeluaran').forEach(o => {
           if (expenseGroups[o[3]] !== undefined) {
             expenseGroups[o[3]] += Number(o[4]) || 0;
           } else {
+            if (!expenseGroups["Biaya Lain-lain"]) expenseGroups["Biaya Lain-lain"] = 0;
             expenseGroups["Biaya Lain-lain"] += Number(o[4]) || 0;
           }
         });
@@ -2133,14 +2286,12 @@
     function filterOpsLedger(type) {
       selectedOpsFilter = type;
       document.querySelectorAll('#sec-transaksi-ops button[id^="btn-ops-"]').forEach(btn => {
-        btn.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
-        btn.classList.add('text-slate-500', 'hover:text-slate-800');
+        btn.className = "px-3 py-1.5 text-xs font-bold rounded-lg text-slate-500 hover:text-slate-800 transition";
       });
       const activeMap = { Semua: 'all', Pendapatan: 'income', Pengeluaran: 'expense', Neraca: 'neraca' };
       const activeBtn = document.getElementById('btn-ops-' + activeMap[type]);
       if (activeBtn) {
-        activeBtn.classList.remove('text-slate-500', 'hover:text-slate-800');
-        activeBtn.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-rose-600', 'text-white', 'shadow-md');
+        activeBtn.className = "px-3 py-1.5 text-xs font-bold rounded-lg bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition";
       }
       loadLedgerData();
     }
@@ -2178,7 +2329,170 @@
       );
     }
 
+    // CATEGORY CRUD LOGICS
+    function loadCategoriesData() {
+      showLoading(true);
+      google.script.run
+        .withFailureHandler(handleError)
+        .withSuccessHandler(responseString => {
+          const data = JSON.parse(responseString);
+          categoryOptions = data;
+          localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(data));
+
+          let flatCategories = [];
+          Object.keys(data).forEach(jenis => {
+            data[jenis].forEach((catObj, index) => {
+              flatCategories.push({ 
+                id: `${jenis}||${index}`, 
+                jenis: jenis, 
+                nama: catObj.nama, 
+                saldoNormal: catObj.saldoNormal, 
+                originalIndex: index 
+              });
+            });
+          });
+          renderCategoriesTable(flatCategories);
+          showLoading(false);
+        }).getCategories();
+    }
+
+    function renderCategoriesTable(items) {
+      const tbody = document.getElementById('table-category-list');
+      if (items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-slate-400 text-sm italic">Belum ada kategori terdaftar.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map((item, idx) => {
+        let badgeColor = "bg-rose-50 text-rose-600 border border-rose-100";
+        if (item.jenis === "Pendapatan") badgeColor = "bg-emerald-50 text-emerald-600 border border-emerald-100";
+        if (item.jenis === "Neraca") badgeColor = "bg-blue-50 text-blue-600 border border-blue-100";
+
+        let snBadge = item.saldoNormal === "Debet" ? "bg-sky-50 text-sky-700 border border-sky-100" : "bg-amber-50 text-amber-700 border border-amber-100";
+
+        return `
+          <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
+            <td class="py-4 px-6 text-center font-bold text-slate-400">${idx + 1}</td>
+            <td class="py-4 px-4">
+              <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${badgeColor}">
+                ${item.jenis}
+              </span>
+            </td>
+            <td class="py-4 px-4 font-bold text-slate-800">${item.nama}</td>
+            <td class="py-4 px-4 text-center">
+              <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${snBadge}">
+                ${item.saldoNormal}
+              </span>
+            </td>
+            <td class="py-4 px-6 text-center">
+              <div class="flex items-center justify-center gap-1.5">
+                <button onclick="startEditCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}', '${item.saldoNormal}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                  <i class="fas fa-edit text-[10px]"></i>
+                </button>
+                <button onclick="promptDeleteCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition" title="Hapus Kategori">
+                  <i class="fas fa-trash-alt text-[10px]"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterCategoriesTable() {
+      const q = document.getElementById('category-search').value.toLowerCase().trim();
+      refreshCategoryOptions();
+      let flatCategories = [];
+      Object.keys(categoryOptions).forEach(jenis => {
+        categoryOptions[jenis].forEach((catObj, index) => {
+          if (jenis.toLowerCase().includes(q) || catObj.nama.toLowerCase().includes(q) || catObj.saldoNormal.toLowerCase().includes(q)) {
+            flatCategories.push({ id: `${jenis}||${index}`, jenis: jenis, nama: catObj.nama, saldoNormal: catObj.saldoNormal, originalIndex: index });
+          }
+        });
+      });
+      renderCategoriesTable(flatCategories);
+    }
+
+    function startEditCategory(jenis, index, nama, saldoNormal) {
+      document.getElementById('category-edit-id').value = `${jenis}||${index}`;
+      document.getElementById('category-jenis').value = jenis;
+      document.getElementById('category-nama').value = nama;
+      document.getElementById('category-saldoNormal').value = saldoNormal || "Debet";
+
+      document.getElementById('category-form-title').innerText = "Edit Kategori";
+      document.getElementById('category-form-desc').innerText = "Ubah pemetaan akun atau nama kategori";
+      document.getElementById('btn-save-category').innerHTML = '<i class="fas fa-check-circle"></i> Simpan Perubahan';
+      document.getElementById('btn-cancel-edit-category').classList.remove('hidden');
+    }
+
+    function cancelEditCategory() {
+      document.getElementById('category-edit-id').value = "";
+      document.getElementById('form-kategori').reset();
+
+      document.getElementById('category-form-title').innerText = "Kelola Kategori";
+      document.getElementById('category-form-desc').innerText = "Atur pengelompokan jenis akun akuntansi guesthouse";
+      document.getElementById('btn-save-category').innerHTML = '<i class="fas fa-plus-circle"></i> Simpan Kategori';
+      document.getElementById('btn-cancel-edit-category').classList.add('hidden');
+    }
+
+    function promptDeleteCategory(jenis, index, nama) {
+      showCustomAlert(
+        "Hapus Kategori?",
+        `Apakah Anda yakin ingin menghapus kategori "${nama}"? Data transaksi lama yang menggunakan kategori ini tidak akan terhapus, namun tidak akan dikelompokkan secara spesifik di laporan keuangan.`,
+        false,
+        true,
+        () => {
+          showLoading(true);
+          google.script.run
+            .withFailureHandler(handleError)
+            .withSuccessHandler(msg => {
+              cachedData = null; // force reload reports cache
+              showLoading(false);
+              showCustomAlert("Berhasil Dihapus", msg, true);
+              loadCategoriesData();
+              refreshCategoryOptions();
+            }).deleteCategory({ jenis: jenis, index: index });
+        }
+      );
+    }
+
     // SUBMISSIONS
+    document.getElementById('form-kategori').onsubmit = function(e) {
+      e.preventDefault();
+      showLoading(true);
+      const editId = document.getElementById('category-edit-id').value;
+      const jenis = document.getElementById('category-jenis').value;
+      const nama = document.getElementById('category-nama').value.trim();
+      const saldoNormal = document.getElementById('category-saldoNormal').value;
+
+      if (editId) {
+        // UPDATE MODE
+        const [oldJenis, oldIndex] = editId.split('||');
+        google.script.run
+          .withFailureHandler(handleError)
+          .withSuccessHandler(msg => {
+            cachedData = null;
+            showLoading(false);
+            showCustomAlert("Sukses", msg, true);
+            cancelEditCategory();
+            loadCategoriesData();
+            refreshCategoryOptions();
+          }).editCategory({ oldJenis: oldJenis, oldIndex: parseInt(oldIndex), jenis: jenis, nama: nama, saldoNormal: saldoNormal });
+      } else {
+        // CREATE MODE
+        google.script.run
+          .withFailureHandler(handleError)
+          .withSuccessHandler(msg => {
+            cachedData = null;
+            showLoading(false);
+            showCustomAlert("Sukses", msg, true);
+            this.reset();
+            loadCategoriesData();
+            refreshCategoryOptions();
+          }).addCategory({ jenis: jenis, nama: nama, saldoNormal: saldoNormal });
+      }
+    };
+
     document.getElementById('form-transaksi').onsubmit = function(e) {
       e.preventDefault();
       showLoading(true);
@@ -2556,6 +2870,75 @@
             getOpsTransactions: function() {
               const opsTrans = JSON.parse(localStorage.getItem('kost_hade_ops_transaksi')) || [];
               setTimeout(() => this.success(JSON.stringify(opsTrans)), 300);
+            },
+            getCategories: function() {
+              const stored = localStorage.getItem('kost_hade_kategori_v2');
+              let data = {};
+              if (stored) {
+                data = JSON.parse(stored);
+              } else {
+                data = {
+                  Pengeluaran: [
+                    { nama: "Listrik & Air", saldoNormal: "Debet" }, 
+                    { nama: "Gaji Karyawan", saldoNormal: "Debet" }, 
+                    { nama: "Wifi & Internet", saldoNormal: "Debet" },
+                    { nama: "Perawatan Kamar (Maintenance)", saldoNormal: "Debet" }, 
+                    { nama: "Kebersihan & Peralatan", saldoNormal: "Debet" },
+                    { nama: "Air Minum & Sembako", saldoNormal: "Debet" }, 
+                    { nama: "Pajak & Perizinan", saldoNormal: "Debet" }, 
+                    { nama: "Biaya Lain-lain", saldoNormal: "Debet" }
+                  ],
+                  Pendapatan: [
+                    { nama: "Kantin / Vending Machine", saldoNormal: "Kredit" }, 
+                    { nama: "Penjualan Barang Bekas", saldoNormal: "Kredit" },
+                    { nama: "Deposit Hangus", saldoNormal: "Kredit" }, 
+                    { nama: "Kemitraan Jasa Laundry", saldoNormal: "Kredit" }, 
+                    { nama: "Pemasukan Lain-lain", saldoNormal: "Kredit" }
+                  ],
+                  Neraca: [
+                    { nama: "Pembelian Aset Tetap", saldoNormal: "Debet" }, 
+                    { nama: "Penyusutan Aset Tetap", saldoNormal: "Kredit" },
+                    { nama: "Penerimaan Deposit Jaminan", saldoNormal: "Kredit" }, 
+                    { nama: "Pengembalian Deposit Jaminan", saldoNormal: "Debet" },
+                    { nama: "Setoran Modal Pemilik", saldoNormal: "Kredit" }, 
+                    { nama: "Penarikan Prive Pemilik", saldoNormal: "Debet" }
+                  ]
+                };
+                localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(data));
+              }
+              setTimeout(() => this.success(JSON.stringify(data)), 300);
+            },
+            addCategory: function(data) {
+              const stored = JSON.parse(localStorage.getItem('kost_hade_kategori_v2'));
+              if (!stored[data.jenis]) stored[data.jenis] = [];
+              
+              if (stored[data.jenis].some(cat => cat.nama === data.nama)) {
+                setTimeout(() => this.fail(`Kategori "${data.nama}" sudah ada di kelompok ${data.jenis}!`), 300);
+                return;
+              }
+
+              stored[data.jenis].push({ nama: data.nama, saldoNormal: data.saldoNormal });
+              localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(stored));
+              setTimeout(() => this.success(`Kategori "${data.nama}" (${data.saldoNormal}) berhasil ditambahkan ke ${data.jenis}!`), 400);
+            },
+            editCategory: function(data) {
+              const stored = JSON.parse(localStorage.getItem('kost_hade_kategori_v2'));
+              
+              // Remove old category placement
+              stored[data.oldJenis].splice(data.oldIndex, 1);
+              
+              // Add to new placement
+              if (!stored[data.jenis]) stored[data.jenis] = [];
+              stored[data.jenis].push({ nama: data.nama, saldoNormal: data.saldoNormal });
+              
+              localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(stored));
+              setTimeout(() => this.success(`Kategori berhasil diperbarui menjadi "${data.nama}" (${data.saldoNormal}) di kelompok ${data.jenis}!`), 400);
+            },
+            deleteCategory: function(data) {
+              const stored = JSON.parse(localStorage.getItem('kost_hade_kategori_v2'));
+              const removed = stored[data.jenis].splice(data.index, 1);
+              localStorage.setItem('kost_hade_kategori_v2', JSON.stringify(stored));
+              setTimeout(() => this.success(`Kategori "${removed[0].nama}" berhasil dihapus dari kelompok ${data.jenis}.`), 400);
             },
             addRoom: function(data) {
               const kamar = JSON.parse(localStorage.getItem('kost_hade_kamar'));
