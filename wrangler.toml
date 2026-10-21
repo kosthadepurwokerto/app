@@ -9,7 +9,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "hadekost-db"
-database_id = "PLACEHOLDER-LOCAL"
+database_id = "3752c0b8-47a0-4990-b7e4-a1cec2695d69"
 migrations_dir = "db"
 
 [vars]
