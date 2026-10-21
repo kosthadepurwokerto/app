@@ -1,0 +1,197 @@
+-- =====================================================================
+-- Kost Hade — Skema D1 (SQLite)
+-- Terapkan: wrangler d1 execute hadekost-db --local --file=db/schema.sql
+--           wrangler d1 execute hadekost-db --remote --file=db/schema.sql
+-- =====================================================================
+
+-- ---------- AKUN ----------
+create table if not exists users (
+  id                  text primary key,
+  username            text unique not null,
+  fullname            text not null,
+  role                text not null default 'staff' check (role in ('admin','staff')),
+  password_hash       text not null,          -- pbkdf2$iter$salt$hash
+  aktif               integer not null default 1,
+  must_change_password integer not null default 0,
+  created_at          text not null default (datetime('now'))
+);
+
+-- hanya SHA-256 dari token sesi yang disimpan
+create table if not exists sessions (
+  token_hash  text primary key,
+  user_id     text not null references users(id) on delete cascade,
+  expires_at  text not null,
+  created_at  text not null default (datetime('now'))
+);
+create index if not exists idx_sessions_user on sessions(user_id);
+
+-- ---------- KATEGORI LEDGER ----------
+create table if not exists categories (
+  id           integer primary key autoincrement,
+  jenis        text not null check (jenis in ('pendapatan','pengeluaran','neraca')),
+  nama         text not null,
+  saldo_normal text not null default 'Debet' check (saldo_normal in ('Debet','Kredit')),
+  aktif        integer not null default 1,
+  unique (jenis, nama)
+);
+
+-- ---------- KAMAR ----------
+create table if not exists rooms (
+  id            integer primary key autoincrement,
+  no_kamar      text unique not null,
+  tipe          text not null,
+  harga_bulanan integer not null default 0 check (harga_bulanan >= 0),  -- rupiah, integer
+  harga_harian  integer not null default 0 check (harga_harian >= 0),
+  status        text not null default 'tersedia' check (status in ('tersedia','terisi','perbaikan')),
+  catatan       text,
+  created_at    text not null default (datetime('now'))
+);
+
+-- ---------- PENYEWA ----------
+create table if not exists tenants (
+  id          integer primary key autoincrement,
+  kode        text unique not null,
+  nama        text not null,
+  hp          text,
+  kamar_id    integer references rooms(id) on delete set null,
+  tgl_masuk   text not null,                 -- YYYY-MM-DD
+  tgl_keluar  text,
+  status      text not null default 'aktif' check (status in ('aktif','keluar')),
+  created_at  text not null default (datetime('now'))
+);
+create index if not exists idx_tenants_status on tenants(status);
+create index if not exists idx_tenants_kamar  on tenants(kamar_id);
+
+-- ---------- TAGIHAN SEWA ----------
+create table if not exists bills (
+  id          integer primary key autoincrement,
+  tenant_id   integer not null references tenants(id) on delete cascade,
+  periode     text not null,                 -- YYYY-MM-01
+  jatuh_tempo text not null,
+  jumlah      integer not null check (jumlah > 0),
+  status      text not null default 'belum_bayar' check (status in ('belum_bayar','lunas')),
+  created_at  text not null default (datetime('now')),
+  unique (tenant_id, periode)
+);
+create index if not exists idx_bills_open on bills(tenant_id, status);
+
+-- ---------- PEMBAYARAN ----------
+create table if not exists payments (
+  id           integer primary key autoincrement,
+  nomor_struk  text unique not null,
+  bill_id      integer references bills(id) on delete set null,
+  tenant_id    integer references tenants(id) on delete set null,
+  tgl_bayar    text not null,
+  jumlah       integer not null check (jumlah > 0),
+  keterangan   text,
+  created_by   text references users(id),
+  voided_at    text,
+  created_at   text not null default (datetime('now'))
+);
+create index if not exists idx_payments_tgl on payments(tgl_bayar desc);
+
+-- ---------- LEDGER OPERASIONAL ----------
+create table if not exists ledger (
+  id           integer primary key autoincrement,
+  tanggal      text not null,
+  jenis        text not null check (jenis in ('pendapatan','pengeluaran','neraca')),
+  kategori_id  integer references categories(id) on delete set null,
+  kategori     text not null,
+  jumlah       integer not null check (jumlah > 0),
+  keterangan   text,
+  created_by   text references users(id),
+  voided_at    text,
+  created_at   text not null default (datetime('now'))
+);
+create index if not exists idx_ledger_tanggal on ledger(tanggal desc);
+
+-- ---------- AUDIT LOG ----------
+create table if not exists audit_log (
+  id         integer primary key autoincrement,
+  actor      text,
+  actor_name text,
+  aksi       text not null,
+  tabel      text not null,
+  row_id     text,
+  data_lama  text,
+  data_baru  text,
+  created_at text not null default (datetime('now'))
+);
+create index if not exists idx_audit_created on audit_log(created_at desc);
+
+-- =====================================================================
+-- TRIGGER AUDIT (otomatis, tidak bisa dilewati aplikasi)
+-- =====================================================================
+create trigger if not exists trg_audit_rooms_i  after insert on rooms begin
+  insert into audit_log(aksi,tabel,row_id,data_baru) values('insert','rooms',new.id,json_object('no_kamar',new.no_kamar,'status',new.status));
+end;
+create trigger if not exists trg_audit_rooms_u  after update on rooms begin
+  insert into audit_log(aksi,tabel,row_id,data_lama,data_baru) values('update','rooms',new.id,json_object('no_kamar',old.no_kamar,'status',old.status,'harga_bulanan',old.harga_bulanan),json_object('no_kamar',new.no_kamar,'status',new.status,'harga_bulanan',new.harga_bulanan));
+end;
+create trigger if not exists trg_audit_tenants_i after insert on tenants begin
+  insert into audit_log(aksi,tabel,row_id,data_baru) values('insert','tenants',new.id,json_object('kode',new.kode,'nama',new.nama,'status',new.status));
+end;
+create trigger if not exists trg_audit_tenants_u after update on tenants begin
+  insert into audit_log(aksi,tabel,row_id,data_lama,data_baru) values('update','tenants',new.id,json_object('nama',old.nama,'status',old.status,'kamar_id',old.kamar_id),json_object('nama',new.nama,'status',new.status,'kamar_id',new.kamar_id));
+end;
+create trigger if not exists trg_audit_bills_i   after insert on bills begin
+  insert into audit_log(aksi,tabel,row_id,data_baru) values('insert','bills',new.id,json_object('tenant_id',new.tenant_id,'periode',new.periode,'jatuh_tempo',new.jatuh_tempo,'jumlah',new.jumlah));
+end;
+create trigger if not exists trg_audit_bills_u   after update on bills begin
+  insert into audit_log(aksi,tabel,row_id,data_lama,data_baru) values('update','bills',new.id,json_object('status',old.status,'jatuh_tempo',old.jatuh_tempo),json_object('status',new.status,'jatuh_tempo',new.jatuh_tempo));
+end;
+create trigger if not exists trg_audit_payments_i after insert on payments begin
+  insert into audit_log(aksi,tabel,row_id,data_baru) values('insert','payments',new.id,json_object('nomor_struk',new.nomor_struk,'jumlah',new.jumlah,'tgl_bayar',new.tgl_bayar,'tenant_id',new.tenant_id));
+end;
+create trigger if not exists trg_audit_payments_u after update on payments begin
+  insert into audit_log(aksi,tabel,row_id,data_lama,data_baru) values('update','payments',new.id,json_object('voided_at',old.voided_at),json_object('voided_at',new.voided_at));
+end;
+create trigger if not exists trg_audit_ledger_i   after insert on ledger begin
+  insert into audit_log(aksi,tabel,row_id,data_baru) values('insert','ledger',new.id,json_object('jenis',new.jenis,'kategori',new.kategori,'jumlah',new.jumlah,'tanggal',new.tanggal));
+end;
+create trigger if not exists trg_audit_ledger_u   after update on ledger begin
+  insert into audit_log(aksi,tabel,row_id,data_lama,data_baru) values('update','ledger',new.id,json_object('voided_at',old.voided_at),json_object('voided_at',new.voided_at));
+end;
+create trigger if not exists trg_audit_users_u    after update on users begin
+  insert into audit_log(aksi,tabel,row_id,data_lama,data_baru) values('update','users',new.id,json_object('role',old.role,'aktif',old.aktif,'fullname',old.fullname),json_object('role',new.role,'aktif',new.aktif,'fullname',new.fullname));
+end;
+
+-- =====================================================================
+-- VIEW: ringkasan (dihitung di DB)
+-- =====================================================================
+drop view if exists v_dashboard;
+create view v_dashboard as
+select
+  (select count(*) from rooms)                                   as total_kamar,
+  (select count(*) from rooms where status='terisi')             as kamar_terisi,
+  (select count(*) from rooms where status='tersedia')           as kamar_tersedia,
+  (select count(*) from tenants where status='aktif')            as penyewa_aktif,
+  (select coalesce(sum(jumlah),0) from payments where voided_at is null)       as total_sewa,
+  (select coalesce(sum(jumlah),0) from ledger where jenis='pendapatan' and voided_at is null) as total_pendapatan_ops,
+  (select coalesce(sum(jumlah),0) from ledger where jenis='pengeluaran' and voided_at is null) as total_pengeluaran,
+  (select coalesce(sum(jumlah),0) from bills b join tenants t on t.id=b.tenant_id
+     where b.status='belum_bayar' and t.status='aktif' and b.jatuh_tempo < date('now'))        as tunggakan;
+
+-- =====================================================================
+-- SEED: kategori default
+-- =====================================================================
+insert or ignore into categories (jenis, nama, saldo_normal) values
+  ('pengeluaran','Listrik & Air','Debet'),
+  ('pengeluaran','Gaji Karyawan','Debet'),
+  ('pengeluaran','Wifi & Internet','Debet'),
+  ('pengeluaran','Perawatan Kamar (Maintenance)','Debet'),
+  ('pengeluaran','Kebersihan & Peralatan','Debet'),
+  ('pengeluaran','Air Minum & Sembako','Debet'),
+  ('pengeluaran','Pajak & Perizinan','Debet'),
+  ('pengeluaran','Biaya Lain-lain','Debet'),
+  ('pendapatan','Kantin / Vending Machine','Kredit'),
+  ('pendapatan','Penjualan Barang Bekas','Kredit'),
+  ('pendapatan','Deposit Hangus','Kredit'),
+  ('pendapatan','Kemitraan Jasa Laundry','Kredit'),
+  ('pendapatan','Pemasukan Lain-lain','Kredit'),
+  ('neraca','Pembelian Aset Tetap','Debet'),
+  ('neraca','Penyusutan Aset Tetap','Kredit'),
+  ('neraca','Penerimaan Deposit Jaminan','Kredit'),
+  ('neraca','Pengembalian Deposit Jaminan','Debet'),
+  ('neraca','Setoran Modal Pemilik','Kredit'),
+  ('neraca','Penarikan Prive Pemilik','Debet');

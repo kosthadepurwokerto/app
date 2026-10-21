@@ -1,54 +1,73 @@
 # Kost Hade — Guesthouse Management
 
-Aplikasi manajemen kost: kamar, penyewa, tagihan, pembayaran, ledger operasional, laporan.
+Manajemen kost: kamar, penyewa, tagihan, pembayaran, ledger operasional, laporan.
 
-**Status backend:** sebelumnya seluruh data disimpan di `localStorage` browser (hilang saat cache
-dibersihkan, tidak sinkron antar perangkat, password plaintext). Sekarang aplikasi memakai
-**Supabase** (PostgreSQL + Auth) dengan RLS dan audit log.
+**Backend:** Cloudflare Workers + D1 (SQLite). Tanpa langganan, tanpa server, login aman
+(password PBKDF2, sesi di cookie HttpOnly). Data tersimpan di database — bukan lagi di
+browser, jadi bisa dibuka dari HP dan PC sekaligus.
 
-## Arsitektur
+## Struktur
 
 ```
-index.html            UI (satu halaman, tanpa build step)
-config.js             URL + anon key Supabase (aman publik)
-supabase-adapter.js   semua akses data + validasi
-supabase/schema.sql   tabel, RLS, view, trigger audit, seed kategori
+pub/            UI statis (index.html + d1-adapter.js)
+worker/index.js Worker API (rute /api/*) + penyaji halaman
+worker/logic.js Logika bisnis murni (bisa diuji di Node)
+db/schema.sql   Skema D1: tabel, trigger audit, view dashboard, kategori default
+tools/buat-akun.mjs  Pembuat akun (hash PBKDF2)
+tools/uji-e2e.sh     Uji end-to-end terhadap Worker lokal
+wrangler.toml
 ```
 
-Tabel: `profiles`, `rooms`, `tenants`, `bills`, `payments`, `ledger`, `categories`, `audit_log`.
-View: `v_dashboard`, `v_kas_bulanan`.
+## Jalankan lokal
 
-## Setup (sekali saja, ±10 menit)
+```bash
+npm install
+npx wrangler d1 execute hadekost-db --local --file=db/schema.sql
+node tools/buat-akun.mjs admin 'PasswordKuat123' admin 'Administrator'   # salin hasilnya:
+npx wrangler d1 execute hadekost-db --local --command "<hasil perintah di atas>"
+npm run dev            # http://localhost:8787
+bash tools/uji-e2e.sh  # 32 pemeriksaan
+```
 
-1. **Buat project Supabase** — https://supabase.com/dashboard → New project. Catat
-   `Project URL` dan `anon public key` (Settings → API).
-2. **Jalankan skema** — SQL Editor → New query → tempel isi `supabase/schema.sql` → Run.
-   Atau lewat CLI: `supabase db push`.
-3. **Isi `config.js`** dengan URL & anon key dari langkah 1.
-4. **Buat akun admin** — Authentication → Users → Add user (email + password, centang
-   *Auto Confirm User*). Lalu di SQL Editor:
-   ```sql
-   insert into profiles (id, username, fullname, role)
-   select id, split_part(email,'@',1), 'Administrator', 'admin'
-   from auth.users where email = 'admin@domain-anda.com';
-   ```
-   Akun staf: ulangi dengan `role = 'staff'`.
-5. Buka aplikasi → login dengan email + password tersebut.
+## Deploy (sekali)
 
-## Aturan bisnis yang dijaga di kode
+```bash
+# 1. buat database D1 dan salin database_id ke wrangler.toml
+npx wrangler d1 create hadekost-db
 
-- **Jatuh tempo** berasal dari tabel `bills`, bukan diketik bebas. Tagihan dibuat otomatis
-  saat registrasi (+1 bulan) dan setelah pembayaran lunas.
-- **Pembayaran** harus cocok persis dengan tagihan terbuka; setelah lunas, tagihan berikutnya
-  dibuat otomatis. Tanggal bayar tidak boleh di masa depan.
-- **Hapus = void.** Transaksi keuangan tidak dihapus fisik, hanya ditandai `voided_at`, dan
-  setiap perubahan tercatat di `audit_log` (trigger database).
-- **Hanya admin** yang boleh menghapus data (policy RLS). Staf bisa input & edit.
-- Penyewa yang sudah punya riwayat pembayaran tidak bisa dihapus — gunakan **Check-out**.
+# 2. terapkan skema ke database produksi
+npx wrangler d1 execute hadekost-db --remote --file=db/schema.sql
+
+# 3. buat akun admin pertama
+node tools/buat-akun.mjs admin 'PasswordKuat123' admin 'Administrator'
+npx wrangler d1 execute hadekost-db --remote --command "<hasil perintah di atas>"
+
+# 4. deploy
+npx wrangler deploy
+```
+
+Setelah deploy, aplikasi tersedia di `https://hadekost.<subdomain>.workers.dev`.
+
+## Aturan bisnis yang dijaga kode
+
+- **Tagihan** dibuat otomatis saat registrasi (+1 bulan, 31 Jan → 28/29 Feb). Jatuh tempo
+  tidak diketik bebas; setelah pembayaran lunas, tagihan bulan berikutnya dibuat otomatis.
+- **Pembayaran** harus cocok persis dengan tagihan terbuka; tanggal tidak boleh di masa depan;
+  setiap pembayaran punya nomor struk `STR-YYYYMMDD-NNN`.
+- **Hapus = void.** Transaksi ledger tidak dihapus fisik, hanya ditandai `voided_at`.
+  Semua insert/update di `rooms`, `tenants`, `bills`, `payments`, `ledger`, `users` dicatat
+  otomatis oleh trigger ke `audit_log`.
+- **Penyewa berriwayat** tidak bisa dihapus; gunakan Check-out.
+- **Staf** tidak melihat menu User/Reset; setiap API menolak permintaan tanpa sesi (401).
 
 ## Keamanan
 
-- `anon key` boleh berada di repo publik; akses data dibatasi RLS, dan password dikelola
-  Supabase Auth (hash bcrypt, bukan plaintext).
-- **Jangan** menaruh `service_role key` di file mana pun di repo ini.
-- Menu "ganti user tanpa password" dari versi lama sudah dihapus.
+- Password disimpan sebagai `pbkdf2$100000$salt$hash` (iterasi 100.000 = batas Workers).
+- Sesi: token acak 32 byte; yang disimpan di DB hanya SHA-256-nya, umur 7 hari.
+- Cookie: `HttpOnly; SameSite=Lax; Secure` (lokal: `COOKIE_SECURE=false`).
+- Tidak ada kredensial di repo. Akun dibuat lewat `tools/buat-akun.mjs`.
+
+## Yang belum tersedia di versi D1
+
+- Edit data penyewa (check-out lalu daftar ulang sebagai gantinya).
+- Kelola kategori & pengguna dari dalam aplikasi (lewat SQL/`tools/buat-akun.mjs`).

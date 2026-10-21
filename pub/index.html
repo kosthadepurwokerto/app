@@ -5,9 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Kost Hade - Guesthouse Management Premium</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="config.js"></script>
-  <script src="supabase-adapter.js"></script>
+  <script src="d1-adapter.js"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   
   <style>
@@ -64,6 +62,10 @@
     .role-user .restricted-user-view {
       display: none !important;
     }
+    /* body.className diganti saat login, jadi aturan harus menang atas utility Tailwind */
+    body.role-user li.restricted-user-view { display: none !important; }
+    body.role-user section.restricted-user-view { display: none !important; }
+    body.role-admin li.restricted-user-view { display: block !important; }
   </style>
 </head>
 <body class="bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0">
@@ -118,12 +120,12 @@
 
       <form id="form-login" class="space-y-4" onsubmit="handleLoginSubmit(event)">
         <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Email</label>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Pengguna (Username)</label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
               <i class="fas fa-user-circle"></i>
             </span>
-            <input type="email" id="login-username" required autocomplete="email" placeholder="nama@email.com" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            <input type="text" id="login-username" required autocomplete="username" placeholder="Masukkan username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
           </div>
         </div>
 
@@ -147,7 +149,7 @@
         <!-- Session status info -->
         <div id="login-status" class="mt-5 pt-5 border-t border-slate-100 text-center">
           <p class="text-[11px] text-slate-400">Masuk dengan akun yang diberikan admin.</p>
-          <p id="login-setup-hint" class="hidden mt-2 text-[11px] text-rose-500 font-semibold">Backend Supabase belum dikonfigurasi. Isi <code>config.js</code> (url &amp; anon key).</p>
+          <p id="login-setup-hint" class="hidden mt-2 text-[11px] text-rose-500 font-semibold">Server tidak merespons. Periksa koneksi lalu coba lagi.</p>
         </div>
       </form>
     </div>
@@ -1195,7 +1197,7 @@
 
     function refreshCategoryOptions() {
       categoryOptions = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
-      if (window.HADE && HADE.sb) {
+      if (window.HADE) {
         HADE.handlers.getCategories().then(data => {
           categoryOptions = data;
           if (typeof refreshCategorySelect === 'function') refreshCategorySelect();
@@ -1223,20 +1225,12 @@
       const uName = document.getElementById('login-username').value.trim().toLowerCase();
       const pWord = document.getElementById('login-password').value;
 
-      if (!window.HADE || !window.HADE.sb) {
-        showCustomAlert("Backend Belum Aktif", "Aplikasi belum terhubung ke database. Admin perlu mengisi config.js (URL & anon key Supabase).", false);
-        return;
-      }
-
       const btn = document.querySelector('#form-login button[type="submit"]');
       btn.disabled = true;
       btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Memverifikasi...';
 
-      HADE.sb.auth.signInWithPassword({ email: uName, password: pWord })
-        .then(({ data, error }) => {
-          if (error) throw new Error('Kombinasi nama pengguna atau kata sandi tidak sesuai.');
-          return HADE.handlers.getSession();
-        })
+      HADE.login(uName, pWord)
+        .then(() => HADE.session())
         .then(sess => {
           if (!sess.logged_in) throw new Error('Akun belum memiliki profil. Hubungi admin.');
           activeUser = sess.user;
@@ -1257,7 +1251,7 @@
     }
 
     function handleLogout() {
-      if (window.HADE && HADE.sb) HADE.sb.auth.signOut();
+      if (window.HADE) { HADE.logout().catch(() => {}); HADE.resetCache(); }
       cachedData = null;
       activeUser = null;
       usersList = [];
@@ -1272,14 +1266,14 @@
 
     // USER SESSIONS MANAGEMENT & INITIALIZATION
     function initUserSession() {
-      if (!window.HADE || !HADE.sb) {
+      if (!window.HADE) {
         document.getElementById('login-setup-hint').classList.remove('hidden');
         document.getElementById('login-screen').classList.remove('hidden');
         document.getElementById('app-container').classList.add('hidden');
         document.getElementById('app-container').classList.remove('flex');
         return;
       }
-      HADE.handlers.getSession().then(sess => {
+      HADE.session().then(sess => {
         if (!sess.logged_in) {
           document.getElementById('login-screen').classList.remove('hidden');
           document.getElementById('app-container').classList.add('hidden');
@@ -1298,11 +1292,7 @@
         document.getElementById('login-screen').classList.remove('hidden');
         document.getElementById('app-container').classList.add('hidden');
       });
-      if (HADE.sb) {
-        HADE.sb.auth.onAuthStateChange((event) => {
-          if (event === 'SIGNED_OUT') handleLogout();
-        });
-      }
+
     }
 
     // Apply permissions dynamically on the UI
@@ -1356,6 +1346,15 @@
 
     // Ganti user tanpa otentikasi DIHAPUS — ini celah eskalasi privilege (siapa pun bisa jadi Admin).
 
+
+    // Sesi berakhir di tengah pemakaian -> kembali ke layar login
+    window.onSesiBerakhir = () => {
+      cachedData = null;
+      activeUser = null;
+      document.getElementById('login-screen').classList.remove('hidden');
+      document.getElementById('app-container').classList.add('hidden');
+      showCustomAlert("Sesi Berakhir", "Anda sudah keluar atau sesi habis. Silakan login ulang.", false);
+    };
 
     // Initialize user session on scripts boot
     initUserSession();
@@ -1491,6 +1490,8 @@
         loadAllTenantsList();
       }
       if(sectionId === 'pembayaran') {
+        const tgl = document.getElementById('input-tgl-pembayaran');
+        if (tgl && !tgl.value) tgl.value = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD lokal
         loadActiveTenants();
         loadPaymentsHistory();
       }
@@ -1535,7 +1536,7 @@
           showLoading(false);
         }).getDashboardData();
       // muat transaksi ledger lengkap untuk laporan
-      if (window.HADE && HADE.sb) {
+      if (window.HADE) {
         HADE.handlers.getOpsRows().then(rows => {
           window.__hadeOps = rows.map(r => [r.id, r.tanggal, r.jenis, r.kategori, String(r.jumlah), r.keterangan || '']);
           if (cachedData) { cachedData.ops = window.__hadeOps.map(o => [o[1], o[3], '', '', o[4]]); }
@@ -2345,7 +2346,9 @@
       const selectedOption = select.options[select.selectedIndex];
       const kamarInput = document.getElementById('input-kamar-pembayaran');
       if (selectedOption && selectedOption.value !== "") {
-        kamarInput.value = selectedOption.getAttribute('data-kamar');
+        kamarInput.value = selectedOption.getAttribute('data-kamar') || '';
+        const tgl = document.getElementById('input-tgl-pembayaran');
+        if (tgl && !tgl.value) tgl.value = new Date().toLocaleDateString('en-CA');
         calculateBilling();
       } else {
         kamarInput.value = "";
@@ -2378,15 +2381,10 @@
       if (!selectedOption || selectedOption.value === "") return;
 
       const kamarNo = selectedOption.getAttribute('data-kamar');
-      let basePrice = 1100000; // default bulanan
-      if (type === 'Harian') {
-        basePrice = 100000;
-      } else {
-        // deluxe adjustment
-        if (kamarNo === '106' || kamarNo === '107') {
-          basePrice = 1250000;
-        }
-      }
+      // harga dari master kamar (bukan hardcode nomor 106/107 seperti versi lama)
+      const room = (cachedData && cachedData.kamar || []).find(k => k[0] === kamarNo) || [];
+      let basePrice = Number(type === 'Harian' ? (room[3] || 0) : (room[2] || 0));
+      if (!basePrice) basePrice = type === 'Harian' ? 100000 : 1100000;
 
       // Compute pricing
       const totalCost = basePrice * durasi;
@@ -3103,8 +3101,8 @@
         nama: this.nama.value, 
         kamar: this.kamar.value, 
         jumlah: this.jumlah.value, 
-        keterangan: this.keterangan.value,
-        jatuhTempo: this.jatuhTempo.value
+        tanggal: document.getElementById('input-tgl-pembayaran').value,
+        keterangan: this.keterangan.value
       });
     };
 
@@ -3231,7 +3229,7 @@
     // =======================================================
     // DETEKSI JALUR & EMULASI FULLY INTERAKTIF UNTUK PREVIEW
     // =======================================================
-    // (Blok emulator localStorage dihapus — backend sekarang Supabase lewat supabase-adapter.js)
+    // (Blok emulator localStorage dihapus — backend sekarang D1 lewat d1-adapter.js)
 
     window.onload = () => { initUserSession(); };
   </script>

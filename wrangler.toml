@@ -1,0 +1,16 @@
+name = "hadekost"
+main = "worker/index.js"
+compatibility_date = "2026-10-01"
+
+[assets]
+directory = "./pub"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "hadekost-db"
+database_id = "PLACEHOLDER-LOCAL"
+migrations_dir = "db"
+
+[vars]
+COOKIE_SECURE = "true"

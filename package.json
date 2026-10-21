@@ -1,0 +1,29 @@
+{
+  "name": "hadekost",
+  "version": "1.0.0",
+  "description": "Aplikasi manajemen kost: kamar, penyewa, tagihan, pembayaran, ledger operasional, laporan.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "wrangler dev --local --var COOKIE_SECURE:false --port 8787",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute hadekost-db --local --file=db/schema.sql",
+    "db:init:remote": "wrangler d1 execute hadekost-db --remote --file=db/schema.sql"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kosthadepurwokerto/app.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kosthadepurwokerto/app/issues"
+  },
+  "homepage": "https://github.com/kosthadepurwokerto/app#readme",
+  "private": "true",
+  "type": "module",
+  "devDependencies": {
+    "wrangler": "^4.151.3"
+  }
+}
