@@ -76,6 +76,8 @@
       return data.kategori || { Pengeluaran: [], Pendapatan: [], Neraca: [] };
     },
 
+    gantiPassword: (lama, baru) => call('/password', { lama, baru }),
+
     // ---------------- KAMAR ----------------
     addRoom: (d) => aksi('rooms.create', d).then((m) => { data.dashboard = null; return m; }),
     editRoom: (d) => aksi('rooms.update', d).then((m) => { data.dashboard = null; return m; }),
@@ -96,17 +98,19 @@
     addOpsTransaction: (d) => aksi('ledger.create', d).then((m) => { data.dashboard = null; return m; }),
     deleteOpsTransaction: (id) => aksi('ledger.void', { id }).then((m) => { data.dashboard = null; return m; }),
 
-    addCategory: async () => { throw new Error('Kelola kategori lewat database (belum ada di versi D1).'); },
-    editCategory: async () => { throw new Error('Kelola kategori lewat database (belum ada di versi D1).'); },
-    deleteCategory: async () => { throw new Error('Kelola kategori lewat database (belum ada di versi D1).'); },
+    addCategory: (d) => aksi('categories.create', d).then((m) => { data.kategori = null; return m; }),
+    editCategory: (d) => aksi('categories.update', d).then((m) => { data.kategori = null; return m; }),
+    deleteCategory: (d) => aksi('categories.delete', d).then((m) => { data.kategori = null; return m; }),
 
     // ---------------- USER ----------------
     getUsers: async () => {
-      throw new Error('Daftar pengguna hanya bisa dilihat admin lewat database.');
+      const b = await muatSemua();            // hanya admin yang menerima daftar user
+      if (!b.users || !b.users.length) throw new Error('Daftar pengguna hanya bisa dilihat admin.');
+      return b.users;
     },
-    addUser: async () => { throw new Error('Buat akun dengan: node tools/buat-akun.mjs <username> <password> admin'); },
-    editUser: async () => { throw new Error('Ubah data pengguna lewat database.'); },
-    deleteUser: async () => { throw new Error('Akun tidak dihapus demi jejak audit; nonaktifkan (aktif=0).'); },
+    addUser: (d) => aksi('users.create', d).then((m) => { data.dashboard = null; return m; }),
+    editUser: (d) => aksi('users.update', d).then((m) => { data.dashboard = null; return m; }),
+    deleteUser: (id) => aksi('users.delete', { id }).then((m) => { data.dashboard = null; return m; }),
 
     // ---------------- cadangan ----------------
     exportAll: async () => ({ exported_at: new Date().toISOString(), ...(await muatSemua()) }),

@@ -974,8 +974,8 @@
                   <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Level Otoritas (Role)</label>
                     <select id="user-role" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
-                      <option value="User">User (Akses Terbatas & No Delete)</option>
-                      <option value="Administrator">Administrator (Akses Penuh)</option>
+                      <option value="staff">User / Staf (tanpa hapus & void)</option>
+                      <option value="admin">Administrator (akses penuh)</option>
                     </select>
                   </div>
                   
@@ -1320,9 +1320,30 @@
           <div class="truncate">${activeUser.fullname}</div>
           <div class="text-[10px] text-slate-400">@${activeUser.username || '-'} • ${isAdmin ? 'Administrator' : 'User Operasional'}</div>
         </div>
+        <button onclick="openGantiPassword()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 flex items-center gap-2 text-xs font-semibold transition">
+          <i class="fas fa-key text-[10px]"></i> Ganti Password
+        </button>
         <button onclick="handleLogout()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-50 text-rose-600 flex items-center gap-2 text-xs font-semibold transition">
           <i class="fas fa-sign-out-alt text-[10px]"></i> Keluar / Logout
         </button>`;
+    }
+
+    // Ganti password sendiri (dulu tidak ada jalan sama sekali selain sentuh database)
+    async function openGantiPassword() {
+      const lama = window.prompt('Password saat ini:');
+      if (lama === null) return;
+      const baru = window.prompt('Password baru (minimal 8 karakter):');
+      if (baru === null) return;
+      if (String(baru).length < 8) { showCustomAlert('Password Terlalu Pendek', 'Password baru minimal 8 karakter.', false); return; }
+      const ulang = window.prompt('Ulangi password baru:');
+      if (ulang !== baru) { showCustomAlert('Tidak Cocok', 'Ulangi password tidak sama.', false); return; }
+      showLoading(true);
+      try {
+        const r = await HADE.handlers.gantiPassword(lama, baru);
+        showCustomAlert('Berhasil', r.message || 'Password diganti.', true);
+      } catch (err) {
+        showCustomAlert('Gagal', err.message || 'Password gagal diganti.', false);
+      } finally { showLoading(false); }
     }
 
     // Toggle simulator user sessions menu
@@ -2693,7 +2714,7 @@
       }
 
       tbody.innerHTML = items.map(u => {
-        const isAdmin = u.role === 'Administrator';
+        const isAdmin = u.role === 'admin' || u.role === 'Administrator';
         return `
           <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
             <td class="py-4 px-6 font-bold text-slate-800">${u.username}</td>
@@ -2705,7 +2726,8 @@
             </td>
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
-                <button onclick="startEditUser('${u.id}', '${u.username}', '${u.fullname}', '${u.role}', '${u.password}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                ${u.aktif === 0 ? '<span class="text-[9px] font-black text-slate-400 uppercase">Nonaktif</span>' : ''}
+                <button onclick="startEditUser('${u.id}', '${u.username}', '${u.fullname}', '${u.role}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
                 <button onclick="promptDeleteUser('${u.id}', '${u.fullname}', '${u.username}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
@@ -2726,12 +2748,14 @@
       renderUsersTable(filtered);
     }
 
-    function startEditUser(id, username, fullname, role, password) {
+    function startEditUser(id, username, fullname, role) {
       document.getElementById('user-edit-id').value = id;
       document.getElementById('user-username').value = username;
       document.getElementById('user-fullname').value = fullname;
-      document.getElementById('user-password').value = password;
-      document.getElementById('user-role').value = role;
+      document.getElementById('user-password').value = '';
+      document.getElementById('user-password').required = false;
+      document.getElementById('user-password').placeholder = 'Kosongkan bila tidak diganti';
+      document.getElementById('user-role').value = (role === 'admin') ? 'admin' : 'staff';
 
       document.getElementById('user-form-title').innerText = "Ubah Pengguna";
       document.getElementById('user-form-desc').innerText = "Sesuaikan kata sandi, nama, atau wewenang";
@@ -2742,6 +2766,8 @@
     function cancelEditUser() {
       document.getElementById('user-edit-id').value = "";
       document.getElementById('form-user').reset();
+      document.getElementById('user-password').required = true;
+      document.getElementById('user-password').placeholder = '••••••••';
 
       document.getElementById('user-form-title').innerText = "Tambah Pengguna";
       document.getElementById('user-form-desc').innerText = "Daftarkan operator atau admin baru ke database";
@@ -2793,12 +2819,13 @@
           let flatCategories = [];
           Object.keys(data).forEach(jenis => {
             data[jenis].forEach((catObj, index) => {
-              flatCategories.push({ 
-                id: `${jenis}||${index}`, 
-                jenis: jenis, 
-                nama: catObj.nama, 
-                saldoNormal: catObj.saldoNormal, 
-                originalIndex: index 
+              flatCategories.push({
+                id: catObj.id,
+                jenis: jenis,
+                nama: catObj.nama,
+                saldoNormal: catObj.saldoNormal,
+                arusKas: catObj.arusKas,
+                originalIndex: index
               });
             });
           });
@@ -2837,10 +2864,10 @@
             </td>
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
-                <button onclick="startEditCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}', '${item.saldoNormal}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                <button onclick="startEditCategory(${item.id}, '${item.jenis}', '${item.nama}', '${item.saldoNormal}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteCategory('${item.jenis}', ${item.originalIndex}, '${item.nama}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
+                <button onclick="promptDeleteCategory(${item.id}, '${item.nama}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -2857,15 +2884,15 @@
       Object.keys(categoryOptions).forEach(jenis => {
         categoryOptions[jenis].forEach((catObj, index) => {
           if (jenis.toLowerCase().includes(q) || catObj.nama.toLowerCase().includes(q) || catObj.saldoNormal.toLowerCase().includes(q)) {
-            flatCategories.push({ id: `${jenis}||${index}`, jenis: jenis, nama: catObj.nama, saldoNormal: catObj.saldoNormal, originalIndex: index });
+            flatCategories.push({ id: catObj.id, jenis: jenis, nama: catObj.nama, saldoNormal: catObj.saldoNormal, arusKas: catObj.arusKas, originalIndex: index });
           }
         });
       });
       renderCategoriesTable(flatCategories);
     }
 
-    function startEditCategory(jenis, index, nama, saldoNormal) {
-      document.getElementById('category-edit-id').value = `${jenis}||${index}`;
+    function startEditCategory(id, jenis, nama, saldoNormal) {
+      document.getElementById('category-edit-id').value = String(id);
       document.getElementById('category-jenis').value = jenis;
       document.getElementById('category-nama').value = nama;
       document.getElementById('category-saldoNormal').value = saldoNormal || "Debet";
@@ -2886,10 +2913,10 @@
       document.getElementById('btn-cancel-edit-category').classList.add('hidden');
     }
 
-    function promptDeleteCategory(jenis, index, nama) {
+    function promptDeleteCategory(id, nama) {
       showCustomAlert(
         "Hapus Kategori?",
-        `Apakah Anda yakin ingin menghapus kategori "${nama}"? Data transaksi lama yang menggunakan kategori ini tidak akan terhapus, namun tidak akan dikelompokkan secara spesifik di laporan keuangan.`,
+        `Apakah Anda yakin ingin menghapus kategori "${nama}"? Bila sudah dipakai transaksi, kategori hanya dinonaktifkan agar laporan lama tetap utuh.`,
         false,
         true,
         () => {
@@ -2902,7 +2929,7 @@
               showCustomAlert("Berhasil Dihapus", msg, true);
               loadCategoriesData();
               refreshCategoryOptions();
-            }).deleteCategory({ jenis: jenis, index: index });
+            }).deleteCategory({ id: id });
         }
       );
     }
@@ -2927,10 +2954,10 @@
             loadUsersData();
             // If editing current user, reload active session
             if (editId === activeUser.id) {
-              activeUser = { ...activeUser, username, fullname, role: String(role).toLowerCase().startsWith('admin') ? 'admin' : 'staff' };
+              activeUser = { ...activeUser, username, fullname, role: role === 'admin' ? 'admin' : 'staff' };
               applyUserRoleUI();
             }
-          }).editUser({ id: editId, username, fullname, password, role });
+          }).editUser({ id: editId, username, fullname, password: password || undefined, role });
       } else {
         google.script.run
           .withFailureHandler(handleError)
@@ -2952,8 +2979,7 @@
       const saldoNormal = document.getElementById('category-saldoNormal').value;
 
       if (editId) {
-        // UPDATE MODE
-        const [oldJenis, oldIndex] = editId.split('||');
+        // UPDATE MODE (id asli dari database)
         google.script.run
           .withFailureHandler(handleError)
           .withSuccessHandler(msg => {
@@ -2963,7 +2989,7 @@
             cancelEditCategory();
             loadCategoriesData();
             refreshCategoryOptions();
-          }).editCategory({ oldJenis: oldJenis, oldIndex: parseInt(oldIndex), jenis: jenis, nama: nama, saldoNormal: saldoNormal });
+          }).editCategory({ id: Number(editId), jenis: jenis, nama: nama, saldoNormal: saldoNormal });
       } else {
         // CREATE MODE
         google.script.run
