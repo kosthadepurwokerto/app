@@ -60,8 +60,9 @@
     },
 
     getOpsRows: async () => {
+      // JANGAN mengosongkan data.dashboard di sini: adapter ini juga dipakai
+      // loadDashboard() sesudahnya, dan mengosongkannya memicu muat ulang berantai.
       data.ops = await call('/ops');
-      data.dashboard = null;
       return data.ops;
     },
 

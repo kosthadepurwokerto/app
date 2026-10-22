@@ -15,6 +15,8 @@ create table if not exists users (
   must_change_password integer not null default 0,
   created_at          text not null default (datetime('now'))
 );
+-- ditambahkan kemudian (push_terkirim = 1 bila "kirim pengingat" sudah ditekan)
+alter table users add column push_terkirim integer not null default 0;
 
 -- hanya SHA-256 dari token sesi yang disimpan
 create table if not exists sessions (
@@ -34,6 +36,7 @@ create table if not exists categories (
   aktif        integer not null default 1,
   unique (jenis, nama)
 );
+alter table categories add column arus_kas integer not null default 1;
 
 -- ---------- KAMAR ----------
 create table if not exists rooms (
@@ -166,11 +169,34 @@ select
   (select count(*) from rooms where status='terisi')             as kamar_terisi,
   (select count(*) from rooms where status='tersedia')           as kamar_tersedia,
   (select count(*) from tenants where status='aktif')            as penyewa_aktif,
-  (select coalesce(sum(jumlah),0) from payments where voided_at is null)       as total_sewa,
-  (select coalesce(sum(jumlah),0) from ledger where jenis='pendapatan' and voided_at is null) as total_pendapatan_ops,
-  (select coalesce(sum(jumlah),0) from ledger where jenis='pengeluaran' and voided_at is null) as total_pengeluaran,
-  (select coalesce(sum(jumlah),0) from bills b join tenants t on t.id=b.tenant_id
-     where b.status='belum_bayar' and t.status='aktif' and b.jatuh_tempo < date('now'))        as tunggakan;
+  -- pendapatan operasional = sewa + pendapatan lain-lain (di luar mutasi neraca)
+  (select coalesce(sum(jumlah),0) from payments where voided_at is null)
+    + (select coalesce(sum(jumlah),0) from ledger where jenis='pendapatan' and voided_at is null)   as total_pendapatan,
+  (select coalesce(sum(jumlah),0) from ledger where jenis='pengeluaran' and voided_at is null)      as total_pengeluaran,
+  -- saldo kas = uang yang benar-benar masuk/keluar, termasuk setoran modal, prive, deposit, beli aset.
+  -- Penyusutan Aset Tetap tidak menggerakkan kas (non-cash), jadi tidak dihitung.
+  (select coalesce(sum(jumlah),0) from payments where voided_at is null)
+    + (select coalesce(sum(case when l.jenis='pendapatan' then l.jumlah
+                               when l.jenis='pengeluaran' then -l.jumlah
+                               when l.jenis='neraca' and coalesce(c.saldo_normal,'Debet')='Kredit' then l.jumlah
+                               when l.jenis='neraca' then -l.jumlah
+                               else 0 end),0)
+        from ledger l left join categories c on c.id = l.kategori_id
+       where l.voided_at is null and coalesce(c.arus_kas, 1) = 1)                                     as sisa_kas,
+ -- mutasi neto dari transaksi neraca (modal masuk - prive - beli aset + deposit)
+ (select coalesce(sum(case when coalesce(c.saldo_normal,'Debet')='Kredit' then l.jumlah else -l.jumlah end),0)
+    from ledger l left join categories c on c.id = l.kategori_id
+   where l.jenis='neraca' and l.voided_at is null and coalesce(c.arus_kas, 1) = 1)                    as modal_neraca,
+  -- pendapatan bulan berjalan (lokal, bukan UTC)
+  (select coalesce(sum(jumlah),0) from payments where voided_at is null and tgl_bayar >= date('now','localtime','start of month')) as pendapatan_bulan_ini,
+  -- tunggakan: SEMUA tagihan lewat jatuh tempo, termasuk penyewa yang sudah check-out
+  -- (uang yang masih terutang tidak boleh hilang dari laporan hanya karena status penyewa berubah)
+  (select coalesce(sum(jumlah),0) from bills
+     where status='belum_bayar' and jatuh_tempo < date('now','localtime'))                          as tunggakan;
+
+-- Tandai penyusutan sebagai non-cash: definisi arus kas TIDAK ditentukan nama kategori
+-- di kode, melainkan kolom ini — kategori baru dari UI otomatis ikut benar.
+update categories set arus_kas = 0 where jenis = 'neraca' and nama = 'Penyusutan Aset Tetap';
 
 -- =====================================================================
 -- SEED: kategori default

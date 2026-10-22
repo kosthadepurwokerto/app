@@ -37,28 +37,54 @@ async function sesiAktif(env, req) {
 
 // ---------- pembacaan data ----------
 async function dashboard(env) {
-  const [rooms, tenants, bills, d, pays] = await Promise.all([
-    env.DB.prepare('select * from rooms order by no_kamar').all(),
-    env.DB.prepare('select * from tenants order by created_at desc').all(),
-    env.DB.prepare("select * from bills where status='belum_bayar' order by jatuh_tempo").all(),
-    env.DB.prepare('select * from v_dashboard').first(),
-    env.DB.prepare('select * from payments where voided_at is null order by tgl_bayar desc, id desc limit 10').all(),
-  ]);
+  // Query berurutan (bukan Promise.all): batch/beberapa statement paralel di D1 lokal
+  // sesekali terbaca sebelum tulisan sebelumnya terlihat, sehingga dashboard menampilkan
+  // angka lama walau data sudah tersimpan. Konsistensi lebih penting daripada beberapa ms.
+  const rooms = await env.DB.prepare('select * from rooms order by no_kamar').all();
+  const tenants = await env.DB.prepare('select * from tenants order by created_at desc').all();
+  const bills = await env.DB.prepare("select * from bills where status='belum_bayar' order by jatuh_tempo, id").all();
+  const pays = await env.DB.prepare('select * from payments where voided_at is null order by tgl_bayar desc, id desc limit 10').all();
+
+  // JANGAN memakai view untuk angka kas: di D1 view bisa mengembalikan nilai basi
+  // sesaat setelah penulisan (terbukti: modal 5.000.000 baru ditarik kembali muncul lagi).
+  // Hitung langsung dari tabel — lebih mahal sedikit, tapi konsisten.
+  const ringkas = await env.DB.prepare(`
+    select
+      (select coalesce(sum(jumlah),0) from payments where voided_at is null) +
+      (select coalesce(sum(jumlah),0) from ledger where jenis='pendapatan' and voided_at is null)      as total_pendapatan,
+      (select coalesce(sum(jumlah),0) from ledger where jenis='pengeluaran' and voided_at is null)      as total_pengeluaran,
+      (select coalesce(sum(jumlah),0) from payments where voided_at is null) +
+      (select coalesce(sum(case when l.jenis='pendapatan' then l.jumlah
+                                when l.jenis='pengeluaran' then -l.jumlah
+                                when l.jenis='neraca' and coalesce(c.saldo_normal,'Debet')='Kredit' then l.jumlah
+                                when l.jenis='neraca' then -l.jumlah else 0 end),0)
+         from ledger l left join categories c on c.id = l.kategori_id
+        where l.voided_at is null and coalesce(c.arus_kas,1)=1)                                        as sisa_kas,
+      (select coalesce(sum(case when coalesce(c.saldo_normal,'Debet')='Kredit' then l.jumlah else -l.jumlah end),0)
+         from ledger l left join categories c on c.id = l.kategori_id
+        where l.jenis='neraca' and l.voided_at is null and coalesce(c.arus_kas,1)=1)                   as modal_neraca,
+      (select coalesce(sum(jumlah),0) from payments
+         where voided_at is null and tgl_bayar >= date('now','localtime','start of month'))            as pendapatan_bulan_ini,
+      (select coalesce(sum(jumlah),0) from bills
+         where status='belum_bayar' and jatuh_tempo < date('now','localtime'))                         as tunggakan
+  `).first();
   const roomMap = {};
   const aktif = (tenants.results || []).filter((t) => t.status === 'aktif');
   (rooms.results || []).forEach((r) => { roomMap[r.id] = r.no_kamar; });
   const label = (s) => ({ terisi: 'Terisi', perbaikan: 'Perbaikan' }[s] || 'Tersedia');
-  const bulanIni = new Date().toISOString().slice(0, 8) + '01';
 
   return {
     stats: {
-      totalKamar: d.total_kamar, kamarTerisi: d.kamar_terisi, kamarTersedia: d.kamar_tersedia,
-      totalPenyewa: d.penyewa_aktif,
-      totalPendapatan: d.total_sewa + d.total_pendapatan_ops,
-      totalPengeluaran: d.total_pengeluaran,
-      sisaKas: d.total_sewa + d.total_pendapatan_ops - d.total_pengeluaran,
-      pendapatanBulanIni: (pays.results || []).filter((p) => p.tgl_bayar >= bulanIni).reduce((a, p) => a + p.jumlah, 0),
-      tunggakan: d.tunggakan,
+      totalKamar: (rooms.results || []).length,
+      kamarTerisi: (rooms.results || []).filter((r) => r.status === 'terisi').length,
+      kamarTersedia: (rooms.results || []).filter((r) => r.status === 'tersedia').length,
+      totalPenyewa: aktif.length,
+      totalPendapatan: ringkas.total_pendapatan,
+      totalPengeluaran: ringkas.total_pengeluaran,
+      sisaKas: ringkas.sisa_kas,
+      modalNeraca: ringkas.modal_neraca,
+      pendapatanBulanIni: ringkas.pendapatan_bulan_ini,
+      tunggakan: ringkas.tunggakan,
     },
     kamar: (rooms.results || []).map((r) => {
       const t = aktif.find((x) => x.kamar_id === r.id);
@@ -67,13 +93,17 @@ async function dashboard(env) {
     penyewa: (tenants.results || []).map((t) => {
       const b = (bills.results || []).find((x) => x.tenant_id === t.id);
       return [t.kode, t.nama, t.hp || '', roomMap[t.kamar_id] || '', t.tgl_masuk,
-              t.status === 'aktif' ? 'Aktif' : 'Keluar', b ? b.jatuh_tempo : ''];
+              t.status === 'aktif' ? 'Aktif' : 'Keluar', b ? b.jatuh_tempo : '',
+              b ? String(b.jumlah) : '', b ? b.id : ''];
     }),
-    transaksi: (pays.results || []).map((p) => [p.tgl_bayar, (tenants.results || []).find((t) => t.id === p.tenant_id)?.nama || '-',
-      roomMap[(tenants.results || []).find((t) => t.id === p.tenant_id)?.kamar_id] || '', String(p.jumlah),
-      (p.keterangan || '') + ' • ' + p.nomor_struk]),
+    transaksi: (pays.results || []).map((p) => {
+      const t = (tenants.results || []).find((x) => x.id === p.tenant_id);
+      return [p.tgl_bayar, t ? t.nama : '-', t ? (roomMap[t.kamar_id] || '') : '', String(p.jumlah),
+              (p.keterangan || '') + ' • ' + p.nomor_struk, String(p.id)];
+    }),
   };
 }
+
 
 async function listLedger(env) {
   const r = await env.DB.prepare('select * from ledger where voided_at is null order by tanggal desc, id desc').all();
@@ -81,16 +111,39 @@ async function listLedger(env) {
 }
 
 // ---------- rute ----------
+// Aksi yang hanya boleh dilakukan admin. Aksi lain boleh untuk semua user aktif.
+const KEPERLUAN = {
+  'tenants.delete': 'admin',
+  'payments.void': 'admin',
+  'ledger.void': 'admin',
+  'rooms.delete': 'admin',
+  'rooms.update': 'admin',
+  'categories.create': 'admin',
+  'categories.update': 'admin',
+  'categories.delete': 'admin',
+  'users.create': 'admin',
+  'users.update': 'admin',
+  'users.delete': 'admin',
+};
+
 const AKSI = {
   'tenants.create': logic.createTenant,
+  'tenants.update': logic.updateTenant,
   'tenants.checkout': (ctx, d) => logic.checkoutTenant(ctx, d.id, d.kamar),
   'tenants.delete': (ctx, d) => logic.deleteTenant(ctx, d.id, d.kamar),
   'payments.create': logic.recordPayment,
+  'payments.void': (ctx, d) => logic.voidPayment(ctx, d.id),
   'ledger.create': addLedger,
   'ledger.void': (ctx, d) => logic.voidOpsTransaction(ctx, d.id),
   'rooms.create': addRoom,
   'rooms.update': updateRoom,
   'rooms.delete': deleteRoom,
+  'categories.create': addCategory,
+  'categories.update': updateCategory,
+  'categories.delete': deleteCategory,
+  'users.create': addUser,
+  'users.update': updateUser,
+  'users.delete': deleteUser,
 };
 
 async function addLedger(ctx, d) {
@@ -98,18 +151,30 @@ async function addLedger(ctx, d) {
   return logic.addOpsTransaction(ctx, { ...d, jenis: String(d.jenis || '').toLowerCase() });
 }
 
+function validRoom(d) {
+  const tipe = String(d.tipe || '').trim() || 'Standar';
+  const bulanan = logic.num(d.hargaBulanan);
+  const harian = logic.num(d.hargaHarian);
+  if (bulanan < 0 || harian < 0) throw logic.httpError(400, 'Harga kamar tidak boleh negatif.');
+  return { tipe, bulanan, harian };
+}
+
 async function addRoom(ctx, d) {
   const no = String(d.noKamar || '').trim();
   if (!no) throw logic.httpError(400, 'Nomor kamar wajib diisi.');
+  const { tipe, bulanan, harian } = validRoom(d);
   const dup = await ctx.db.prepare('select id from rooms where no_kamar=?').bind(no).first();
   if (dup) throw logic.httpError(409, `Unit Kamar ${no} sudah terdaftar.`);
   await ctx.db.prepare('insert into rooms (no_kamar, tipe, harga_bulanan, harga_harian, status) values (?,?,?,?,?)')
-    .bind(no, d.tipe || 'Standar', logic.num(d.hargaBulanan), logic.num(d.hargaHarian), 'tersedia').run();
-  return `Kamar ${no} (${d.tipe}) berhasil ditambahkan.`;
+    .bind(no, tipe, bulanan, harian, 'tersedia').run();
+  await ctx.audit('room.create', 'rooms', no, null, { no, tipe, bulanan, harian });
+  return `Kamar ${no} (${tipe}) berhasil ditambahkan.`;
 }
 
 async function updateRoom(ctx, d) {
   const oldNo = String(d.oldNoKamar || '').trim(), newNo = String(d.noKamar || '').trim();
+  if (!newNo) throw logic.httpError(400, 'Nomor kamar wajib diisi.');
+  const { tipe, bulanan, harian } = validRoom(d);
   const r = await ctx.db.prepare('select * from rooms where no_kamar=?').bind(oldNo).first();
   if (!r) throw logic.httpError(404, `Kamar ${oldNo} tidak ditemukan.`);
   if (newNo !== oldNo) {
@@ -117,23 +182,155 @@ async function updateRoom(ctx, d) {
     if (dup) throw logic.httpError(409, `Unit Kamar ${newNo} sudah terdaftar.`);
   }
   await ctx.db.prepare('update rooms set no_kamar=?, tipe=?, harga_bulanan=?, harga_harian=? where id=?')
-    .bind(newNo, d.tipe, logic.num(d.hargaBulanan), logic.num(d.hargaHarian), r.id).run();
+    .bind(newNo, tipe, bulanan, harian, r.id).run();
+  await ctx.audit('room.update', 'rooms', newNo, { no: oldNo, tipe: r.tipe, bulanan: r.harga_bulanan }, { no: newNo, tipe, bulanan });
   return `Kamar ${newNo} berhasil diperbarui.`;
 }
 
 async function deleteRoom(ctx, d) {
-  const r = await ctx.db.prepare('select * from rooms where no_kamar=?').bind(d.noKamar).first();
+  const r = await ctx.db.prepare('select * from rooms where no_kamar=?').bind(String(d.noKamar || '')).first();
   if (!r) throw logic.httpError(404, `Kamar ${d.noKamar} tidak ditemukan.`);
   const aktif = await ctx.db.prepare("select count(*) as n from tenants where kamar_id=? and status='aktif'").bind(r.id).first();
   if (aktif.n) throw logic.httpError(409, `Kamar ${d.noKamar} masih memiliki penyewa aktif. Check-out dulu.`);
   await ctx.db.prepare('delete from rooms where id=?').bind(r.id).run();
+  await ctx.audit('room.delete', 'rooms', r.no_kamar, { no: r.no_kamar, tipe: r.tipe, bulanan: r.harga_bulanan }, null);
   return `Unit Kamar ${d.noKamar} telah dihapus.`;
+}
+
+const JENIS_KAT = { pengeluaran: 'Pengeluaran', pendapatan: 'Pendapatan', neraca: 'Neraca' };
+
+function validKat(d) {
+  const jenis = String(d.jenis || '').toLowerCase();
+  if (!JENIS_KAT[jenis]) throw logic.httpError(400, 'Jenis kategori harus Pendapatan, Pengeluaran, atau Neraca.');
+  const nama = String(d.nama || '').trim();
+  if (!nama) throw logic.httpError(400, 'Nama kategori wajib diisi.');
+  const saldo = String(d.saldoNormal || (jenis === 'pengeluaran' ? 'Debet' : 'Kredit'));
+  if (!['Debet', 'Kredit'].includes(saldo)) throw logic.httpError(400, 'Saldo normal harus Debet atau Kredit.');
+  const arusKas = d.arusKas === undefined ? 1 : (d.arusKas ? 1 : 0);
+  return { jenis, nama, saldo, arusKas };
+}
+
+async function addCategory(ctx, d) {
+  const { jenis, nama, saldo, arusKas } = validKat(d);
+  const dup = await ctx.db.prepare('select id from categories where jenis=? and nama=?').bind(jenis, nama).first();
+  if (dup) throw logic.httpError(409, `Kategori "${nama}" sudah ada.`);
+  await ctx.db.prepare('insert into categories (jenis, nama, saldo_normal, arus_kas) values (?,?,?,?)').bind(jenis, nama, saldo, arusKas).run();
+  await ctx.audit('category.create', 'categories', nama, null, { jenis, nama, saldo, arusKas });
+  return `Kategori ${JENIS_KAT[jenis]} "${nama}" ditambahkan.`;
+}
+
+async function updateCategory(ctx, d) {
+  const id = Number(d.id);
+  const old = await ctx.db.prepare('select * from categories where id=?').bind(id).first();
+  if (!old) throw logic.httpError(404, 'Kategori tidak ditemukan.');
+  const { jenis, nama, saldo, arusKas } = validKat({
+    ...d, jenis: d.jenis || old.jenis, saldoNormal: d.saldoNormal || old.saldo_normal,
+    arusKas: d.arusKas === undefined ? old.arus_kas : d.arusKas,
+  });
+  const dup = await ctx.db.prepare('select id from categories where jenis=? and nama=? and id<>?').bind(jenis, nama, id).first();
+  if (dup) throw logic.httpError(409, `Kategori "${nama}" sudah ada.`);
+  await ctx.db.prepare('update categories set jenis=?, nama=?, saldo_normal=?, arus_kas=? where id=?').bind(jenis, nama, saldo, arusKas, id).run();
+  // transaksi lama menyimpan nama kategori sebagai teks: ikut diganti agar laporan tidak terpecah
+  await ctx.db.prepare('update ledger set kategori=? where kategori=? and jenis=?').bind(nama, old.nama, old.jenis).run();
+  await ctx.audit('category.update', 'categories', id, { jenis: old.jenis, nama: old.nama }, { jenis, nama });
+  return `Kategori "${nama}" diperbarui.`;
+}
+
+async function deleteCategory(ctx, d) {
+  const id = Number(d.id);
+  const old = await ctx.db.prepare('select * from categories where id=?').bind(id).first();
+  if (!old) throw logic.httpError(404, 'Kategori tidak ditemukan.');
+  const dipakai = await ctx.db.prepare('select count(*) as n from ledger where kategori=? and jenis=?').bind(old.nama, old.jenis).first();
+  if (dipakai.n) {
+    await ctx.db.prepare('update categories set aktif=0 where id=?').bind(id).run();
+    return `Kategori "${old.nama}" sudah dipakai ${dipakai.n} transaksi, jadi dinonaktifkan (riwayat tetap utuh).`;
+  }
+  await ctx.db.prepare('delete from categories where id=?').bind(id).run();
+  await ctx.audit('category.delete', 'categories', id, { jenis: old.jenis, nama: old.nama }, null);
+  return `Kategori "${old.nama}" dihapus.`;
+}
+
+function validUser(d, isNew) {
+  const username = String(d.username || '').trim().toLowerCase();
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) throw logic.httpError(400, 'Username 3-32 karakter: huruf kecil, angka, titik, garis bawah, atau strip.');
+  const role = String(d.role || 'staff');
+  if (!['admin', 'staff'].includes(role)) throw logic.httpError(400, 'Role harus admin atau staff.');
+  const fullname = String(d.fullname || '').trim() || username;
+  const password = d.password === undefined || d.password === null ? undefined : String(d.password);
+  if (isNew && (!password || password.length < 8)) throw logic.httpError(400, 'Password minimal 8 karakter.');
+  if (!isNew && password && password.length < 8) throw logic.httpError(400, 'Password minimal 8 karakter.');
+  return { username, role, fullname, password };
+}
+
+async function addUser(ctx, d) {
+  const { username, role, fullname, password } = validUser(d, true);
+  const dup = await ctx.db.prepare('select id from users where username=?').bind(username).first();
+  if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai.`);
+  const hash = await logic.hashPassword(password);
+  await ctx.db.prepare('insert into users (id, username, fullname, role, password_hash, aktif) values (?,?,?,?,?,1)')
+    .bind('usr_' + crypto.randomUUID().slice(0, 8), username, fullname, role, hash).run();
+  await ctx.audit('user.create', 'users', username, null, { username, role });
+  return `Pengguna ${username} (${role}) dibuat.`;
+}
+
+async function updateUser(ctx, d) {
+  const id = String(d.id || '');
+  const old = await ctx.db.prepare('select * from users where id=?').bind(id).first();
+  if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
+  const base = { ...d, username: d.username || old.username, role: d.role || old.role, fullname: d.fullname || old.fullname };
+  const { username, role, fullname, password } = validUser(base, false);
+  const aktif = d.aktif === undefined ? old.aktif : (d.aktif ? 1 : 0);
+  // jangan sampai tidak ada admin aktif yang tersisa
+  if (old.role === 'admin' && (role !== 'admin' || !aktif)) {
+    const admins = await ctx.db.prepare("select count(*) as n from users where role='admin' and aktif=1 and id<>?").bind(id).first();
+    if (!admins.n) throw logic.httpError(409, 'Minimal harus ada satu admin aktif.');
+  }
+  if (old.id === ctx.user.id && !aktif) throw logic.httpError(409, 'Tidak bisa menonaktifkan akun yang sedang dipakai.');
+  const dup = await ctx.db.prepare('select id from users where username=? and id<>?').bind(username, id).first();
+  if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai.`);
+  if (password) {
+    await ctx.db.prepare('update users set username=?, fullname=?, role=?, aktif=?, password_hash=?, must_change_password=1 where id=?')
+      .bind(username, fullname, role, aktif, await logic.hashPassword(password), id).run();
+    await ctx.db.prepare('delete from sessions where user_id=? and token_hash<>?').bind(id, sesiHashOf(ctx)).run();
+  } else {
+    await ctx.db.prepare('update users set username=?, fullname=?, role=?, aktif=? where id=?')
+      .bind(username, fullname, role, aktif, id).run();
+  }
+  if (!aktif) await ctx.db.prepare('delete from sessions where user_id=?').bind(id).run();
+  await ctx.audit('user.update', 'users', id, { username: old.username, role: old.role, aktif: old.aktif }, { username, role, aktif });
+  return `Pengguna ${username} diperbarui.`;
+}
+
+const sesiHashOf = (ctx) => (ctx && ctx.user && ctx.user.token_hash) || '';
+
+async function deleteUser(ctx, d) {
+  const id = String(d.id || '');
+  const old = await ctx.db.prepare('select * from users where id=?').bind(id).first();
+  if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
+  if (old.id === ctx.user.id) throw logic.httpError(409, 'Tidak bisa menghapus akun yang sedang dipakai.');
+  if (old.role === 'admin') {
+    const admins = await ctx.db.prepare("select count(*) as n from users where role='admin' and aktif=1 and id<>?").bind(id).first();
+    if (!admins.n) throw logic.httpError(409, 'Minimal harus ada satu admin aktif.');
+  }
+  // akun yang punya jejak transaksi hanya dinonaktifkan supaya audit tetap utuh
+  const jejak = await ctx.db.prepare('select (select count(*) from payments where created_by=?) + (select count(*) from ledger where created_by=?) as n')
+    .bind(id, id).first();
+  await ctx.db.prepare('delete from sessions where user_id=?').bind(id).run();
+  if (jejak.n) {
+    await ctx.db.prepare('update users set aktif=0 where id=?').bind(id).run();
+    await ctx.audit('user.deactivate', 'users', id, { username: old.username }, null);
+    return `Pengguna ${old.username} dinonaktifkan (punya riwayat transaksi, tidak dihapus).`;
+  }
+  await ctx.db.prepare('delete from users where id=?').bind(id).run();
+  await ctx.audit('user.delete', 'users', id, { username: old.username, role: old.role }, null);
+  return `Pengguna ${old.username} dihapus.`;
 }
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     const secure = (env.COOKIE_SECURE ?? 'true') !== 'false';
+    const today = logic.todayISO();
 
     if (!url.pathname.startsWith('/api/')) {
       return env.ASSETS.fetch(req);                    // UI statis (index.html)
@@ -141,54 +338,88 @@ export default {
 
     try {
       // ---------- auth ----------
-      if (url.pathname === '/api/login' && req.method === 'POST') {
+      if (url.pathname === '/api/login') {
+        if (req.method !== 'POST') return json({ error: 'Gunakan POST untuk login.' }, 405);
         const { username, password } = await req.json().catch(() => ({}));
-        const u = await env.DB.prepare('select * from users where username=? and aktif=1')
-          .bind(String(username || '').trim().toLowerCase()).first();
+        const uname = String(username || '').trim().toLowerCase();
+        const u = await env.DB.prepare('select * from users where username=? and aktif=1').bind(uname).first();
         if (!u || !(await logic.verifyPassword(String(password || ''), u.password_hash)))
           return json({ error: 'Kombinasi nama pengguna atau kata sandi tidak sesuai.' }, 401);
         const token = logic.randomToken();
         const exp = new Date(Date.now() + SESI_HARI * 86400000).toISOString();
         await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at) values (?,?,?)')
           .bind(await logic.sha256hex(token), u.id, exp).run();
+        await env.DB.prepare("delete from sessions where expires_at < datetime('now')").run().catch(() => {});
         return json({ ok: true, user: { username: u.username, fullname: u.fullname, role: u.role } },
           200, { 'set-cookie': setSesiCookie(token, secure) });
       }
+
+      const sesi = await sesiAktif(env, req);
+
       if (url.pathname === '/api/logout') {
+        if (req.method !== 'POST') return json({ error: 'Gunakan POST untuk logout.' }, 405);
         const t = cookieValue(req, 'hade_sesi');
         if (t) await env.DB.prepare('delete from sessions where token_hash=?').bind(await logic.sha256hex(t)).run();
         return json({ ok: true }, 200, { 'set-cookie': setSesiCookie('', secure, 0) });
       }
 
-      const sesi = await sesiAktif(env, req);
       if (url.pathname === '/api/session') {
         return sesi ? json({ logged_in: true, user: { id: sesi.id, username: sesi.username, fullname: sesi.fullname, role: sesi.role, must_change_password: !!sesi.must_change_password } })
                     : json({ logged_in: false });
       }
       if (!sesi) return json({ error: 'Sesi berakhir. Silakan login ulang.' }, 401);
 
+      // ---------- ganti password sendiri ----------
+      if (url.pathname === '/api/password' && req.method === 'POST') {
+        const { lama, baru } = await req.json().catch(() => ({}));
+        const u = await env.DB.prepare('select * from users where id=?').bind(sesi.id).first();
+        if (!u || !(await logic.verifyPassword(String(lama || ''), u.password_hash)))
+          return json({ error: 'Password lama tidak sesuai.' }, 401);
+        if (String(baru || '').length < 8) return json({ error: 'Password baru minimal 8 karakter.' }, 400);
+        await env.DB.prepare('update users set password_hash=?, must_change_password=0 where id=?')
+          .bind(await logic.hashPassword(String(baru)), sesi.id).run();
+        await env.DB.prepare('delete from sessions where user_id=? and token_hash<>?')
+          .bind(sesi.id, sesi.token_hash).run();
+        await logic.audit(env, sesi, 'user.password', 'users', sesi.id, null, null);
+        return json({ ok: true, message: 'Password berhasil diganti. Sesi lain sudah dikeluarkan.' });
+      }
+
       // ---------- baca ----------
       if (url.pathname === '/api/bootstrap') {
-        const [d, ops, cats] = await Promise.all([dashboard(env), listLedger(env), env.DB.prepare('select * from categories where aktif=1 order by nama').all()]);
+        const [d, ops, cats, us] = await Promise.all([
+          dashboard(env), listLedger(env),
+          env.DB.prepare('select * from categories where aktif=1 order by jenis, nama').all(),
+          env.DB.prepare('select id, username, fullname, role, aktif, created_at from users order by username').all(),
+        ]);
         const kategori = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
         (cats.results || []).forEach((c) => {
           const k = c.jenis.charAt(0).toUpperCase() + c.jenis.slice(1);
-          (kategori[k] = kategori[k] || []).push({ nama: c.nama, saldoNormal: c.saldo_normal });
+          (kategori[k] = kategori[k] || []).push({ id: c.id, nama: c.nama, saldoNormal: c.saldo_normal, jenis: k, arusKas: c.arus_kas !== 0 });
         });
-        return json({ ...d, ops, kategori });
+        const users = sesi.role === 'admin'
+          ? (us.results || []).map((u) => ({ id: u.id, username: u.username, nama: u.fullname, fullname: u.fullname, role: u.role, aktif: u.aktif }))
+          : [];
+        return json({ ...d, ops, kategori, users });
       }
       if (url.pathname === '/api/dashboard') return json(await dashboard(env));
       if (url.pathname === '/api/ops') return json(await listLedger(env));
 
       // ---------- tulis ----------
-      if (url.pathname === '/api/action' && req.method === 'POST') {
+      if (url.pathname === '/api/action') {
+        if (req.method !== 'POST') return json({ error: 'Gunakan POST untuk aksi.' }, 405);
         const { action, data } = await req.json().catch(() => ({}));
         const fn = AKSI[action];
         if (!fn) return json({ error: `Aksi "${action}" tidak dikenal.` }, 400);
+        if (sesi.must_change_password) {
+          return json({ error: 'Anda wajib mengganti password terlebih dahulu.' }, 403);
+        }
+        if (KEPERLUAN[action] === 'admin' && sesi.role !== 'admin') {
+          return json({ error: 'Aksi ini hanya untuk admin.' }, 403);
+        }
         const ctx = {
-          env, db: env.DB, user: sesi,
-          today: logic.todayISO(), now: () => new Date().toISOString(),
-          audit: async () => {},                       // trigger DB sudah mencatat
+          env, db: env.DB, user: sesi, today,
+          now: () => new Date().toISOString(),
+          audit: (aksi, tabel, rowId, lama, baru) => logic.audit(env, sesi, aksi, tabel, rowId, lama, baru),
         };
         const msg = await fn(ctx, data || {});
         return json({ ok: true, message: msg });
@@ -197,8 +428,11 @@ export default {
       return json({ error: 'Rute tidak ditemukan.' }, 404);
     } catch (e) {
       const status = e.status || 500;
-      if (status === 500) console.error('[hade]', e.stack || e);
-      return json({ error: e.message || 'Terjadi kesalahan pada server.' }, status);
+      if (status >= 500) {
+        console.error('[hade]', e.stack || e);
+        return json({ error: 'Terjadi kesalahan pada server. Silakan coba lagi.' }, 500);
+      }
+      return json({ error: e.message || 'Permintaan tidak valid.' }, status);
     }
   },
 };
