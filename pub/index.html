@@ -555,7 +555,45 @@
         
         <!-- SECTION: RECORD PAYMENT & HISTORY -->
         <section id="sec-pembayaran" class="content-section hidden w-full animate-fade-in">
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                      <!-- PENGINGAT WHATSAPP (lebar penuh: di luar grid 12 kolom) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-8">
+              <div class="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="min-w-0">
+                  <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
+                    <span class="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0"><i class="fab fa-whatsapp text-emerald-600 text-xs"></i></span>
+                    Pengingat WhatsApp
+                  </h3>
+                  <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">Tagihan yang belum lunas. Klik <b class="text-slate-500">Kirim</b> — WhatsApp terbuka dengan pesan siap kirim, Anda tinggal tekan Send.</p>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <button onclick="muatPengingat()" class="px-3 py-2 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition">Segarkan</button>
+                  <button id="btn-kirim-semua" onclick="kirimSemuaPengingat()" class="px-3 py-2 text-[11px] font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition whitespace-nowrap disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed" disabled>Kirim ke semua</button>
+                </div>
+              </div>
+              <!-- HP: daftar kartu ringkas (tabel 6 kolom tidak nyaman digeser di layar kecil) -->
+              <div id="pengingat-kartu" class="md:hidden divide-y divide-slate-100"></div>
+
+              <!-- Desktop/tablet: tabel -->
+              <div class="hidden md:block overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead class="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <tr>
+                      <th class="py-2.5 px-5">Penyewa</th>
+                      <th class="py-2.5 px-4">Kamar</th>
+                      <th class="py-2.5 px-4">Jatuh Tempo</th>
+                      <th class="py-2.5 px-4 text-right">Tagihan</th>
+                      <th class="py-2.5 px-4 text-center">Status</th>
+                      <th class="py-2.5 px-5 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-pengingat" class="divide-y divide-slate-100">
+                    <tr><td colspan="6" class="py-6 text-center text-slate-400 text-xs italic">Memuat…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
             
             <!-- LEFT SIDE: FORM RECORD PAYMENT -->
             <div class="lg:col-span-4">
@@ -657,37 +695,6 @@
                     </tbody>
                   </table>
                 </div>
-              </div>
-            </div>
-
-            <!-- PENGINGAT WHATSAPP (tanpa biaya: WA dibuka di HP Anda, Anda yang menekan Send) -->
-            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6">
-              <div class="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div>
-                  <h3 class="font-extrabold text-slate-900 text-sm"><i class="fab fa-whatsapp text-emerald-500 mr-2"></i>Pengingat WhatsApp</h3>
-                  <p class="text-[11px] text-slate-400 mt-0.5">Tagihan belum lunas. Klik <b>Kirim</b> — WhatsApp terbuka dengan pesan siap kirim, Anda tinggal tekan Send.</p>
-                </div>
-                <div class="flex gap-2">
-                  <button onclick="muatPengingat()" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition">Segarkan</button>
-                  <button onclick="kirimSemuaPengingat()" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition">Buka semua yang belum diingatkan</button>
-                </div>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                  <thead class="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400">
-                    <tr>
-                      <th class="py-3 px-5">Penyewa</th>
-                      <th class="py-3 px-4">Kamar</th>
-                      <th class="py-3 px-4">Jatuh Tempo</th>
-                      <th class="py-3 px-4">Tagihan</th>
-                      <th class="py-3 px-4">Status</th>
-                      <th class="py-3 px-5 text-center">Aksi</th>
-                    </tr>
-                  </thead>
-                  <tbody id="table-pengingat" class="divide-y divide-slate-100">
-                    <tr><td colspan="6" class="py-8 text-center text-slate-400 text-sm italic">Memuat…</td></tr>
-                  </tbody>
-                </table>
               </div>
             </div>
 
@@ -2623,28 +2630,73 @@
         tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-rose-500 text-sm">${esc(err.message)}</td></tr>`;
         return;
       }
+      const kartu = document.getElementById('pengingat-kartu');
+      const btnSemua = document.getElementById('btn-kirim-semua');
+      const perluKirim = daftarPengingat.filter((p) => !p.sudahDiingatkan && p.hp).length;
+      if (btnSemua) {
+        btnSemua.disabled = perluKirim === 0;
+        btnSemua.title = perluKirim === 0 ? 'Tidak ada tagihan yang perlu diingatkan' : `Kirim ke ${perluKirim} penyewa`;
+      }
       if (!daftarPengingat.length) {
         tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-emerald-600 text-sm font-bold">Semua tagihan sudah lunas 🎉</td></tr>`;
+        kartu.innerHTML = `<div class="py-8 text-center text-emerald-600 text-sm font-bold">Semua tagihan sudah lunas 🎉</div>`;
         return;
       }
       tbody.innerHTML = daftarPengingat.map((p) => {
         const lewat = p.terlambat > 0;
+        const badge = 'inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wide border whitespace-nowrap';
+        // semua status memakai bentuk badge yang sama (dulu "H-13" tampil sebagai bentuk lain)
         const status = p.sudahDiingatkan
-          ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">Sudah diingatkan</span>`
+          ? `<span class="${badge} bg-emerald-50 text-emerald-700 border-emerald-100">Sudah diingatkan</span>`
           : (lewat
-              ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-600 border border-rose-100">Terlambat ${p.terlambat} hr</span>`
-              : `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-600 border border-amber-100">${p.terlambat === 0 ? 'Hari ini' : 'H-' + Math.abs(p.terlambat)}</span>`);
+              ? `<span class="${badge} bg-rose-50 text-rose-700 border-rose-100">Terlambat ${p.terlambat} hari</span>`
+              : `<span class="${badge} bg-amber-50 text-amber-700 border-amber-100">${p.terlambat === 0 ? 'Jatuh tempo hari ini' : 'H-' + Math.abs(p.terlambat)}</span>`);
         return `
           <tr class="hover:bg-slate-50 transition text-slate-700 text-xs md:text-sm">
-            <td class="py-3 px-5 font-bold text-slate-900">${esc(p.nama)}<div class="text-[9px] text-slate-400 font-mono">${esc(p.kode)}</div></td>
-            <td class="py-3 px-4">${esc(p.kamar)}</td>
-            <td class="py-3 px-4 whitespace-nowrap">${esc(String(p.jatuhTempo).slice(0, 10))}</td>
-            <td class="py-3 px-4 font-extrabold text-slate-800 whitespace-nowrap">${rp(p.jumlah)}</td>
-            <td class="py-3 px-4">${status}</td>
+            <td class="py-3 px-5">
+              <div class="font-bold text-slate-900 truncate max-w-[180px]">${esc(p.nama)}</div>
+              <div class="text-[9px] text-slate-400 font-mono">${esc(p.kode)}</div>
+            </td>
+            <td class="py-3 px-4"><span class="px-2 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 font-black text-[10px]">${esc(p.kamar)}</span></td>
+            <td class="py-3 px-4 whitespace-nowrap text-slate-500">${esc(String(p.jatuhTempo).slice(0, 10))}</td>
+            <td class="py-3 px-4 font-extrabold text-slate-800 whitespace-nowrap text-right">${rp(p.jumlah)}</td>
+            <td class="py-3 px-4 text-center">${status}</td>
             <td class="py-3 px-5 text-center whitespace-nowrap">
-              ${p.hp ? `<button data-aksi="wa-pengingat" data-bill="${esc(p.billId)}" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wide transition"><i class="fab fa-whatsapp mr-1"></i>Kirim</button>` : '<span class="text-[10px] text-rose-400 font-bold">HP belum diisi</span>'}
+              ${p.hp
+                ? `<button data-aksi="wa-pengingat" data-bill="${esc(p.billId)}" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wide transition"><i class="fab fa-whatsapp"></i>Kirim</button>`
+                : `<button type="button" disabled class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 font-bold text-[10px] uppercase tracking-wide cursor-not-allowed" title="Isi nomor WhatsApp penyewa di menu Penyewa"><i class="fab fa-whatsapp"></i>Tanpa HP</button>`}
             </td>
           </tr>`;
+      }).join('');
+
+      // versi seluler: satu kartu per penyewa
+      kartu.innerHTML = daftarPengingat.map((p) => {
+        const badge = 'inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wide border whitespace-nowrap';
+        const status = p.sudahDiingatkan
+          ? `<span class="${badge} bg-emerald-50 text-emerald-700 border-emerald-100">Sudah diingatkan</span>`
+          : (p.terlambat > 0
+              ? `<span class="${badge} bg-rose-50 text-rose-700 border-rose-100">Terlambat ${p.terlambat} hari</span>`
+              : `<span class="${badge} bg-amber-50 text-amber-700 border-amber-100">${p.terlambat === 0 ? 'Jatuh tempo hari ini' : 'H-' + Math.abs(p.terlambat)}</span>`);
+        return `
+          <div class="p-4">
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0">
+                <div class="font-extrabold text-slate-900 text-sm truncate">${esc(p.nama)}</div>
+                <div class="text-[10px] text-slate-400 font-mono mt-0.5">${esc(p.kode)} · Kamar ${esc(p.kamar)}</div>
+              </div>
+              ${status}
+            </div>
+            <div class="flex items-end justify-between gap-3 mt-3">
+              <div>
+                <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Tagihan</div>
+                <div class="font-extrabold text-slate-800 text-sm">${rp(p.jumlah)}</div>
+                <div class="text-[10px] text-slate-400 mt-0.5">Jatuh tempo ${esc(String(p.jatuhTempo).slice(0, 10))}</div>
+              </div>
+              ${p.hp
+                ? `<button data-aksi="wa-pengingat" data-bill="${esc(p.billId)}" class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wide transition shrink-0"><i class="fab fa-whatsapp"></i>Kirim</button>`
+                : `<span class="px-3 py-2 rounded-lg bg-slate-100 text-slate-400 border border-slate-200 font-bold text-[10px] uppercase tracking-wide">Tanpa HP</span>`}
+            </div>
+          </div>`;
       }).join('');
     }
 
