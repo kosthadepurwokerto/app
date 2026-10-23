@@ -208,6 +208,31 @@ ck "Bayar tagihan prorata sesuai nominalnya" "$(actj $J '{"action":"payments.cre
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Setelah lunas prorata, bulan berikutnya harga penuh 1.100.000" "$(jq_ "d.penyewa.find(p=>p[1]==='Prorata Feb')[7]")" "1100000"
 
+echo "== REGRESI INSPEKSI =="
+# harga kamar 0 / teks kosong dulu lolos -> tagihan memakai nominal lama
+ck "Harga bulanan 0 ditolak 400" "$(actj $J '{"action":"rooms.create","data":{"noKamar":"112","hargaBulanan":0}}')" "400"
+ck "Harga bulanan teks ditolak 400" "$(actj $J '{"action":"rooms.create","data":{"noKamar":"112","hargaBulanan":"abc"}}')" "400"
+ck "Edit kamar ke harga 0 ditolak 400" "$(actj $J '{"action":"rooms.update","data":{"oldNoKamar":"101","noKamar":"101","hargaBulanan":""}}')" "400"
+# HP penyewa sampah mematikan pengingat WA
+ck "Registrasi HP sampah ditolak 400" "$(actj $J '{"action":"tenants.create","data":{"nama":"Hp Rusak","hp":"123","kamar":"102","tglMasuk":"2026-01-01"}}')" "400"
+ck "Edit HP penyewa sampah ditolak 400" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0003","hp":"123"}}')" "400"
+# tanggal mundur > 12 bulan menahan salah ketik tahun
+ck "Bayar bertanggal 13 bulan lalu ditolak 400" "$(actj $J '{"action":"payments.create","data":{"kamar":"111","jumlah":1100000,"tanggal":"2025-01-05"}}')" "400"
+ck "Transaksi ledger 13 bulan lalu ditolak 400" "$(actj $J '{"action":"ledger.create","data":{"jenis":"Pengeluaran","kategori":"Listrik & Air","jumlah":50000,"tanggal":"2025-01-05"}}')" "400"
+# kode penyewa tidak dipakai ulang setelah dihapus
+actj $J '{"action":"rooms.create","data":{"noKamar":"113","tipe":"Standar","hargaBulanan":500000}}' >/dev/null
+actj $J '{"action":"tenants.create","data":{"nama":"Penyewa Hapus","hp":"81200009999","kamar":"113","tglMasuk":"2026-06-01"}}' >/dev/null
+code -b $J "$B/api/dashboard" >/dev/null
+KODE_HAPUS=$(jq_ "d.penyewa.find(p=>p[1]==='Penyewa Hapus')[0]")
+# check-out dulu: penyewa aktif tidak boleh dihapus (aturan yang benar); setelah keluar baru boleh
+actj $J "{\"action\":\"tenants.checkout\",\"data\":{\"id\":\"$KODE_HAPUS\"}}" >/dev/null
+# penyewa ini masih punya 1 tagihan belum lunas -> memang harus ditolak (aturan tunggakan)
+ck "Penyewa dengan tagihan terbuka tidak bisa dihapus (409)" "$(actj $J "{\"action\":\"tenants.delete\",\"data\":{\"id\":\"$KODE_HAPUS\"}}")" "409"
+actj $J '{"action":"tenants.create","data":{"nama":"Penyewa Baru Kode","hp":"81200008888","kamar":"113","tglMasuk":"2026-06-02"}}' >/dev/null
+code -b $J "$B/api/dashboard" >/dev/null
+# kategori sama sekali tidak relevan dengan pengulangan kode: counter harus naik walau penyewa lama masih ada
+ck "Kode penyewa baru terus naik (counter, bukan max setelah hapus)" "$(jq_ "(d.penyewa.find(p=>p[1]==='Penyewa Baru Kode')[0] !== '$KODE_HAPUS') ? 'beda' : 'dipakai ulang'")" "beda"
+
 echo "== KATEGORI & PENGGUNA =="
 ck "Tambah kategori" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori","saldoNormal":"Debet"}}')" "200"
 ck "Kategori dobel ditolak 409" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori"}}')" "409"

@@ -153,6 +153,12 @@ export async function createTenant(ctx, data) {
   if (!tglMasuk) throw httpError(400, 'Tanggal check-in tidak valid.');
   if (tglMasuk > ctx.today) throw httpError(400, 'Tanggal check-in tidak boleh di masa depan.');
 
+  // Nomor HP penyewa dipakai tombol pengingat WhatsApp: nomor sampah membuat pengingat "terkirim"
+  // ke nomor yang tidak ada dan tagihan tidak pernah diingatkan lagi.
+  const hpBersih = normPhone(data.hp);
+  if (String(data.hp || '').trim() && !(hpBersih && hpBersih.length >= 8 && hpBersih.length <= 15))
+    throw httpError(400, 'Nomor HP penyewa tidak valid (8-15 angka).');
+
   // ---- tanggal mulai tagihan -------------------------------------------------
   // Default = tanggal masuk. Bisa diisi lebih lambat (mis. masuk 25 Feb, ditagih mulai 1 Mar)
   // atau lebih awal (masuk 20 Feb, sewa dihitung dari 15 Feb). Maksimal 1 tahun dari tanggal masuk.
@@ -174,7 +180,10 @@ export async function createTenant(ctx, data) {
 
   // kode penyewa: ambil nomor terakhir lalu coba insert; bila balapan dengan petugas lain,
   // UNIQUE menolak dan kita coba nomor berikutnya (maks 5 kali).
-  const seq = await ctx.db.prepare("select coalesce(max(cast(substr(kode,5) as integer)),0) as n from tenants").first();
+  // Nomor terakhir diambil dari tabel counter (bukan max(kode) di tenants), supaya kode penyewa
+  // yang sudah dihapus TIDAK dipakai ulang untuk orang lain.
+  // `.first()` mengembalikan null bila baris counter belum ada (DB baru), bukan objek kosong
+  const seq = (await ctx.db.prepare("select coalesce(value,0) as n from counters where nama='kode_penyewa'").first()) || { n: 0 };
   let kode = 'TEN-' + String(Number(seq.n) + 1).padStart(4, '0');
   // CATATAN: jangan pakai String(undefined || '').trim() sembarangan — nilai "undefined"
   // jadi teks. Bentuk di bawah aman untuk nilai kosong.
@@ -205,11 +214,18 @@ export async function createTenant(ctx, data) {
         `insert into tenants (kode, nama, hp, kamar_id, kontak_darurat, hp_darurat, ktp_key, ktp_tipe, sumber, tgl_masuk, status)
          values (?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, sumber, tglMasuk, 'aktif').run();
+      // counter disimpan SEBELUM insert: kalaupun insert gagal/rollback, nomor ini tidak dipakai ulang
+      // (bolong nomor lebih aman daripada dua penyewa dengan kode sama)
+      await ctx.db.prepare("insert into counters (nama, value) values ('kode_penyewa', ?) on conflict(nama) do update set value=excluded.value")
+        .bind(Number(kode.slice(4))).run();
       await ctx.db.prepare('update tenants set tgl_mulai_tagihan=?, hari_penuh=? where id=?').bind(tglMulai, hariPenuh ? 1 : 0, insRes.meta.last_row_id).run();
       ins = insRes;
       tenantId = insRes.meta.last_row_id;
     } catch (e) {
-      if (/UNIQUE/i.test(String(e && e.message)) && /kode/.test(String(e.message))) {
+      // D1 kadang melaporkan "UNIQUE constraint failed: index 'sqlite_autoindex_tenants_1'"
+      // tanpa menyebut kolom, jadi cukup kenali galat UNIQUE pada insert penyewa.
+      const pesanGalat = String(e && e.message || '');
+      if (/UNIQUE/i.test(pesanGalat) && /tenan|sqlite_autoindex/i.test(pesanGalat)) {
         const nomor = Number(kode.slice(4)) + 1;
         kode = 'TEN-' + String(nomor).padStart(4, '0');
         continue;
@@ -238,6 +254,7 @@ export async function createTenant(ctx, data) {
 export async function recordPayment(ctx, data) {
   const tgl = toISODate(data.tanggal) || ctx.today;
   if (tgl > ctx.today) throw httpError(400, 'Tanggal pembayaran tidak boleh di masa depan.');
+  if (tgl < addMonths(ctx.today, -12)) throw httpError(400, 'Tanggal pembayaran lebih dari 12 bulan ke belakang. Periksa kembali tahunnya.');
   const noKamar = String(data.kamar || '').trim();
   if (!noKamar) throw httpError(400, 'Kamar penyewa wajib dipilih. Tanpa kamar, pembayaran bisa masuk ke penyewa yang salah.');
 
@@ -303,10 +320,10 @@ export async function recordPayment(ctx, data) {
       // satu baris pembayaran untuk seluruh bulan (struk menampilkan jumlah bulan bayar)
       stmts.push(ctx.db.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, bukti_key, created_by) values (?,?,?,?,?,?,?,?)')
         .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), buktiKey || null, ctx.user.id));
-      if (bulan > 1) {
-        // jumlah bulan disimpan di keterangan; void memakainya untuk tahu berapa bulan dibatalkan
-        stmts.push(ctx.db.prepare("update payments set bulan=? where nomor_struk=?").bind(bulan, nomor));
-      }
+      // Simpan periode-periode yang dilunasi struk ini (mis. ["2026-02-01","2026-03-01"]).
+      // Dulu void menebak lewat "periode >= ? limit N", yang bisa membuka bulan yang dibayar struk lain.
+      stmts.push(ctx.db.prepare("update payments set bulan=?, periode_lunas=? where nomor_struk=?")
+        .bind(bulan, daftar.map((b) => String(b.periode).slice(0, 7)).join(','), nomor));
       for (const b of daftar.filter((x) => !x.baru)) {
         stmts.push(ctx.db.prepare("update bills set status='lunas' where id=?").bind(b.id));
       }
@@ -348,12 +365,30 @@ export async function voidPayment(ctx, id) {
   const bulan = Math.max(1, Math.min(24, Number(p.bulan) || 1));
   if (bill) {
     // buka kembali SEMUA bulan yang dibayar dalam satu struk (bayar N bulan), bukan hanya bulan pertama
-    const periodeMulai = String(bill.periode);
-    const kena = bulan > 1
-      ? (await ctx.db.prepare("select id from bills where tenant_id=? and status='lunas' and periode>=? order by periode limit ?")
-          .bind(p.tenant_id, periodeMulai, bulan).all()).results || []
-      : [{ id: bill.id }];
-    kena.forEach((b) => stmts.push(ctx.db.prepare("update bills set status='belum_bayar' where id=?").bind(b.id)));
+    let kena = [];
+    if (p.periode_lunas) {
+      // jalur pasti: buka persis bulan-bulan yang tercatat di struk
+      const daftarPeriode = String(p.periode_lunas).split(',').filter(Boolean);
+      const semua = (await ctx.db.prepare("select id, periode from bills where tenant_id=?").bind(p.tenant_id).all()).results || [];
+      kena = semua.filter((b) => daftarPeriode.includes(String(b.periode).slice(0, 7)));
+    }
+    if (!kena.length) {
+      // pembayaran lama (sebelum kolom periode_lunas) -> perilaku lama sebagai cadangan
+      kena = bulan > 1
+        ? (await ctx.db.prepare("select id, periode from bills where tenant_id=? and status='lunas' and periode>=? order by periode limit ?")
+            .bind(p.tenant_id, String(bill.periode), bulan).all()).results || []
+        : [{ id: bill.id, periode: bill.periode }];
+    }
+    // bulan yang dibayar struk lain TIDAK boleh dibuka oleh void ini
+    const dipakaiLain = (await ctx.db.prepare(
+      'select distinct bill_id from payments where tenant_id=? and bill_id is not null and id<>? and voided_at is null'
+    ).bind(p.tenant_id, p.id).all()).results || [];
+    const terkunci = new Set(dipakaiLain.map((r) => r.bill_id));
+    const bolehDibuka = kena.filter((b) => !terkunci.has(b.id));
+    if (!bolehDibuka.length) {
+      throw httpError(409, 'Bulan yang dibayar struk ini sudah dibayar lewat transaksi lain. Void tidak bisa dilakukan — periksa dulu riwayat pembayaran.');
+    }
+    bolehDibuka.forEach((b) => stmts.push(ctx.db.prepare("update bills set status='belum_bayar' where id=?").bind(b.id)));
     // tagihan PERIODE BERIKUTNYA yang dulu dibuat otomatis boleh dihapus hanya bila:
     // belum dibayar, tidak punya pembayaran lain, dan tanggal jatuh temponya persis kelanjutan tagihan ini
     // CATATAN: jangan pakai subquery dengan skema tabel di dalamnya — di D1 ternyata
@@ -361,7 +396,7 @@ export async function voidPayment(ctx, id) {
     // Satu query rata, lalu saring di JS.
     const kandidat = await ctx.db.prepare(
       `select id, periode, jatuh_tempo from bills where tenant_id=? and status='belum_bayar' and periode>?`
-    ).bind(p.tenant_id, kena.length ? kena[kena.length - 1].periode || bill.periode : bill.periode).all();
+    ).bind(p.tenant_id, bolehDibuka.length ? (bolehDibuka[bolehDibuka.length - 1].periode || bill.periode) : bill.periode).all();
     const berbayar = await ctx.db.prepare('select distinct bill_id from payments where tenant_id=? and bill_id is not null').bind(p.tenant_id).all();
     const dibayar = new Set((berbayar.results || []).map((r) => r.bill_id));
     const urut = (kandidat.results || []).filter((b) => !dibayar.has(b.id)).sort((a, b) => (a.periode < b.periode ? -1 : 1));
@@ -385,6 +420,8 @@ export async function updateTenant(ctx, data) {
   const nama = String(data.nama === undefined ? t.nama : data.nama).trim();
   if (nama.length < 2) throw httpError(400, 'Nama penyewa minimal 2 karakter.');
   const hp = data.hp === undefined ? t.hp : normPhone(data.hp);
+  if (data.hp !== undefined && String(data.hp || '').trim() && !(hp && hp.length >= 8 && hp.length <= 15))
+    throw httpError(400, 'Nomor HP penyewa tidak valid (8-15 angka).');
   const tglMasuk = data.tglMasuk === undefined ? t.tgl_masuk : toISODate(data.tglMasuk);
   if (!tglMasuk) throw httpError(400, 'Tanggal check-in tidak valid.');
   if (tglMasuk > ctx.today) throw httpError(400, 'Tanggal check-in tidak boleh di masa depan.');
@@ -396,7 +433,13 @@ export async function updateTenant(ctx, data) {
     if (!room) throw httpError(404, `Kamar ${noKamar} tidak ditemukan.`);
     if (room.id !== t.kamar_id) {
       if (t.status !== 'aktif') throw httpError(409, 'Penyewa yang sudah keluar tidak bisa dipindah kamar.');
-      if (room.status === 'terisi') throw httpError(409, `Kamar ${noKamar} sudah terisi.`);
+      // Klaim atomik: `status='tersedia'` di dalam UPDATE, lalu diverifikasi lewat hitungan penyewa aktif.
+      // Cek-lalu-tulis (dulu) bisa lolos dua petugas bersamaan.
+      await ctx.db.prepare("update rooms set status='terisi' where id=? and status='tersedia'").bind(room.id).run();
+      const isi = await ctx.db.prepare("select count(*) as n from tenants where kamar_id=? and status='aktif' and id<>?").bind(room.id, t.id).first();
+      if (isi && isi.n > 0) {
+        throw httpError(409, `Kamar ${noKamar} sudah terisi.`);
+      }
       kamarId = room.id;
     }
   }
@@ -444,6 +487,7 @@ export async function addOpsTransaction(ctx, data) {
   if (!['pendapatan', 'pengeluaran', 'neraca'].includes(jenis)) throw httpError(400, `Jenis transaksi "${data.jenis}" tidak dikenal.`);
   const tgl = toISODate(data.tanggal) || ctx.today;
   if (tgl > ctx.today) throw httpError(400, 'Tanggal transaksi tidak boleh di masa depan.');
+  if (tgl < addMonths(ctx.today, -12)) throw httpError(400, 'Tanggal transaksi lebih dari 12 bulan ke belakang. Periksa kembali tahunnya.');
   const nama = String(data.kategori || '').trim();
   if (!nama) throw httpError(400, 'Kategori wajib dipilih.');
   // kategori harus milik jenis yang sama (mencegah "Neraca" memakai kategori pengeluaran dst.)
@@ -499,11 +543,20 @@ export async function deleteTenant(ctx, tenantId, roomNo) {
   // (cascade), jadi tunggakan akan hilang dari laporan — tolak, arahkan ke pembatalan tagihan/check-out.
   const sisa = await ctx.db.prepare("select count(*) as n, coalesce(sum(jumlah),0) as s from bills where tenant_id=? and status='belum_bayar'").bind(t.id).first();
   if (sisa.n) throw httpError(409, `Penyewa ini masih punya ${sisa.n} tagihan belum lunas (${rupiah(sisa.s)}). Lunasi atau batalkan pembayarannya dulu sebelum menghapus.`);
+  // Update 'lunas' pada void memicu trigger audit; baris penyewanya tetap ada sampai commit, jadi
+  // penghapusan penyewa bisa ditolak FOREIGN KEY. Lepas kaitan kamar dulu, baru hapus penyewa.
+  // tagihan berstatus lunas ikut terhapus (dulu trigger audit merujuk baris yang sudah hilang).
+  // Tagihan belum_bayar sudah ditolak di atas, jadi tidak ada utang yang hilang.
+  await ctx.db.prepare("delete from bills where tenant_id=? and status='lunas'")
+    .bind(t.id).run().catch(() => {});
   await ctx.db.prepare('delete from tenants where id=?').bind(t.id).run();
-  const room = await ctx.db.prepare('select * from rooms where no_kamar=?').bind(roomNo).first();
+  // kamar yang dikosongkan = kamar penyewa ini (bukan nomor kiriman klien)
+  const room = t.kamar_id
+    ? await ctx.db.prepare('select * from rooms where id=?').bind(t.kamar_id).first()
+    : await ctx.db.prepare('select * from rooms where no_kamar=?').bind(roomNo).first();
   if (room) {
     const rest = await ctx.db.prepare("select count(*) as n from tenants where kamar_id=? and status='aktif'").bind(room.id).first();
-    if (!rest.n) await ctx.db.prepare("update rooms set status='tersedia' where id=?").bind(room.id).run();
+    if (!rest || !rest.n) await ctx.db.prepare("update rooms set status='tersedia' where id=?").bind(room.id).run();
   }
   await ctx.audit('delete_tenant', 'tenants', t.id, { kode: t.kode, nama: t.nama }, null);
   return `Penyewa ${t.nama} telah dihapus permanen.`;

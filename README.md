@@ -26,7 +26,7 @@ npx wrangler d1 execute hadekost-db --local --file=db/schema.sql
 node tools/buat-akun.mjs admin 'PasswordKuat123' admin 'Administrator'   # salin hasilnya:
 npx wrangler d1 execute hadekost-db --local --command "<hasil perintah di atas>"
 npm run dev            # http://localhost:8787
-bash tools/uji-e2e.sh  # 32 pemeriksaan
+npm test   # atau: bash tools/uji-lokal.sh  (137 pemeriksaan, DB lokal terpisah)
 ```
 
 ## Deploy (sekali)
@@ -69,5 +69,36 @@ Setelah deploy, aplikasi tersedia di `https://hadekost.<subdomain>.workers.dev`.
 
 ## Yang belum tersedia di versi D1
 
-- Edit data penyewa (check-out lalu daftar ulang sebagai gantinya).
+- Edit data penyewa, check-out, pindah kamar, bayar N bulan sekaligus, bukti bayar (foto/PDF).
 - Kelola kategori & pengguna dari dalam aplikasi (lewat SQL/`tools/buat-akun.mjs`).
+
+## Migrasi database
+
+`schema.sql` dipakai untuk **database baru**. Database yang sudah berjalan cukup menjalankan
+migrasi berurutan di `db/migrasi-*.sql` yang belum pernah diterapkan (kolom/index/tabel baru):
+
+```bash
+# cek dulu, lalu jalankan dengan pengaman (backup otomatis + tolak DELETE/UPDATE tanpa WHERE)
+bash tools/sql-produksi.sh db/migrasi-00X-nama-migrasi.sql --ya
+```
+
+Daftar migrasi yang ada sekarang: 001 kolom dasar, 002 kontak penyewa, 003 ktp_berkas,
+004 pengingat WA, 005 sumber penyewa, 006 index kuota, 007 bayar banyak bulan,
+008 tanggal mulai tagihan, 009 bukti bayar, 010 periode lunas, 011 counter kode penyewa.
+`schema.sql` sudah memuat semua kolom tersebut, jadi DB baru **tidak** perlu menjalankan 001-011.
+
+## Backup & pemulihan
+
+```bash
+npm run backup                        # ekspor D1 ke ~/backup/hadekost/ (30 berkas terakhir disimpan)
+```
+Backup harian otomatis: cron 20:00 UTC (03:00 WIB), log di `~/logs/backup-hadekost.log`.
+
+Memulihkan: buat database baru, lalu impor berkas dengan
+`npx wrangler d1 import <nama-db> --file=<berkas.sql>` (uji di database terpisah sebelum menimpa produksi).
+
+## Uji
+
+`npm test` menjalankan seluruh uji E2E (137 pemeriksaan) pada D1 lokal terpisah; database produksi
+tidak tersentuh. Uji mencakup otorisasi role, perhitungan kas/tunggakan, void, bayar N bulan,
+prorata, bukti bayar, dan regresi bug yang pernah terjadi.

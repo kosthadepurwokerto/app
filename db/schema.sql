@@ -68,6 +68,12 @@ create table if not exists tenants (
   status      text not null default 'aktif' check (status in ('aktif','keluar')),
   created_at  text not null default (datetime('now'))
 );
+-- counter nomor berurutan (kode penyewa tidak boleh dipakai ulang setelah dihapus)
+create table if not exists counters (
+  nama  text primary key,
+  value integer not null default 0
+);
+insert or ignore into counters (nama, value) values ('kode_penyewa', 0);
 create index if not exists idx_tenants_status on tenants(status);
 create index if not exists idx_tenants_kamar  on tenants(kamar_id);
 
@@ -119,6 +125,7 @@ create table if not exists payments (
   voided_at    text,
   bulan        integer not null default 1,   -- jumlah bulan yang dibayar dalam satu struk
   bukti_key    text,                        -- berkas bukti bayar (foto/PDF) di R2 / D1
+  periode_lunas text,                       -- "YYYY-MM,YYYY-MM" bulan yang dilunasi struk ini
   created_at   text not null default (datetime('now'))
 );
 create index if not exists idx_payments_tgl on payments(tgl_bayar desc);

@@ -94,7 +94,7 @@
       <p id="modal-message" class="text-sm text-slate-500 mb-6 px-2"></p>
       <div class="flex gap-3 justify-center">
         <button id="modal-cancel-btn" onclick="closeModal()" class="hidden flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold transition">Batal</button>
-        <button id="modal-confirm-btn" onclick="closeModal()" class="flex-1 bg-gradient-to-r from-blue-600 to-rose-600 text-white py-3 px-4 rounded-xl font-bold hover:from-blue-700 hover:to-rose-700 transition shadow-lg shadow-blue-600/20">OK</button>
+        <button id="modal-confirm-btn" class="flex-1 bg-gradient-to-r from-blue-600 to-rose-600 text-white py-3 px-4 rounded-xl font-bold hover:from-blue-700 hover:to-rose-700 transition shadow-lg shadow-blue-600/20">OK</button>
       </div>
     </div>
   </div>
@@ -470,7 +470,7 @@
                   </div>
                   <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal Check-In</label>
-                    <input type="date" name="tglMasuk" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                    <input type="date" name="tglMasuk" required max="" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
@@ -1675,10 +1675,15 @@
     }
 
     // Modal Confirmation Execution Hook
+    // Satu-satunya jalur klik OK. Jangan menambah onclick="closeModal()" pada tombol ini:
+    // closeModal() mengosongkan callback lebih dulu sehingga aksi (checkout, hapus, dst) tidak pernah jalan.
     document.getElementById('modal-confirm-btn').addEventListener('click', () => {
       const cb = modalConfirmCallback;
       modalConfirmCallback = null;
-      if (cb) cb();
+      closeModal();
+      if (typeof cb === 'function') {
+        try { cb(); } catch (err) { handleError(err); }
+      }
     });
 
     function showLoading(show) { 
@@ -1698,9 +1703,11 @@
       }
     }
 
-    function handleError(e) { 
-      showLoading(false); 
-      showCustomAlert("Error Server", e.message || e, false); 
+    function handleError(e) {
+      showLoading(false);
+      // jembatan HADE meneruskan pesan galat sebagai string biasa, bukan objek Error
+      const pesan = e && e.message ? e.message : String(e === undefined || e === null ? 'Terjadi kesalahan.' : e);
+      showCustomAlert("Gagal", pesan, false);
     }
 
     function toggleRoomForm() { 
@@ -2395,7 +2402,6 @@
               <td class="py-3 px-4 text-emerald-600 font-extrabold text-xs md:text-sm whitespace-nowrap">${rp(angkaBersih)}</td>
               <td class="py-3 px-4 text-xs text-slate-500 max-w-[180px] truncate" title="${esc(t[4])}">${esc(t[4])}</td>
               <td class="py-3 px-6 text-center">
-              ${t[6] ? `<button data-aksi="bukti" data-bukti="${esc(t[6])}" title="Lihat bukti bayar" class="text-emerald-500 hover:text-emerald-700 transition p-2 hover:bg-emerald-50 rounded-lg mr-1"><i class="fas fa-paperclip text-xs"></i></button>` : ''}
               ${t[6] ? `<button data-aksi="bukti" data-bukti="${esc(t[6])}" title="Lihat bukti bayar" class="text-emerald-500 hover:text-emerald-700 transition p-2 hover:bg-emerald-50 rounded-lg mr-1"><i class="fas fa-paperclip text-xs"></i></button>` : ''}
                 <button data-aksi="struk" data-tgl="${esc(t[0])}" data-nama="${esc(t[1])}" data-kamar="${esc(t[2])}" data-jumlah="${angkaBersih}" data-ket="${esc(t[4])}" data-no="${esc(t[5] || '')}" data-struk="${esc(String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/) ? String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/)[0] : '')}" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-rose-600 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat Struk">
                   <i class="fas fa-file-invoice text-xs"></i>
@@ -3740,6 +3746,14 @@
       if (!pertahankanFile) document.getElementById('input-ktp').value = '';
     }
 
+    // tanggal check-in tidak boleh di masa depan (server menolak, tapi form sebaiknya mencegah lebih dulu)
+    (function () {
+      const el = document.querySelector('#form-penyewa [name="tglMasuk"]');
+      if (el) el.max = new Date().toLocaleDateString('en-CA');
+      const el2 = document.getElementById('input-tgl-pembayaran');
+      if (el2) el2.max = new Date().toLocaleDateString('en-CA');
+    })();
+
     // --- tanggal mulai tagihan: default mengikuti tanggal check-in ---
     function perbaruiInfoTagihan() {
       const masuk = document.getElementById('form-penyewa').tglMasuk.value;
@@ -3813,7 +3827,8 @@
       const box = document.getElementById('bukti-pratinjau-box');
       if (!f) { resetBuktiBayar(); return; }
       if (f.type === 'application/pdf') {
-        box.innerHTML = '<div class="text-center px-2"><i class="fas fa-file-pdf text-rose-500 text-lg"></i><div class="text-[10px] text-slate-500 truncate">' + f.name + '</div></div>';
+        // nama berkas bisa berisi markup -> wajib di-escape (dulu <img onerror> di nama PDF tereksekusi)
+        box.innerHTML = '<div class="text-center px-2"><i class="fas fa-file-pdf text-rose-500 text-lg"></i><div class="text-[10px] text-slate-500 truncate">' + esc(f.name) + '</div></div>';
         return;
       }
       const url = URL.createObjectURL(f);

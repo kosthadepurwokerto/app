@@ -184,6 +184,8 @@ async function lihatBerkas(env, kunci, sesi, opsi) {
     headers: {
       'content-type': tipe,
       'cache-control': 'private, no-store',
+      // jangan biarkan browser menebak tipe lain (berkas bisa disajikan sebagai HTML)
+      'x-content-type-options': 'nosniff',
       'content-disposition': `inline; filename="${kunci.split('/').pop()}"`,
     },
   });
@@ -347,6 +349,11 @@ function validRoom(d) {
   const bulanan = logic.num(d.hargaBulanan);
   const harian = logic.num(d.hargaHarian);
   if (bulanan < 0 || harian < 0) throw logic.httpError(400, 'Harga kamar tidak boleh negatif.');
+  // Harga 0 dulu lolos (hanya negatif yang ditolak) sehingga kamar bisa tersimpan tanpa tarif
+  // dan tagihan berikutnya memakai nominal lama (prorata) — sekarang wajib ada angka.
+  if (!(bulanan > 0)) throw logic.httpError(400, 'Harga bulanan wajib diisi dan lebih dari 0.');
+  if (!(harian >= 0) || harian > 10000000) throw logic.httpError(400, 'Harga harian tidak masuk akal.');
+  if (bulanan > 100000000) throw logic.httpError(400, 'Harga bulanan tidak masuk akal.');
   return { tipe, bulanan, harian };
 }
 
@@ -639,7 +646,9 @@ export default {
         console.error('[hade]', e.stack || e);
         return json({ error: 'Terjadi kesalahan pada server. Silakan coba lagi.' }, 500);
       }
-      return json({ error: e.message || 'Permintaan tidak valid.' }, status);
+      // galat 4xx berasal dari validasi (pesan aman); galat lain jangan bocorkan detail internal
+      const pesanAman = status >= 500 ? 'Permintaan tidak valid.' : (e.message || 'Permintaan tidak valid.');
+      return json({ error: pesanAman }, status);
     }
   },
 };
