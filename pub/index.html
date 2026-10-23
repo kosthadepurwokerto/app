@@ -443,6 +443,14 @@
                   </div>
                   <h3 class="font-extrabold text-slate-900 text-lg">Registrasi Penghuni</h3>
                   <p class="text-xs text-slate-400">Daftarkan penghuni suite baru ke database</p>
+                  <div class="flex gap-2 mt-3">
+                    <button type="button" onclick="bukaImporWa()" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-[11px] transition">
+                      <i class="fab fa-whatsapp"></i> Dari WhatsApp
+                    </button>
+                    <button type="button" onclick="salinTautanUndangan()" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[11px] transition">
+                      <i class="fas fa-link"></i> Undang
+                    </button>
+                  </div>
                 </div>
 
                 <form id="form-penyewa" class="space-y-4">
@@ -1195,6 +1203,55 @@
           Simpan Pembaruan
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: IMPOR DATA PENYEWA DARI WHATSAPP -->
+  <div id="impor-wa-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-2xl max-h-[92vh] overflow-y-auto animate-fade-in">
+      <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3 sticky top-0 bg-white z-10">
+        <div>
+          <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2"><i class="fab fa-whatsapp text-emerald-500"></i> Impor dari WhatsApp</h3>
+          <p class="text-[11px] text-slate-400 mt-1">Tempel isi pesan penyewa, data terisi otomatis. Foto KTP dilampirkan di sini.</p>
+        </div>
+        <button type="button" onclick="tutupImporWa()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400"><i class="fas fa-times"></i></button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Isi pesan WhatsApp</label>
+          <textarea id="wa-teks" rows="7" placeholder="Halo, mau daftar kost.&#10;Nama: Rina Kartika&#10;HP: 081234567890&#10;Kamar: 101&#10;Tanggal masuk: 01/11/2026&#10;Kontak darurat: Ibu Ratna - 081333344444" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition font-mono leading-relaxed"></textarea>
+          <div class="flex items-center justify-between mt-2">
+            <p class="text-[10px] text-slate-400">Format bebas: “Nama: …”, “Nama = …”, atau satu baris per data.</p>
+            <button type="button" onclick="uraiPesanWa()" class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-bold text-[11px] transition">Urai otomatis</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
+            <input id="wa-nama" type="text" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">HP / WhatsApp</label>
+            <input id="wa-hp" type="tel" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kontak Darurat</label>
+            <input id="wa-kontak" type="text" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">HP Darurat</label>
+            <input id="wa-hpdarurat" type="tel" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kamar</label>
+            <select id="wa-kamar" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500 bg-white"></select></div>
+          <div><label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tanggal Masuk</label>
+            <input id="wa-tgl" type="date" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"></div>
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Foto KTP dari WhatsApp</label>
+          <input type="file" id="wa-ktp" accept="image/jpeg,image/png,image/webp" class="w-full p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-600 text-xs file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-slate-200 file:text-slate-700 file:font-bold file:text-[11px]">
+          <p id="wa-ktp-info" class="text-[10px] text-slate-400 mt-1">Terima jpg/png/webp (maks 5 MB). Foto otomatis diperkecil sebelum disimpan.</p>
+        </div>
+
+        <button type="button" onclick="simpanImporWa()" class="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-emerald-500/10 text-sm flex items-center justify-center gap-2">
+          <i class="fas fa-check"></i> Simpan sebagai Penyewa
+        </button>
+      </div>
     </div>
   </div>
 
@@ -2420,7 +2477,10 @@
                 </div>
                 <div>
                   <p class="font-extrabold text-slate-900 leading-tight">${esc(p[1])}</p>
-                  <p class="text-[9px] text-slate-400 font-mono mt-0.5">${esc(p[0])}</p>
+                  <p class="text-[9px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                    ${esc(p[0])}
+                    ${p[12] === 'wa' ? '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-100 font-bold text-[8px] tracking-wider">VIA WA</span>' : ''}
+                  </p>
                 </div>
               </div>
             </td>
@@ -2597,6 +2657,178 @@
           </tr>
         `;
       }).join('');
+    }
+
+    // ================= IMPOR PENYEWA DARI WHATSAPP =================
+    // Penyewa mengirim data + foto KTP lewat WhatsApp; petugas cukup menempel pesannya.
+    function bukaImporWa() {
+      const sel = document.getElementById('wa-kamar');
+      const kamar = (cachedData && cachedData.kamar || []).filter((k) => k[4] === 'Tersedia').map((k) => k[0]);
+      sel.innerHTML = kamar.length
+        ? '<option value="">-- Pilih Kamar --</option>' + kamar.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('')
+        : '<option value="">Semua kamar terisi</option>';
+      document.getElementById('wa-teks').value = '';
+      ['wa-nama', 'wa-hp', 'wa-kontak', 'wa-hpdarurat'].forEach((id) => { document.getElementById(id).value = ''; });
+      document.getElementById('wa-tgl').value = new Date().toLocaleDateString('en-CA');
+      document.getElementById('wa-ktp').value = '';
+      const m = document.getElementById('impor-wa-modal');
+      m.classList.remove('hidden'); m.classList.add('flex');
+    }
+
+    function tutupImporWa() {
+      const m = document.getElementById('impor-wa-modal');
+      m.classList.remove('flex'); m.classList.add('hidden');
+    }
+
+    // Tautan undangan WA untuk dikirim ke calon penyewa
+    function salinTautanUndangan() {
+      const teks = 'Halo, terima kasih tertarik tinggal di Kost Hade.\n\nUntuk pendaftaran, mohon kirim data berikut ya:\n1. Nama lengkap\n2. Nomor WhatsApp\n3. Kontak darurat (nama)\n4. HP kontak darurat\n5. Tanggal rencana masuk\n6. Foto KTP\n\nCukup balas pesan ini. Terima kasih.\n- Admin Kost Hade';
+      const hp = window.prompt('Nomor WhatsApp calon penyewa (kosongkan untuk hanya menyalin teks):', '');
+      if (hp === null) return;
+      const nomor = String(hp).replace(/[^0-9]/g, '').replace(/^0/, '62');
+      const url = nomor ? `https://wa.me/${nomor}?text=${encodeURIComponent(teks)}` : null;
+      if (url) window.open(url, '_blank', 'noopener');
+      else { navigator.clipboard && navigator.clipboard.writeText(teks); showCustomAlert('Teks Disalin', 'Teks permintaan data sudah disalin. Tempel ke WhatsApp siapa pun.', true); }
+    }
+
+    const LABEL_WA = {
+      nama: /^(nama|nama lengkap|nama penyewa)\b/i,
+      hp: /^(hp|no hp|nomor hp|whatsapp|wa|telp|telepon|no wa)\b/i,
+      kamar: /^(kamar|no kamar|nomor kamar|unit)\b/i,
+      tgl: /^(tanggal|tgl|tgl masuk|tanggal masuk|mulai|mulai sewa)\b/i,
+      kontak: /^(kontak darurat|nama kontak darurat|darurat|keluarga)\b/i,
+      hpdarurat: /^(hp darurat|no hp darurat|nomor darurat|telp darurat|hp kontak darurat)\b/i,
+    };
+
+    function normTglWa(s) {
+      const t = String(s).trim();
+      let m = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/);
+      if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      m = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+      const bulan = { januari:1, februari:2, maret:3, april:4, mei:5, juni:6, juli:7, agustus:8, september:9, oktober:10, november:11, desember:12 };
+      m = t.toLowerCase().match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/);
+      if (m && bulan[m[2]]) return `${m[3]}-${String(bulan[m[2]]).padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+      return '';
+    }
+
+    // Urai pesan bebas. Urutan kerja:
+    //  1) pola "Label: nilai" / "Label = nilai" / "Label - nilai"
+    //  2) sisanya ditebak per baris: tanggal, nomor HP, nomor kamar
+    //  3) kalau nama belum ada, ambil dari kalimat pembuka ("saya Siti Aminah")
+    // Semua nilai normalisasi ke bentuk yang diterima server (HP 0xxx, tanggal YYYY-MM-DD).
+    function uraiPesan(teks) {
+      const hasil = { nama: '', hp: '', kamar: '', tgl: '', kontak: '', hpdarurat: '' };
+      const baris = String(teks || '').split(/\r?\n/).map((b) => b.replace(/^[-•*]\s*/, '').trim()).filter(Boolean);
+      const sisa = [];
+
+      const cocokLabel = (label) => Object.keys(LABEL_WA).find((k) => LABEL_WA[k].test(label));
+
+      baris.forEach((b) => {
+        const m = b.match(/^([A-Za-z .]{2,30})\s*[:=]\s*(.+)$/) || b.match(/^([A-Za-z .]{2,30})\s+-\s+(.+)$/);
+        if (!m) { sisa.push(b); return; }
+        const label = m[1].trim().toLowerCase();
+        const nilai = m[2].trim();
+        let kunci = cocokLabel(label);
+        // "hp darurat" harus dicek sebelum "hp"
+        if (kunci === 'hp' && /darurat|kontak|keluarga|wali/i.test(label)) kunci = null;
+
+        if (kunci === 'kontak') {
+          // "Kontak darurat: Ibu Ratna - 0813..." / "Ibu Ratna (0813...)"
+          const kurung = nilai.match(/^(.*?)\s*[\(\[]\s*([+0-9][0-9\s-]{7,})\s*[\)\]]\s*$/);
+          const pisah = kurung || nilai.match(/^(.*?)[\s\-,(]+([+0-9][0-9\s-]{7,})$/) || nilai.match(/^(.*?)\s+-\s+([+0-9][0-9\s-]{7,})$/);
+          if (pisah) { hasil.kontak = pisah[1].replace(/[,(]\s*$/, '').trim(); hasil.hpdarurat = pisah[2].replace(/[^0-9+]/g, ''); }
+          else hasil.kontak = nilai;
+          return;
+        }
+        if (kunci === 'tgl') { hasil.tgl = normTglWa(nilai); return; }
+        if (kunci === 'hpdarurat') { hasil.hpdarurat = nilai.replace(/[^0-9+]/g, ''); return; }
+        if (kunci === 'hp') { hasil.hp = nilai.replace(/[^0-9+]/g, ''); return; }
+        if (kunci === 'kamar') { const k = nilai.match(/([0-9]{1,4}[A-Za-z]?)/); if (k) hasil.kamar = k[1].toUpperCase(); return; }
+        if (kunci === 'nama') { hasil.nama = nilai.replace(/\s*[,.]$/, ''); return; }
+        sisa.push(b);
+      });
+
+      sisa.forEach((b) => {
+        if (!hasil.tgl) { const t = normTglWa(b.replace(/^(tgl|tanggal|mulai|masuk)[:\s]*/i, '')); if (t) { hasil.tgl = t; return; } }
+        if (!hasil.hpdarurat) {
+          const d = b.match(/(?:hp|telp|telepon)\s*darurat\s*[:\-]?\s*([+0-9][0-9\s-]{7,})/i);
+          if (d) { hasil.hpdarurat = d[1].replace(/[^0-9+]/g, ''); return; }
+        }
+        if (!hasil.hp) { const hp = b.match(/(?:\+62|62|0)8[0-9\s-]{7,13}/); if (hp) { hasil.hp = hp[0].replace(/[^0-9+]/g, ''); return; } }
+        if (!hasil.kamar) { const k = b.match(/kamar\s*(?:no\.?|nomor)?\s*[:\-]?\s*([0-9]{1,4}[A-Za-z]?)/i); if (k) { hasil.kamar = k[1].toUpperCase(); return; } }
+        if (!hasil.nama) {
+          const n = b.match(/(?:saya|nama saya|aku|namaku)\s+([A-Za-z][A-Za-z .'’]{2,50})/i);
+          if (n) { hasil.nama = n[1].trim().replace(/\s+(mau|ingin|yang|untuk)$/i, ''); return; }
+        }
+      });
+
+      // cerita satu paragraf ("Saya ingin sewa kamar 601 mulai 20/12/2026. Nama saya Andi...")
+      if (!hasil.kamar || !hasil.tgl || !hasil.nama) {
+        const teksSemua = String(teks || '').replace(/\n/g, ' ');
+        if (!hasil.kamar) { const k = teksSemua.match(/kamar\s*(?:no\.?|nomor)?\s*[:\-]?\s*([0-9]{1,4}[A-Za-z]?)/i); if (k) hasil.kamar = k[1].toUpperCase(); }
+        if (!hasil.tgl) {
+          const t = teksSemua.match(/(\d{1,2}[/-]\d{1,2}[/-]\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/);
+          if (t) hasil.tgl = normTglWa(t[1]);
+        }
+        if (!hasil.nama) {
+          const n = teksSemua.match(/(?:nama saya|namaku|saya)\s+([A-Za-z][A-Za-z .'’]{2,50}?)(?=[,.]|\s+(?:ingin|mau|wa|whatsapp|hp|yg|yang)|$)/i);
+          if (n) hasil.nama = n[1].trim();
+        }
+      }
+      // tanggal yang masih berbentuk teks ("5 Desember 2026") dirapikan
+      if (hasil.tgl && !/^\d{4}-\d{2}-\d{2}$/.test(hasil.tgl)) hasil.tgl = normTglWa(hasil.tgl) || '';
+      // nomor HP: 62xxx -> 0xxx supaya seragam
+      const rapikanHp = (v) => String(v || '').replace(/[^0-9+]/g, '').replace(/^\+?62/, '0').replace(/^\+/, '');
+      hasil.hp = rapikanHp(hasil.hp);
+      hasil.hpdarurat = rapikanHp(hasil.hpdarurat);
+      return hasil;
+    }
+
+    function uraiPesanWa() {
+      const h = uraiPesan(document.getElementById('wa-teks').value);
+      const isi = (id, v) => { if (v) document.getElementById(id).value = v; };
+      isi('wa-nama', h.nama); isi('wa-hp', h.hp); isi('wa-kontak', h.kontak);
+      isi('wa-hpdarurat', h.hpdarurat); isi('wa-tgl', h.tgl);
+      if (h.kamar) {
+        const sel = document.getElementById('wa-kamar');
+        if ([...sel.options].some((o) => o.value === h.kamar)) sel.value = h.kamar;
+      }
+      const kosong = [];
+      if (!document.getElementById('wa-nama').value) kosong.push('nama');
+      if (!document.getElementById('wa-hp').value) kosong.push('no HP');
+      if (!document.getElementById('wa-kamar').value) kosong.push('kamar');
+      showCustomAlert(kosong.length ? 'Perlu Dilengkapi' : 'Data Terbaca', kosong.length ? `Terbaca sebagian. Isi manual: ${kosong.join(', ')}.` : 'Semua data utama terbaca. Periksa lalu simpan.', kosong.length === 0);
+    }
+
+    async function simpanImporWa() {
+      const nama = document.getElementById('wa-nama').value.trim();
+      const hp = document.getElementById('wa-hp').value.trim();
+      const kamar = document.getElementById('wa-kamar').value;
+      const tgl = document.getElementById('wa-tgl').value;
+      if (!nama || !hp || !kamar || !tgl) { showCustomAlert('Belum Lengkap', 'Nama, HP, kamar, dan tanggal masuk wajib diisi.', false); return; }
+      showLoading(true);
+      try {
+        const file = document.getElementById('wa-ktp').files[0];
+        let ktp = null;
+        if (file) ktp = await HADE.handlers.uploadKtp(await perkecilGambar(file));
+        const data = {
+          nama, hp, kamar, tglMasuk: tgl,
+          kontakDarurat: document.getElementById('wa-kontak').value.trim(),
+          hpDarurat: document.getElementById('wa-hpdarurat').value.trim(),
+          ktpKey: ktp ? ktp.kunci : '', ktpTipe: ktp ? ktp.tipe : '',
+          sumber: 'wa',
+        };
+        const msg = await HADE.handlers.addTenant(data);
+        cachedData = null; HADE.resetCache();
+        showLoading(false);
+        tutupImporWa();
+        showCustomAlert('Tersimpan', msg, true);
+        loadAllTenantsList();
+      } catch (err) {
+        showLoading(false);
+        showCustomAlert('Gagal Menyimpan', err.message || String(err), false);
+      }
     }
 
     // ================= PENGINGAT WHATSAPP =================

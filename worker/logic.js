@@ -133,10 +133,11 @@ export async function createTenant(ctx, data) {
   const ktp = KTP_TIPE[String(data.ktpTipe || '')] ? String(data.ktpTipe) : null;
   const ktpKey = ktp ? String(data.ktpKey || '').slice(0, 200) : null;
   if (ktp && !/^ktp\/[0-9]{4}\//.test(ktpKey)) throw httpError(400, 'Kunci foto KTP tidak valid.');
+  const sumber = String(data.sumber || 'manual') === 'wa' ? 'wa' : 'manual';
   const ins = await ctx.db.prepare(
-    `insert into tenants (kode, nama, hp, kamar_id, kontak_darurat, hp_darurat, ktp_key, ktp_tipe, tgl_masuk, status)
-     values (?,?,?,?,?,?,?,?,?,?)`
-  ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, tglMasuk, 'aktif').run();
+    `insert into tenants (kode, nama, hp, kamar_id, kontak_darurat, hp_darurat, ktp_key, ktp_tipe, sumber, tgl_masuk, status)
+     values (?,?,?,?,?,?,?,?,?,?,?)`
+  ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, sumber, tglMasuk, 'aktif').run();
   const tenantId = ins.meta.last_row_id;
 
   await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')

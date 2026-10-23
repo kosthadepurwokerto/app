@@ -95,7 +95,7 @@ async function dashboard(env) {
       return [t.kode, t.nama, t.hp || '', roomMap[t.kamar_id] || '', t.tgl_masuk,
               t.status === 'aktif' ? 'Aktif' : 'Keluar', b ? b.jatuh_tempo : '',
               b ? String(b.jumlah) : '', b ? b.id : '',
-              t.kontak_darurat || '', t.hp_darurat || '', t.ktp_key ? 'ada' : ''];
+              t.kontak_darurat || '', t.hp_darurat || '', t.ktp_key ? 'ada' : '', t.sumber || 'manual'];
     }),
     transaksi: (pays.results || []).map((p) => {
       const t = (tenants.results || []).find((x) => x.id === p.tenant_id);

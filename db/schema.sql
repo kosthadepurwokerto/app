@@ -62,6 +62,7 @@ create table if not exists tenants (
   hp_darurat     text,                       -- nomor HP kontak darurat
   ktp_key     text,                          -- kunci berkas foto KTP di R2 (bukan data base64)
   ktp_tipe    text,                          -- image/jpeg | image/png | image/webp
+  sumber      text not null default 'manual', -- manual = diinput petugas, wa = dikirim penyewa via WhatsApp
   tgl_masuk   text not null,                 -- YYYY-MM-DD
   tgl_keluar  text,
   status      text not null default 'aktif' check (status in ('aktif','keluar')),

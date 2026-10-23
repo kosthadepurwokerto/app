@@ -149,6 +149,14 @@ ck "Staff boleh mencatat transaksi" "$(actj $S "{\"action\":\"ledger.create\",\"
 code -b $S "$B/api/bootstrap" >/dev/null
 ck "Bootstrap untuk staff tidak memuat daftar user" "$(jq_ 'd.users.length')" "0"
 
+echo "== IMPOR DARI WHATSAPP =="
+# simulasi hasil urai pesan WA di UI: server hanya perlu menerima data + sumber
+ACT_WA=$(actj $J '{"action":"tenants.create","data":{"nama":"Rina WA","hp":"81234500000","kamar":"102","tglMasuk":"2026-01-01","kontakDarurat":"Ibu Ratna","hpDarurat":"08133330000","sumber":"wa"}}')
+code -b $J "$B/api/bootstrap" >/dev/null
+ck "Penyewa dari WhatsApp tersimpan" "$(jq_ "(p=>[p[1],p[10]].join('|'))(d.penyewa.find(p=>p[12]==='wa'))")" "Rina WA|08133330000"
+ck "Penanda sumber 'wa' tersimpan" "$(jq_ "d.penyewa.find(p=>p[9]==='Ibu Ratna')[12]")" "wa"
+ck "Penyewa manual tetap bertanda 'manual'" "$(jq_ "d.penyewa.find(p=>p[0]==='TEN-0001')[12]")" "manual"
+
 echo "== PENGINGAT WHATSAPP =="
 # TEN-0003 didaftarkan di sini supaya tagihannya pasti terbuka (TEN-0001/0002 kondisinya sudah berubah)
 actj $J '{"action":"rooms.create","data":{"noKamar":"104","tipe":"Standar","hargaBulanan":950000}}' >/dev/null
