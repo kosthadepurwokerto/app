@@ -116,6 +116,7 @@ async function listLedger(env) {
 // foto KTP hanya bisa diambil lewat endpoint ini dan hanya oleh user yang login.
 const KTP_TIPE = logic.KTP_TIPE;
 const KTP_MAKS = 5 * 1024 * 1024;          // 5 MB (R2); mode cadangan D1 dibatasi 2 MB oleh tabel
+const KUNCI_KTP = logic.KUNCI_KTP;
 
 // Catatan: handler khusus ini membalas JSON sendiri (bukan melempar) — error object yang
 // dilempar dari dalam pemrosesan multipart tidak sampai ke penangkap error utama Worker.
@@ -147,7 +148,11 @@ async function unggahKtp(req, env, sesi) {
 }
 
 async function lihatKtp(env, kunci, sesi) {
-  if (!/^ktp\/[0-9]{4}\//.test(kunci)) return json({ error: 'Kunci foto tidak valid.' }, 400);
+  // Foto KTP data pribadi: hanya admin (staff tidak, walau mendaftarkan penyewa).
+  if (sesi.role !== 'admin') return json({ error: 'Hanya admin yang boleh membuka foto KTP.' }, 403);
+  // kunci harus persis bentuk yang kita buat (mencegah ../ dan kunci lain)
+  if (!KUNCI_KTP.test(kunci)) return json({ error: 'Kunci foto tidak valid.' }, 400);
+  await logic.audit(env, sesi, 'ktp.lihat', 'tenants', kunci, null, null);
   let body, tipe;
   if (logic.KTP_MODE === 'r2' && env.KTP) {
     const obj = await env.KTP.get(kunci);
@@ -222,6 +227,9 @@ async function catatPengingat(ctx, billId) {
 // Aksi yang hanya boleh dilakukan admin. Aksi lain boleh untuk semua user aktif.
 const KEPERLUAN = {
   'tenants.delete': 'admin',
+  'tenants.update': 'admin',
+  'tenants.checkout': 'admin',
+  'rooms.create': 'admin',
   'payments.void': 'admin',
   'ledger.void': 'admin',
   'rooms.delete': 'admin',
@@ -364,10 +372,11 @@ function validUser(d, isNew) {
   if (!/^[a-z0-9._-]{3,32}$/.test(username)) throw logic.httpError(400, 'Username 3-32 karakter: huruf kecil, angka, titik, garis bawah, atau strip.');
   const role = String(d.role || 'staff');
   if (!['admin', 'staff'].includes(role)) throw logic.httpError(400, 'Role harus admin atau staff.');
-  const fullname = String(d.fullname || '').trim() || username;
+  const fullname = String(d.fullname || '').trim().slice(0, 120) || username;
   const password = d.password === undefined || d.password === null ? undefined : String(d.password);
   if (isNew && (!password || password.length < 8)) throw logic.httpError(400, 'Password minimal 8 karakter.');
   if (!isNew && password && password.length < 8) throw logic.httpError(400, 'Password minimal 8 karakter.');
+  if (password && password.length > 200) throw logic.httpError(400, 'Password maksimal 200 karakter.');
   return { username, role, fullname, password };
 }
 

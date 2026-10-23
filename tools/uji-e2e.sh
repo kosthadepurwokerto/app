@@ -55,6 +55,31 @@ ck "Edit penyewa (nama/hp)" "$(actj $J '{"action":"tenants.update","data":{"id":
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Nama penyewa berubah menjadi Budi S." "$(jq_ 'd.penyewa[0][1]')" "Budi S."
 
+echo "== REGRESI BUG AUDIT =="
+# (1) void pembayaran harus ikut menghapus tagihan susulan (dulu tertinggal -> 2 tagihan terbuka)
+actj $J '{"action":"rooms.create","data":{"noKamar":"105","tipe":"Standar","hargaBulanan":750000}}' >/dev/null
+actj $J "{\"action\":\"tenants.create\",\"data\":{\"nama\":\"Cek Void\",\"hp\":\"81200000001\",\"kamar\":\"105\",\"tglMasuk\":\"$TODAY\"}}" >/dev/null
+actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"105\",\"jumlah\":750000,\"tanggal\":\"$TODAY\"}}" >/dev/null
+VID=$(code -b $J "$B/api/dashboard" >/dev/null; jq_ "d.transaksi.find(t=>t[2]==='105')[5]")
+ck "Void pembayaran (uji tagihan susulan)" "$(actj $J "{\"action\":\"payments.void\",\"data\":{\"id\":$VID}}")" "200"
+SISA=$(/usr/bin/python3 - <<'PYX'
+import sqlite3, glob, os, re
+# hitung tagihan terbuka lewat API: penyewa "Cek Void" harus 1 tagihan (jatuh tempo awal), bukan 2
+PYX
+)
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Void menyisakan tepat 1 tagihan terbuka (bukan 2)" "$(jq_ "(r=>r.filter(p=>p[1]==='Cek Void').length)(d.penyewa)")" "1"
+ck "Jatuh tempo kembali ke bulan masuk +1" "$(jq_ "d.penyewa.find(p=>p[1]==='Cek Void')[6]")" "$(date -d "+1 month" +%F)"
+
+# (3) aksi yang mengubah data sewa hanya untuk admin
+ck "Tanggal 30 Februari ditolak 400" "$(actj $J '{"action":"tenants.create","data":{"nama":"Tgl Salah","kamar":"102","tglMasuk":"2026-02-30"}}')" "400"
+ck "Tanggal 1900 ditolak 400" "$(actj $J '{"action":"tenants.create","data":{"nama":"Tgl Tua","kamar":"102","tglMasuk":"1900-01-01"}}')" "400"
+
+# (4) edit penyewa tanpa menyentuh kontak tidak menghapus kontak darurat
+code -b $J "$B/api/dashboard" >/dev/null
+actj $J '{"action":"tenants.update","data":{"id":"TEN-0002","kontakDarurat":"Ibu Ratna","hpDarurat":"08133334444"}}' >/dev/null
+ck "Edit nama saja tidak menghapus kontak darurat" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0002","nama":"Tanpa Bayar"}}' >/dev/null; code -b $J "$B/api/dashboard" >/dev/null; jq_ "(p=>[p[9],p[10]].join('|'))(d.penyewa.find(x=>x[0]==='TEN-0002'))")" "Ibu Ratna|08133334444"
+
 echo "== KONTAK DARURAT & FOTO KTP =="
 printf '\x89PNG\r\n\x1a\n' > /tmp/ktp-uji.png   # cukup dikenali sebagai gambar oleh uji ini
 KRES=$(code -b $J -X POST -F "file=@/tmp/ktp-uji.png;type=image/png" "$B/api/ktp")
@@ -78,8 +103,8 @@ ck "Bayar nominal salah ditolak 409" "$(actj $J "{\"action\":\"payments.create\"
 ck "Bayar tepat 1.100.000 diterima" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"101\",\"jumlah\":1100000,\"tanggal\":\"$TODAY\",\"keterangan\":\"Sewa\"}}")" "200"
 ck "Bayar tanggal masa depan ditolak 400" "$(actj $J '{"action":"payments.create","data":{"kamar":"101","jumlah":1100000,"tanggal":"2099-01-01"}}')" "400"
 code -b $J "$B/api/dashboard" >/dev/null
-ck "Setelah bayar: kas 1.100.000 & tempo +2 bln" "$(jq_ "[d.stats.sisaKas,d.penyewa[0][6]].join('|')")" "1100000|$(date -d "+2 month" +%F)"
-ck "Nomor struk format STR-YYYYMMDD-NNN" "$(jq_ '/STR-[0-9]{8}-001/.test(d.transaksi[0][4])')" "true"
+ck "Setelah bayar: kas 1.100.000 & tempo +1 bln dari tagihan" "$(jq_ "[d.stats.sisaKas,(p=>p[6])(d.penyewa.find(x=>x[0]==='TEN-0001'))].join('|')")" "1100000|$(date -d "+2 month" +%F)"
+ck "Nomor struk format STR-YYYYMMDD-NNN" "$(jq_ "/STR-[0-9]{8}-[0-9]{3}/.test(d.transaksi.find(t=>t[2]==='101')[4])")" "true"
 PAYID=$(jq_ 'd.transaksi[0][5]')
 
 echo "== LEDGER =="
@@ -118,12 +143,15 @@ ck "Bayar ulang setelah void diterima" "$(actj $J "{\"action\":\"payments.create
 echo "== CHECK-OUT & TUNGGAKAN =="
 actj $J '{"action":"rooms.create","data":{"noKamar":"103","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null
 actj $J '{"action":"tenants.create","data":{"nama":"Tanpa Bayar","kamar":"103","tglMasuk":"2026-01-01"}}' >/dev/null
-ck "Check-out penyewa bertunggakan" "$(actj $J '{"action":"tenants.checkout","data":{"id":"TEN-0002","kamar":"103"}}')" "200"
+# ID diambil dari nama, bukan nomor: urutan TEN-xxxx bisa berubah bila ada uji lain mendaftar lebih dulu
+code -b $J "$B/api/dashboard" >/dev/null
+ID_TANPA=$(jq_ "d.penyewa.find(p=>p[1]==='Tanpa Bayar')[0]")
+ck "Check-out penyewa bertunggakan" "$(actj $J "{\"action\":\"tenants.checkout\",\"data\":{\"id\":\"$ID_TANPA\",\"kamar\":\"103\"}}")" "200"
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Tunggakan 1.100.000 tetap tampil setelah check-out" "$(jq_ 'd.stats.tunggakan')" "1100000"
-ck "Kamar 103 kembali Tersedia" "$(jq_ "d.kamar.find(k=>k[0]==='103')[4]")" "Tersedia"
+ck "Kamar milik penyewa yang check-out kembali Tersedia" "$(jq_ "(k=>k[4])(d.kamar.find(x=>x[0]==='103'))")" "Tersedia"
 ck "Hapus penyewa berriwayat ditolak 409" "$(actj $J '{"action":"tenants.delete","data":{"id":"TEN-0001","kamar":"101"}}')" "409"
-ck "Hapus penyewa yang masih punya tagihan tertunggak ditolak 409" "$(actj $J '{"action":"tenants.delete","data":{"id":"TEN-0002","kamar":"103"}}')" "409"
+ck "Hapus penyewa yang masih punya tagihan tertunggak ditolak 409" "$(actj $J "{\"action\":\"tenants.delete\",\"data\":{\"id\":\"$ID_TANPA\",\"kamar\":\"103\"}}")" "409"
 
 echo "== KATEGORI & PENGGUNA =="
 ck "Tambah kategori" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori","saldoNormal":"Debet"}}')" "200"
@@ -147,7 +175,12 @@ ck "Staff TIDAK boleh hapus penyewa (403)" "$(actj $S '{"action":"tenants.delete
 ck "Staff TIDAK boleh buat user (403)" "$(actj $S '{"action":"users.create","data":{"username":"xx","password":"12345678"}}')" "403"
 ck "Staff boleh mencatat transaksi" "$(actj $S "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"pengeluaran\",\"kategori\":\"Listrik & Air\",\"jumlah\":1000,\"tanggal\":\"$TODAY\"}}")" "200"
 code -b $S "$B/api/bootstrap" >/dev/null
-ck "Bootstrap untuk staff tidak memuat daftar user" "$(jq_ 'd.users.length')" "0"
+ck "Staff TIDAK boleh check-out (403)" "$(actj $S '{"action":"tenants.checkout","data":{"id":"TEN-0001","kamar":"101"}}')" "403"
+ck "Staff TIDAK boleh edit penyewa (403)" "$(actj $S '{"action":"tenants.update","data":{"id":"TEN-0001","nama":"X Y"}}')" "403"
+ck "Staff TIDAK boleh tambah kamar (403)" "$(actj $S '{"action":"rooms.create","data":{"noKamar":"777","hargaBulanan":1}}')" "403"
+
+# (5) tanggal mustahil / terlalu tua ditolak
+ck "Bootstrap untuk staff tidak memuat daftar user" "$(code -b $S "$B/api/bootstrap" >/dev/null; jq_ "Array.isArray(d.users) ? d.users.length : 0")" "0"
 
 echo "== IMPOR DARI WHATSAPP =="
 # simulasi hasil urai pesan WA di UI: server hanya perlu menerima data + sumber

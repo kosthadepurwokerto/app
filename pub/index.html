@@ -3636,24 +3636,23 @@
       const tglMasuk = document.getElementById('edit-tenant-tglmasuk').value;
       const status = document.getElementById('edit-tenant-status').value;
 
+      // kirim HANYA field yang diubah: server membaca nilai kosong sebagai "hapus",
+      // jadi mengirim '' untuk field yang tidak disentuh akan menghapus data lama.
+      const asal = (cachedData && cachedData.penyewa || []).find((p) => p[0] === id) || [];
+      const kontakNow = document.getElementById('edit-tenant-kontak').value.trim();
+      const hpDaruratNow = document.getElementById('edit-tenant-hpdarurat').value.trim();
+      const payload = { id, nama, hp, kamar, tglMasuk, status };
+      if (kontakNow !== (asal[9] || '')) payload.kontakDarurat = kontakNow;
+      if (hpDaruratNow !== (asal[10] || '')) payload.hpDarurat = hpDaruratNow;
+      if (ktpEditTerpilih) { payload.ktpKey = ktpEditTerpilih.kunci; payload.ktpTipe = ktpEditTerpilih.tipe; }
       google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
         cachedData = null;
         showLoading(false);
         closeEditTenantModal();
         showCustomAlert("Sukses", msg, true);
         loadAllTenantsList();
-      }).editTenant({
-        id: id,
-        nama: nama,
-        hp: hp,
-        kamar: kamar,
-        tglMasuk: tglMasuk,
-        status: status,
-        kontakDarurat: document.getElementById('edit-tenant-kontak').value,
-        hpDarurat: document.getElementById('edit-tenant-hpdarurat').value,
-        ktpKey: ktpEditTerpilih ? ktpEditTerpilih.kunci : '',
-        ktpTipe: ktpEditTerpilih ? ktpEditTerpilih.tipe : ''
-      });
+      }).editTenant(payload);
+      return;
     };
 
     // Foto KTP: pratinjau lokal + unggah saat form disimpan.

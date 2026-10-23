@@ -15,8 +15,6 @@ create table if not exists users (
   must_change_password integer not null default 0,
   created_at          text not null default (datetime('now'))
 );
--- ditambahkan kemudian (push_terkirim = 1 bila "kirim pengingat" sudah ditekan)
-alter table users add column push_terkirim integer not null default 0;
 
 -- hanya SHA-256 dari token sesi yang disimpan
 create table if not exists sessions (
@@ -34,9 +32,9 @@ create table if not exists categories (
   nama         text not null,
   saldo_normal text not null default 'Debet' check (saldo_normal in ('Debet','Kredit')),
   aktif        integer not null default 1,
+  arus_kas     integer not null default 1,   -- 0 = non-cash (penyusutan) tidak menggerakkan kas
   unique (jenis, nama)
 );
-alter table categories add column arus_kas integer not null default 1;
 
 -- ---------- KAMAR ----------
 create table if not exists rooms (
@@ -249,3 +247,10 @@ insert or ignore into categories (jenis, nama, saldo_normal) values
   ('neraca','Pengembalian Deposit Jaminan','Debet'),
   ('neraca','Setoran Modal Pemilik','Kredit'),
   ('neraca','Penarikan Prive Pemilik','Debet');
+
+-- ---------- INDEX TAMBAHAN (kuota baca) ----------
+-- Query dashboard/ops selalu menyaring voided_at is null; index parsial membuat D1
+-- tidak perlu memindai seluruh tabel pembayaran/ledger saat menghitung kas.
+create index if not exists idx_payments_aktif on payments(tgl_bayar) where voided_at is null;
+create index if not exists idx_ledger_aktif   on ledger(tanggal)   where voided_at is null;
+create index if not exists idx_bills_status   on bills(status, jatuh_tempo);
