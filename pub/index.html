@@ -2637,13 +2637,15 @@
       const kamarNo = selectedOption.getAttribute('data-kamar');
       // Server hanya menerima nominal yang SAMA dengan tagihan terbuka, jadi form menampilkan
       // tagihan itu (dulu memakai harga kamar/harian -> ditolak 409 saat menyimpan).
-      inputJumlah.value = Number(selectedOption.getAttribute('data-tagihan') || 0);
+      // nominal = tagihan per bulan × jumlah bulan (server memvalidasi total = N × tagihan)
+      const perBulan = Number(selectedOption.getAttribute('data-tagihan') || 0);
+      inputJumlah.value = perBulan * (type === 'Bulanan' ? durasi : 1);
       // Jatuh tempo = tagihan nyata dari server (bukan hitungan sendiri dari tanggal bayar)
       const formattedDate = selectedOption.getAttribute('data-tempo') || addBulan(tglBayarStr || new Date().toLocaleDateString('en-CA'), durasi);
       inputJatuhTempo.value = formattedDate;
 
       // Populate auto description helper
-      inputKeterangan.value = `Pembayaran Sewa ${type} Kamar ${kamarNo} (${durasi} ${type === 'Bulanan' ? 'Bulan' : 'Hari'}) - s.d. ${formattedDate}`;
+      inputKeterangan.value = `Pembayaran Sewa ${type} Kamar ${kamarNo}${type === 'Bulanan' && durasi > 1 ? ` — ${durasi} bulan` : ''} - s.d. ${formattedDate}`;
     }
 
     // LOAD EXPANDED PAYMENTS LOG FOR DETAILED LOGS TAB
@@ -3745,6 +3747,9 @@
       }).recordPayment({
         nama: this.nama.value, 
         kamar: this.kamar.value, 
+        // jumlah bulan yang dibayar sekaligus (1 = biasa/bulanan, 3 = tiga bulan, 12 = setahun)
+        bulan: Number(document.getElementById('input-durasi-sewa').value) || 1,
+        tipeSewa: document.getElementById('select-tipe-sewa').value,
         jumlah: this.jumlah.value, 
         tanggal: document.getElementById('input-tgl-pembayaran').value,
         keterangan: this.keterangan.value

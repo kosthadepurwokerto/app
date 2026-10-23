@@ -193,38 +193,58 @@ export async function createTenant(ctx, data) {
   }
 
   await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
-    .bind(tenantId, bulanPeriode(tglMasuk), addMonths(tglMasuk, 1), num(room.harga_bulanan), 'belum_bayar').run();
+    // jatuh tempo tunduk pada klem 1-28 (tanggal 31 Jan -> 28 Feb, supaya rantai bulan tidak melompat)
+    .bind(tenantId, bulanPeriode(tglMasuk), klemJatuhTempo(addMonths(tglMasuk, 1)), num(room.harga_bulanan), 'belum_bayar').run();
   await ctx.audit('create_tenant', 'tenants', tenantId, null, { kode, nama, kamar: noKamar });
 
   return `Registrasi ${nama} di Kamar ${noKamar} berhasil (${kode}). Tagihan ${rupiah(room.harga_bulanan)} jatuh tempo ${addMonths(tglMasuk, 1)}.`;
 }
 
 export async function recordPayment(ctx, data) {
-  const jumlah = num(data.jumlah);
-  if (jumlah <= 0) throw httpError(400, 'Nominal pembayaran harus lebih dari 0.');
   const tgl = toISODate(data.tanggal) || ctx.today;
   if (tgl > ctx.today) throw httpError(400, 'Tanggal pembayaran tidak boleh di masa depan.');
   const noKamar = String(data.kamar || '').trim();
   if (!noKamar) throw httpError(400, 'Kamar penyewa wajib dipilih. Tanpa kamar, pembayaran bisa masuk ke penyewa yang salah.');
 
-  // tenaga: cari lewat kamar (unik), bukan lewat nama
+  // cari penyewa lewat kamar (unik), bukan lewat nama
   const t = await ctx.db.prepare(
     `select t.*, r.no_kamar from tenants t join rooms r on r.id = t.kamar_id
       where t.status='aktif' and r.no_kamar = ?`
   ).bind(noKamar).first();
   if (!t) throw httpError(404, `Tidak ada penyewa aktif di kamar ${noKamar}.`);
 
-  const bill = await ctx.db.prepare(
-    "select * from bills where tenant_id=? and status='belum_bayar' order by jatuh_tempo limit 1"
-  ).bind(t.id).first();
-  if (!bill) throw httpError(409, `Tidak ada tagihan terbuka untuk ${t.nama}. Tagihan dibuat otomatis saat registrasi atau setelah pembayaran lunas.`);
-  if (num(bill.jumlah) !== jumlah)
-    throw httpError(409, `Nominal bayar ${rupiah(jumlah)} tidak sama dengan tagihan ${rupiah(bill.jumlah)} (jatuh tempo ${bill.jatuh_tempo}).`);
+  // ---- bayar N bulan sekaligus -------------------------------------------------
+  // `bulan` = jumlah bulan yang dibayar (default 1). Tagihan dilunasi berurutan mulai
+  // yang paling awal, dan tagihan bulan-bulan berikutnya dibuat bila belum ada.
+  const bulan = Math.max(1, Math.min(24, Number.parseInt(data.bulan, 10) || 1));
 
+  // semua tagihan terbuka, urut jatuh tempo
+  const terbuka = (await ctx.db.prepare(
+    "select * from bills where tenant_id=? and status='belum_bayar' order by jatuh_tempo"
+  ).bind(t.id).all()).results || [];
+
+  // lengkapi daftar: kalau kurang dari N, buat tagihan lanjutan di memori (belum ditulis)
+  const daftar = terbuka.slice(0, bulan).map((b) => ({ ...b, baru: false }));
+  let acuan = daftar.length ? daftar[daftar.length - 1] : null;
+  if (!acuan) {
+    throw httpError(409, `Tidak ada tagihan terbuka untuk ${t.nama}. Tagihan dibuat otomatis saat registrasi atau setelah pembayaran lunas.`);
+  }
+  let jt = String(acuan.jatuh_tempo).slice(0, 10);
+  while (daftar.length < bulan) {
+    jt = klemJatuhTempo(addMonths(jt, 1));
+    daftar.push({ id: null, tenant_id: t.id, periode: bulanPeriode(jt), jatuh_tempo: jt, jumlah: acuan.jumlah, status: 'belum_bayar', baru: true });
+  }
+  const jumlah = num(data.jumlah) || daftar.reduce((a, b) => a + num(b.jumlah), 0);
+  if (jumlah <= 0) throw httpError(400, 'Nominal pembayaran harus lebih dari 0.');
+  const total = daftar.reduce((a, b) => a + num(b.jumlah), 0);
+  if (total !== jumlah)
+    throw httpError(409, `Nominal bayar ${rupiah(jumlah)} tidak sama dengan total ${bulan} bulan × ${rupiah(num(daftar[0].jumlah))} = ${rupiah(total)}.`);
+
+  const bill = daftar[0];
   // Jatuh tempo berikutnya: tanggal yang sama bulan depan (diklem 28/29/30),
   // TETAPI diklem juga ke tanggal 1-28 supaya tidak melompati bulan saat bulan pendek
   // (31 Mar -> 30 Apr -> 31 Apr tidak ada; dulu ini membuat periode Mei terlewat).
-  const tglJatuh = String(bill.jatuh_tempo).slice(0, 10);
+  const tglJatuh = String(daftar[daftar.length - 1].jatuh_tempo).slice(0, 10);
   const nextJt = klemJatuhTempo(addMonths(tglJatuh, 1));
   const nextPeriode = bulanPeriode(nextJt);
   const dup = await ctx.db.prepare('select id from bills where tenant_id=? and periode=?').bind(t.id, nextPeriode).first();
@@ -236,13 +256,30 @@ export async function recordPayment(ctx, data) {
     const cnt = await ctx.db.prepare('select count(*) as n from payments where tgl_bayar=?').bind(tgl).first();
     nomor = `STR-${tgl.replace(/-/g, '')}-${String(cnt.n + 1 + coba).padStart(3, '0')}`;
     try {
-      bukti = await ctx.db.batch([
-        ctx.db.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, created_by) values (?,?,?,?,?,?,?)')
-          .bind(nomor, bill.id, t.id, tgl, jumlah, String(data.keterangan || ''), ctx.user.id),
-        ctx.db.prepare("update bills set status='lunas' where id=?").bind(bill.id),
-        ...(dup ? [] : [ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
-          .bind(t.id, nextPeriode, nextJt, bill.jumlah, 'belum_bayar')]),
-      ]);
+      const stmts = [];
+      // tagihan yang belum ada di DB dibuat dulu, lalu dilunasi (per periode, unik per penyewa)
+      for (const b of daftar.filter((x) => x.baru)) {
+        stmts.push(ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+          .bind(t.id, b.periode, b.jatuh_tempo, b.jumlah, 'belum_bayar'));
+      }
+      // satu baris pembayaran untuk seluruh bulan (struk menampilkan jumlah bulan bayar)
+      stmts.push(ctx.db.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, created_by) values (?,?,?,?,?,?,?)')
+        .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), ctx.user.id));
+      if (bulan > 1) {
+        // jumlah bulan disimpan di keterangan; void memakainya untuk tahu berapa bulan dibatalkan
+        stmts.push(ctx.db.prepare("update payments set bulan=? where nomor_struk=?").bind(bulan, nomor));
+      }
+      for (const b of daftar.filter((x) => !x.baru)) {
+        stmts.push(ctx.db.prepare("update bills set status='lunas' where id=?").bind(b.id));
+      }
+      // tagihan baris "bayar N bulan" dilunasi lewat pasangan pembayaran per periode,
+      // supaya jejak lunas per bulan tetap jelas dan void bisa mengembalikannya satu per satu.
+      for (const b of daftar.filter((x) => x.baru)) {
+        stmts.push(ctx.db.prepare("update bills set status='lunas' where tenant_id=? and periode=?").bind(t.id, b.periode));
+      }
+      if (!dup) stmts.push(ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+        .bind(t.id, nextPeriode, nextJt, daftar[0].jumlah, 'belum_bayar'));
+      bukti = await ctx.db.batch(stmts);
     } catch (e) {
       if (!/UNIQUE/i.test(String(e && e.message))) throw e;
       bukti = null;
@@ -251,7 +288,8 @@ export async function recordPayment(ctx, data) {
   if (!bukti) throw httpError(500, 'Gagal membuat nomor struk unik. Coba lagi.');
 
   await ctx.audit('payment', 'payments', nomor, null, { nomor, jumlah, tgl, tenant: t.kode });
-  return `Pembayaran ${rupiah(jumlah)} dibukukan (${nomor}). Tagihan berikutnya jatuh tempo ${nextJt}.`;
+  const pesanBulan = bulan > 1 ? ` untuk ${bulan} bulan (${daftar.map((b) => String(b.periode).slice(0, 7)).join(', ')})` : '';
+  return `Pembayaran ${rupiah(jumlah)}${pesanBulan} dibukukan (${nomor}). Tagihan berikutnya jatuh tempo ${nextJt}.`;
 }
 
 // Pembatalan pembayaran (salah catat / uang dikembalikan).
@@ -264,17 +302,23 @@ export async function voidPayment(ctx, id) {
   const bill = p.bill_id ? await ctx.db.prepare('select * from bills where id=?').bind(p.bill_id).first() : null;
 
   const stmts = [ctx.db.prepare("update payments set voided_at=strftime('%Y-%m-%dT%H:%M:%f','now') where id=?").bind(p.id)];
+  const bulan = Math.max(1, Math.min(24, Number(p.bulan) || 1));
   if (bill) {
-    // buka kembali tagihan yang dibayar
-    stmts.push(ctx.db.prepare("update bills set status='belum_bayar' where id=?").bind(bill.id));
+    // buka kembali SEMUA bulan yang dibayar dalam satu struk (bayar N bulan), bukan hanya bulan pertama
+    const periodeMulai = String(bill.periode);
+    const kena = bulan > 1
+      ? (await ctx.db.prepare("select id from bills where tenant_id=? and status='lunas' and periode>=? order by periode limit ?")
+          .bind(p.tenant_id, periodeMulai, bulan).all()).results || []
+      : [{ id: bill.id }];
+    kena.forEach((b) => stmts.push(ctx.db.prepare("update bills set status='belum_bayar' where id=?").bind(b.id)));
     // tagihan PERIODE BERIKUTNYA yang dulu dibuat otomatis boleh dihapus hanya bila:
     // belum dibayar, tidak punya pembayaran lain, dan tanggal jatuh temponya persis kelanjutan tagihan ini
     // CATATAN: jangan pakai subquery dengan skema tabel di dalamnya — di D1 ternyata
     // merusak pernyataan lain dalam batch yang sama (data terlihat belum ter-update).
     // Satu query rata, lalu saring di JS.
     const kandidat = await ctx.db.prepare(
-      `select id, periode, jatuh_tempo from bills where tenant_id=? and id<>? and periode>? and status='belum_bayar'`
-    ).bind(p.tenant_id, bill.id, bill.periode).all();
+      `select id, periode, jatuh_tempo from bills where tenant_id=? and status='belum_bayar' and periode>?`
+    ).bind(p.tenant_id, kena.length ? kena[kena.length - 1].periode || bill.periode : bill.periode).all();
     const berbayar = await ctx.db.prepare('select distinct bill_id from payments where tenant_id=? and bill_id is not null').bind(p.tenant_id).all();
     const dibayar = new Set((berbayar.results || []).map((r) => r.bill_id));
     const urut = (kandidat.results || []).filter((b) => !dibayar.has(b.id)).sort((a, b) => (a.periode < b.periode ? -1 : 1));

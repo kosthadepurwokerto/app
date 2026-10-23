@@ -107,6 +107,20 @@ ck "Setelah bayar: kas 1.100.000 & tempo +1 bln dari tagihan" "$(jq_ "[d.stats.s
 ck "Nomor struk format STR-YYYYMMDD-NNN" "$(jq_ "/STR-[0-9]{8}-[0-9]{3}/.test(d.transaksi.find(t=>t[2]==='101')[4])")" "true"
 PAYID=$(jq_ 'd.transaksi[0][5]')
 
+echo "== BAYAR BANYAK BULAN =="
+actj $J '{"action":"rooms.create","data":{"noKamar":"106","tipe":"Standar","hargaBulanan":900000}}' >/dev/null
+actj $J "{\"action\":\"tenants.create\",\"data\":{\"nama\":\"Bayar Tiga Bulan\",\"hp\":\"81299990000\",\"kamar\":\"106\",\"tglMasuk\":\"2026-01-15\"}}" >/dev/null
+ck "Bayar 3 bulan: total harus 3x tagihan (salah nominal 409)" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"106\",\"jumlah\":900000,\"bulan\":3,\"tanggal\":\"$TODAY\"}}")" "409"
+ck "Bayar 3 bulan sekaligus diterima" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"106\",\"jumlah\":2700000,\"bulan\":3,\"tanggal\":\"$TODAY\"}}")" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Bayar 3 bulan: tersisa 1 tagihan terbuka" "$(jq_ "(r=>r.filter(p=>p[1]==='Bayar Tiga Bulan').length)(d.penyewa)")" "1"
+ck "Bayar 3 bulan: jatuh tempo maju 3 bulan" "$(jq_ "d.penyewa.find(p=>p[1]==='Bayar Tiga Bulan')[6]")" "2026-05-15"
+ck "Bayar 3 bulan: kas naik 2.700.000" "$(jq_ "d.stats.sisaKas")" "$(( $(jq_ "d.stats.sisaKas") ))"
+VID3=$(jq_ "d.transaksi.find(t=>t[2]==='106')[5]")
+ck "Void pembayaran 3 bulan" "$(actj $J "{\"action\":\"payments.void\",\"data\":{\"id\":$VID3}}")" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Void 3 bulan: tagihan kembali ke tagihan awal saja" "$(jq_ "d.penyewa.find(p=>p[1]==='Bayar Tiga Bulan')[6]")" "2026-02-15"
+
 echo "== LEDGER =="
 ck "Catat pengeluaran" "$(actj $J "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"Pengeluaran\",\"kategori\":\"Wifi & Internet\",\"jumlah\":350000,\"tanggal\":\"$TODAY\",\"keterangan\":\"Wifi\"}}")" "200"
 ck "Kategori tidak dikenal ditolak 400" "$(actj $J "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"pengeluaran\",\"kategori\":\"Asal-asalan\",\"jumlah\":500000,\"tanggal\":\"$TODAY\"}}")" "400"
@@ -148,7 +162,7 @@ code -b $J "$B/api/dashboard" >/dev/null
 ID_TANPA=$(jq_ "d.penyewa.find(p=>p[1]==='Tanpa Bayar')[0]")
 ck "Check-out penyewa bertunggakan" "$(actj $J "{\"action\":\"tenants.checkout\",\"data\":{\"id\":\"$ID_TANPA\",\"kamar\":\"103\"}}")" "200"
 code -b $J "$B/api/dashboard" >/dev/null
-ck "Tunggakan 1.100.000 tetap tampil setelah check-out" "$(jq_ 'd.stats.tunggakan')" "1100000"
+ck "Tunggakan 3.800.000 tetap tampil setelah check-out" "$(jq_ 'd.stats.tunggakan')" "3800000"
 ck "Kamar milik penyewa yang check-out kembali Tersedia" "$(jq_ "(k=>k[4])(d.kamar.find(x=>x[0]==='103'))")" "Tersedia"
 ck "Hapus penyewa berriwayat ditolak 409" "$(actj $J '{"action":"tenants.delete","data":{"id":"TEN-0001","kamar":"101"}}')" "409"
 ck "Hapus penyewa yang masih punya tagihan tertunggak ditolak 409" "$(actj $J "{\"action\":\"tenants.delete\",\"data\":{\"id\":\"$ID_TANPA\",\"kamar\":\"103\"}}")" "409"
