@@ -14,3 +14,11 @@ migrations_dir = "db"
 
 [vars]
 COOKIE_SECURE = "true"
+
+# Foto KTP penyewa (berkas biner TIDAK ditaruh di D1)
+# Aktifkan blok ini setelah bucket dibuat:
+#   npx wrangler r2 bucket create hadekost-ktp      (butuh token dengan izin Workers R2 Storage)
+# lalu set KTP_MODE = 'r2' di worker/logic.js.
+# [[r2_buckets]]
+# binding = "KTP"
+# bucket_name = "hadekost-ktp"

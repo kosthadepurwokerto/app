@@ -94,7 +94,8 @@ async function dashboard(env) {
       const b = (bills.results || []).find((x) => x.tenant_id === t.id);
       return [t.kode, t.nama, t.hp || '', roomMap[t.kamar_id] || '', t.tgl_masuk,
               t.status === 'aktif' ? 'Aktif' : 'Keluar', b ? b.jatuh_tempo : '',
-              b ? String(b.jumlah) : '', b ? b.id : ''];
+              b ? String(b.jumlah) : '', b ? b.id : '',
+              t.kontak_darurat || '', t.hp_darurat || '', t.ktp_key ? 'ada' : ''];
     }),
     transaksi: (pays.results || []).map((p) => {
       const t = (tenants.results || []).find((x) => x.id === p.tenant_id);
@@ -108,6 +109,72 @@ async function dashboard(env) {
 async function listLedger(env) {
   const r = await env.DB.prepare('select * from ledger where voided_at is null order by tanggal desc, id desc').all();
   return (r.results || []).map((x) => [x.id, x.tanggal, x.jenis.charAt(0).toUpperCase() + x.jenis.slice(1), x.kategori, String(x.jumlah), x.keterangan || '']);
+}
+
+// ---------- FOTO KTP (R2) ----------
+// Berkas biner disimpan di R2; D1 hanya menyimpan kuncinya. Tidak ada URL publik:
+// foto KTP hanya bisa diambil lewat endpoint ini dan hanya oleh user yang login.
+const KTP_TIPE = logic.KTP_TIPE;
+const KTP_MAKS = 5 * 1024 * 1024;          // 5 MB (R2); mode cadangan D1 dibatasi 2 MB oleh tabel
+
+// Catatan: handler khusus ini membalas JSON sendiri (bukan melempar) — error object yang
+// dilempar dari dalam pemrosesan multipart tidak sampai ke penangkap error utama Worker.
+async function unggahKtp(req, env, sesi) {
+  const pakaiR2 = logic.KTP_MODE === 'r2' && !!env.KTP;
+  let form;
+  try { form = await req.formData(); } catch { return json({ error: 'Unggahan tidak valid. Kirim sebagai multipart/form-data.' }, 400); }
+  const file = form.get('file');
+  if (!file || typeof file === 'string' || !file.size) return json({ error: 'Berkas foto KTP wajib diunggah.' }, 400);
+  const extKtp = KTP_TIPE[file.type];
+  if (!extKtp) return json({ error: 'Format foto harus JPG, PNG, atau WEBP.' }, 400);
+  if (file.size > KTP_MAKS) return json({ error: 'Ukuran foto maksimal ' + (KTP_MAKS / 1048576) + ' MB.' }, 400);
+  const isi = await file.arrayBuffer();
+  const kunciBaru = `ktp/${new Date().getFullYear()}/${crypto.randomUUID()}.${extKtp}`;
+  try {
+    if (pakaiR2) {
+      await env.KTP.put(kunciBaru, isi, { httpMetadata: { contentType: file.type } });
+    } else {
+      // mode cadangan: simpan di D1 (foto sudah diperkecil di browser, maks 1,5 MB)
+      await env.DB.prepare('insert into ktp_berkas (kunci, tipe, ukuran, isi) values (?,?,?,?)')
+        .bind(kunciBaru, file.type, file.size, new Uint8Array(isi)).run();
+    }
+  } catch (e) {
+    console.error('[hade] simpan ktp', e);
+    return json({ error: 'Gagal menyimpan foto. Coba lagi.' }, 500);
+  }
+  await logic.audit(env, sesi, 'ktp.upload', 'tenants', null, null, { kunci: kunciBaru, bytes: file.size, simpan: pakaiR2 ? 'r2' : 'd1' });
+  return json({ ok: true, kunci: kunciBaru, tipe: file.type });
+}
+
+async function lihatKtp(env, kunci, sesi) {
+  if (!/^ktp\/[0-9]{4}\//.test(kunci)) return json({ error: 'Kunci foto tidak valid.' }, 400);
+  let body, tipe;
+  if (logic.KTP_MODE === 'r2' && env.KTP) {
+    const obj = await env.KTP.get(kunci);
+    if (!obj) return json({ error: 'Foto KTP tidak ditemukan.' }, 404);
+    body = obj.body;
+    tipe = (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream';
+  } else {
+    const row = await env.DB.prepare('select tipe, isi from ktp_berkas where kunci=?').bind(kunci).first();
+    if (!row) return json({ error: 'Foto KTP tidak ditemukan.' }, 404);
+    // D1 mengembalikan kolom BLOB sebagai array angka — harus dijadikan Uint8Array,
+    // kalau langsung dijadikan body Response hasilnya 0 byte.
+    const isi = row.isi;
+    if (isi instanceof ArrayBuffer) body = new Uint8Array(isi);
+    else if (ArrayBuffer.isView(isi)) body = isi;
+    else if (Array.isArray(isi)) body = new Uint8Array(isi);
+    else if (typeof isi === 'string') body = new TextEncoder().encode(isi);
+    else body = isi;
+    tipe = row.tipe;
+  }
+  return new Response(body, {
+    headers: {
+      'content-type': tipe,
+      'cache-control': 'private, no-store',          // data pribadi: jangan di-cache proxy
+      'content-disposition': 'inline',
+      'x-content-type-options': 'nosniff',
+    },
+  });
 }
 
 // ---------- rute ----------
@@ -401,6 +468,15 @@ export default {
           : [];
         return json({ ...d, ops, kategori, users });
       }
+      if (url.pathname === '/api/ktp' && req.method === 'POST') return unggahKtp(req, env, sesi);
+      if (url.pathname.startsWith('/api/ktp/penyewa/')) {
+        // URL stabil per penyewa (dipakai tombol "Lihat foto"); kunci R2 tidak pernah dikirim ke browser
+        const kode = decodeURIComponent(url.pathname.slice('/api/ktp/penyewa/'.length));
+        const t = await env.DB.prepare('select ktp_key from tenants where kode=? or id=?').bind(kode, Number(kode) || -1).first();
+        if (!t || !t.ktp_key) return json({ error: 'Penyewa ini belum punya foto KTP.' }, 404);
+        return lihatKtp(env, t.ktp_key, sesi);
+      }
+      if (url.pathname.startsWith('/api/ktp/')) return lihatKtp(env, decodeURIComponent(url.pathname.slice('/api/ktp/'.length)), sesi);
       if (url.pathname === '/api/dashboard') return json(await dashboard(env));
       if (url.pathname === '/api/ops') return json(await listLedger(env));
 

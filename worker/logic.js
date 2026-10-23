@@ -83,6 +83,21 @@ export function randomToken(bytes = 32) {
   return [...crypto.getRandomValues(new Uint8Array(bytes))].map((x) => x.toString(16).padStart(2, '0')).join('');
 }
 
+// Nomor HP kontak darurat: kosong = hapus; selain itu minimal 8 digit setelah dinormalisasi.
+function validasiHpDarurat(nilai) {
+  const n = normPhone(String(nilai ?? '')).slice(0, 20);
+  if (n && !/^\+?[0-9]{8,20}$/.test(n)) return { salah: 'Nomor HP kontak darurat harus 8-20 angka.' };
+  return { nilai: n };
+}
+
+// Penyimpanan foto KTP: 'r2' (disarankan) atau 'd1' (cadangan bila bucket R2 belum bisa dibuat).
+// Di mode d1, foto disimpan di tabel ktp_berkas; D1 membatasi ukuran baris ~2 MB, jadi foto
+// diperkecil di browser sebelum diunggah.
+export const KTP_MODE = 'r2';
+
+// tipe foto KTP yang diterima (ekstensi dipakai untuk kunci R2)
+export const KTP_TIPE = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
 // ---------- aksi bisnis ----------
 // ctx: { env, db (D1), user, today, audit(aksi, tabel, rowId, lama, baru) }
 
@@ -109,9 +124,19 @@ export async function createTenant(ctx, data) {
 
   const seq = await ctx.db.prepare("select coalesce(max(cast(substr(kode,5) as integer)),0)+1 as n from tenants").first();
   const kode = 'TEN-' + String(seq.n).padStart(4, '0');
+  // CATATAN: jangan pakai String(undefined || '').trim() sembarangan — nilai "undefined"
+  // jadi teks. Bentuk di bawah aman untuk nilai kosong.
+  const kontak = String(data.kontakDarurat ?? '').trim().slice(0, 80);
+  const cekHp = validasiHpDarurat(data.hpDarurat);
+  if (cekHp.salah) throw httpError(400, cekHp.salah);
+  const hpDarurat = cekHp.nilai;
+  const ktp = KTP_TIPE[String(data.ktpTipe || '')] ? String(data.ktpTipe) : null;
+  const ktpKey = ktp ? String(data.ktpKey || '').slice(0, 200) : null;
+  if (ktp && !/^ktp\/[0-9]{4}\//.test(ktpKey)) throw httpError(400, 'Kunci foto KTP tidak valid.');
   const ins = await ctx.db.prepare(
-    'insert into tenants (kode, nama, hp, kamar_id, tgl_masuk, status) values (?,?,?,?,?,?)'
-  ).bind(kode, nama, normPhone(data.hp), room.id, tglMasuk, 'aktif').run();
+    `insert into tenants (kode, nama, hp, kamar_id, kontak_darurat, hp_darurat, ktp_key, ktp_tipe, tgl_masuk, status)
+     values (?,?,?,?,?,?,?,?,?,?)`
+  ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, tglMasuk, 'aktif').run();
   const tenantId = ins.meta.last_row_id;
 
   await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
@@ -230,14 +255,28 @@ export async function updateTenant(ctx, data) {
       kamarId = room.id;
     }
   }
+  // kontak darurat: tidak dikirim = pertahankan; dikirim kosong = hapus;
+  // dikirim berisi = ganti (divalidasi).
+  const pakai = (v) => v !== undefined && v !== null;
+  const kontak = !pakai(data.kontakDarurat) ? t.kontak_darurat
+    : (String(data.kontakDarurat).trim() ? String(data.kontakDarurat).trim().slice(0, 80) : null);
+  let hpDarurat = t.hp_darurat;
+  if (pakai(data.hpDarurat)) {
+    const cek = validasiHpDarurat(data.hpDarurat);
+    if (cek.salah) throw httpError(400, cek.salah);
+    hpDarurat = cek.nilai || null;
+  }
+  const ktpTipeBaru = KTP_TIPE[String(data.ktpTipe || '')] ? String(data.ktpTipe) : null;
+  const ktpKeyBaru = ktpTipeBaru ? String(data.ktpKey || '').slice(0, 200) : null;
+  if (ktpTipeBaru && !/^ktp\/[0-9]{4}\//.test(ktpKeyBaru)) throw httpError(400, 'Kunci foto KTP tidak valid.');
   const status = String(data.status || t.status) === 'keluar' ? 'keluar' : 'aktif';
   const tglKeluar = status === 'keluar'
     ? (toISODate(data.tglKeluar) || t.tgl_keluar || ctx.today)
     : null;
 
   const stmts = [
-    ctx.db.prepare('update tenants set nama=?, hp=?, kamar_id=?, tgl_masuk=?, status=?, tgl_keluar=? where id=?')
-      .bind(nama, hp, kamarId, tglMasuk, status, tglKeluar, t.id),
+    ctx.db.prepare('update tenants set nama=?, hp=?, kamar_id=?, kontak_darurat=?, hp_darurat=?, ktp_key=?, ktp_tipe=?, tgl_masuk=?, status=?, tgl_keluar=? where id=?')
+      .bind(nama, hp, kamarId, kontak, hpDarurat, ktpKeyBaru || t.ktp_key, ktpTipeBaru || t.ktp_tipe, tglMasuk, status, tglKeluar, t.id),
   ];
   // sinkronkan status kamar lama & baru
   if (t.kamar_id && (t.kamar_id !== kamarId || status === 'keluar')) {
@@ -248,8 +287,8 @@ export async function updateTenant(ctx, data) {
   }
   await ctx.db.batch(stmts);
   await ctx.audit('tenant.update', 'tenants', t.id,
-    { nama: t.nama, hp: t.hp, kamar_id: t.kamar_id, tgl_masuk: t.tgl_masuk, status: t.status },
-    { nama, hp, kamar_id: kamarId, tgl_masuk: tglMasuk, status });
+    { nama: t.nama, hp: t.hp, kamar_id: t.kamar_id, kontak_darurat: t.kontak_darurat, hp_darurat: t.hp_darurat, status: t.status },
+    { nama, hp, kamar_id: kamarId, kontak_darurat: kontak, hp_darurat: hpDarurat, ktp: !!(ktpKeyBaru || t.ktp_key), status });
   return `Data penyewa ${nama} diperbarui.`;
 }
 

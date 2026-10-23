@@ -110,6 +110,21 @@
     editUser: (d) => aksi('users.update', d).then((m) => { data.dashboard = null; return m; }),
     deleteUser: (id) => aksi('users.delete', { id }).then((m) => { data.dashboard = null; return m; }),
 
+    // ---------------- FOTO KTP ----------------
+    // Unggah ke R2 lewat Worker; yang disimpan di database hanya kunci berkasnya.
+    uploadKtp: async (file) => {
+      if (!file) return null;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(API + '/ktp', { method: 'POST', body: fd, credentials: 'same-origin' });
+      let payload = null;
+      try { payload = await res.json(); } catch (_) { /* bukan JSON */ }
+      if (res.status === 401 && typeof window.onSesiBerakhir === 'function') window.onSesiBerakhir();
+      if (!res.ok) throw new Error((payload && payload.error) || `Unggah foto gagal (${res.status}).`);
+      return payload;                       // { kunci, tipe }
+    },
+    urlKtp: (kunci) => (kunci ? API + '/ktp/' + kunci.split('/').map(encodeURIComponent).join('/') : null),
+
     // ---------------- cadangan ----------------
     exportAll: async () => ({ exported_at: new Date().toISOString(), ...(await muatSemua()) }),
     _reset: () => { data = { dashboard: null, ops: null, kategori: null }; },

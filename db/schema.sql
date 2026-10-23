@@ -50,13 +50,18 @@ create table if not exists rooms (
   created_at    text not null default (datetime('now'))
 );
 
--- ---------- PENYEWA ----------
+-- ---------- PENYEWA (kolom tambahan untuk DB lama; di DB baru pernyataan ini gagal
+-- dengan "duplicate column" dan aman diabaikan — lihat tools/uji-lokal.sh) ----------
 create table if not exists tenants (
   id          integer primary key autoincrement,
   kode        text unique not null,
   nama        text not null,
   hp          text,
   kamar_id    integer references rooms(id) on delete set null,
+  kontak_darurat text,                       -- nama kontak darurat
+  hp_darurat     text,                       -- nomor HP kontak darurat
+  ktp_key     text,                          -- kunci berkas foto KTP di R2 (bukan data base64)
+  ktp_tipe    text,                          -- image/jpeg | image/png | image/webp
   tgl_masuk   text not null,                 -- YYYY-MM-DD
   tgl_keluar  text,
   status      text not null default 'aktif' check (status in ('aktif','keluar')),
@@ -64,6 +69,15 @@ create table if not exists tenants (
 );
 create index if not exists idx_tenants_status on tenants(status);
 create index if not exists idx_tenants_kamar  on tenants(kamar_id);
+
+-- ---------- BERKAS FOTO KTP (mode cadangan, bila R2 belum tersedia) ----------
+create table if not exists ktp_berkas (
+  kunci      text primary key,
+  tipe       text not null,
+  ukuran     integer not null,
+  isi        blob not null,
+  created_at text not null default (datetime('now'))
+);
 
 -- ---------- TAGIHAN SEWA ----------
 create table if not exists bills (

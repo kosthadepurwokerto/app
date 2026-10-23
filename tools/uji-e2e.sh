@@ -55,6 +55,23 @@ ck "Edit penyewa (nama/hp)" "$(actj $J '{"action":"tenants.update","data":{"id":
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Nama penyewa berubah menjadi Budi S." "$(jq_ 'd.penyewa[0][1]')" "Budi S."
 
+echo "== KONTAK DARURAT & FOTO KTP =="
+printf '\x89PNG\r\n\x1a\n' > /tmp/ktp-uji.png   # cukup dikenali sebagai gambar oleh uji ini
+KRES=$(code -b $J -X POST -F "file=@/tmp/ktp-uji.png;type=image/png" "$B/api/ktp")
+ck "Unggah foto KTP berhasil" "$KRES" "200"
+KTKEY=$(jq_ 'd.kunci')
+ck "Format salah ditolak 400" "$(printf 'x' > /tmp/bukan.txt; code -b $J -X POST -F 'file=@/tmp/bukan.txt;type=text/plain' "$B/api/ktp")" "400"
+ck "Unggah tanpa login ditolak 401" "$(code -X POST -F "file=@/tmp/ktp-uji.png;type=image/png" "$B/api/ktp")" "401"
+ck "Kontak darurat tersimpan saat registrasi" "$(actj $J "{\"action\":\"tenants.update\",\"data\":{\"id\":\"TEN-0001\",\"kontakDarurat\":\"Ibu Ratna\",\"hpDarurat\":\"08133334444\",\"ktpKey\":\"$KTKEY\",\"ktpTipe\":\"image/png\"}}")" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Dashboard mengirim kontak darurat & penanda KTP" "$(jq_ "(p=>[p[9],p[10],p[11]].join('|'))(d.penyewa.find(x=>x[0]==='TEN-0001'))")" "Ibu Ratna|08133334444|ada"
+ck "Foto bisa dibuka oleh user login" "$(code -b $J "$B/api/ktp/penyewa/TEN-0001")" "200"
+ck "Foto tidak bisa dibuka tanpa login" "$(code "$B/api/ktp/penyewa/TEN-0001")" "401"
+ck "HP darurat tidak valid ditolak 400" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0001","hpDarurat":"12"}}')" "400"
+ck "Edit tanpa field kontak tidak menghapus data lama" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0001","nama":"Budi Santoso"}}')" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Kontak darurat masih utuh setelah edit nama" "$(jq_ "(p=>[p[9],p[10]].join('|'))(d.penyewa.find(x=>x[0]==='TEN-0001'))")" "Ibu Ratna|08133334444"
+
 echo "== PEMBAYARAN =="
 ck "Bayar tanpa kamar ditolak 400 (dulu: menandai lunas penyewa lain)" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"jumlah\":1100000,\"tanggal\":\"$TODAY\"}}")" "400"
 ck "Bayar nominal salah ditolak 409" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"101\",\"jumlah\":500000,\"tanggal\":\"$TODAY\"}}")" "409"
