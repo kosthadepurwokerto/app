@@ -159,7 +159,7 @@
   <div id="app-container" class="hidden h-screen w-screen flex flex-col md:flex-row m-0 p-0 overflow-hidden">
 
     <!-- SIDEBAR / NAVIGASI UTAMA -->
-    <nav class="w-full md:w-64 bg-white text-slate-700 shadow-xl flex flex-col z-50 flex-shrink-0 md:h-full justify-between border-b md:border-b-0 md:border-r border-slate-200/80">
+    <nav class="w-full md:w-60 lg:w-64 bg-white text-slate-700 shadow-xl flex flex-col z-50 flex-shrink-0 md:h-full justify-between border-b md:border-b-0 md:border-r border-slate-200/80">
       <div class="flex flex-col w-full">
         <!-- Logo Header -->
         <div class="p-4 md:p-6 border-b border-slate-100 flex flex-row md:flex-col items-center justify-between md:justify-center text-left md:text-center gap-3 bg-gradient-to-b from-blue-50/20 to-transparent">
@@ -256,7 +256,7 @@
     </nav>
 
     <!-- AREA KONTEN UTAMA -->
-    <main class="flex-1 h-full overflow-y-auto p-4 md:p-8 lg:p-10 bg-slate-50 w-full hide-scrollbar">
+    <main class="flex-1 min-w-0 h-full overflow-y-auto overflow-x-hidden p-4 md:p-8 lg:p-10 bg-slate-50 hide-scrollbar">
       <div class="max-w-7xl mx-auto w-full pb-16">
 
         <!-- SECTION: DASHBOARD -->
@@ -395,10 +395,10 @@
 
         <!-- SECTION: PENYEWA (MANAGEMENT & REGISTRATION) -->
         <section id="sec-penyewa" class="content-section hidden w-full animate-fade-in">
-          <div class="flex flex-col lg:flex-row gap-8">
+          <div class="flex flex-col lg:flex-row gap-6 lg:gap-8">
             
             <!-- LEFT SIDE: LIST OF ACTIVE TENANTS -->
-            <div class="flex-1">
+            <div class="flex-1 min-w-0">
               <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
                 <div class="p-6 border-b border-slate-100">
                   <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Penyewa Suite</h3>
@@ -434,8 +434,8 @@
               </div>
             </div>
 
-            <!-- RIGHT SIDE: TENANT REGISTRATION FORM -->
-            <div class="w-full lg:w-96 shrink-0">
+            <!-- RIGHT SIDE: TENANT REGISTRATION FORM (menyusut mengikuti layar, tidak terpotong) -->
+            <div class="w-full lg:w-80 xl:w-96 lg:max-w-[26rem]">
               <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
                 <div class="mb-6">
                   <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-rose-500 text-lg shadow-inner">
@@ -447,8 +447,8 @@
                     <button type="button" onclick="bukaImporWa()" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 font-bold text-[11px] transition">
                       <i class="fab fa-whatsapp"></i> Dari WhatsApp
                     </button>
-                    <button type="button" onclick="salinTautanUndangan()" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[11px] transition">
-                      <i class="fas fa-link"></i> Undang
+                    <button type="button" onclick="bukaUndangWa()" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200 font-bold text-[11px] transition">
+                      <i class="fab fa-whatsapp"></i> Undang via WA
                     </button>
                   </div>
                 </div>
@@ -459,7 +459,7 @@
                     <input type="text" name="nama" required placeholder="Ahmad Fauzi" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
                   </div>
                   <div>
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">WhatsApp Handphone</label>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nomor WhatsApp</label>
                     <input type="tel" name="hp" required placeholder="08123456789" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
                   </div>
                   <div>
@@ -475,7 +475,7 @@
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kontak Darurat</label>
-                      <input type="text" name="kontakDarurat" placeholder="Nama keluarga / kerabat" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                      <input type="text" name="kontakDarurat" placeholder="Nama keluarga / hubungan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
                     </div>
                     <div>
                       <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">HP Darurat</label>
@@ -1185,7 +1185,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kontak Darurat</label>
-            <input type="text" id="edit-tenant-kontak" placeholder="Nama keluarga / kerabat" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            <input type="text" id="edit-tenant-kontak" placeholder="Nama keluarga / hubungan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
           </div>
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">HP Darurat</label>
@@ -1203,6 +1203,37 @@
           Simpan Pembaruan
         </button>
       </form>
+    </div>
+  </div>
+
+  <!-- MODAL: UNDANG CALON PENYEWA VIA WHATSAPP -->
+  <div id="undang-wa-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg animate-fade-in">
+      <div class="p-5 border-b border-slate-100 flex items-start justify-between gap-3">
+        <div>
+          <h3 class="font-extrabold text-slate-900 text-base flex items-center gap-2"><i class="fab fa-whatsapp text-emerald-500"></i> Undang Calon Penyewa</h3>
+          <p class="text-[11px] text-slate-400 mt-1">Kirim permintaan data lewat WhatsApp. Balasannya nanti dimasukkan lewat tombol "Dari WhatsApp".</p>
+        </div>
+        <button type="button" onclick="tutupUndangWa()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nomor WhatsApp calon penyewa</label>
+          <input id="undang-hp" type="tel" inputmode="tel" oninput="ubahTeksUndangan()" placeholder="0812xxxxxxx" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm transition">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Pesan yang dikirim</label>
+          <textarea id="undang-teks" rows="8" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-emerald-500 text-xs leading-relaxed"></textarea>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" onclick="salinTeksUndangan()" class="flex-1 px-3 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition">
+            <i class="fas fa-copy mr-1"></i> Salin teks
+          </button>
+          <button type="button" id="undang-kirim" onclick="bukaWaUndangan()" disabled class="flex-1 px-3 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed">
+            <i class="fab fa-whatsapp mr-1"></i> Buka WhatsApp
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -2680,15 +2711,42 @@
       m.classList.remove('flex'); m.classList.add('hidden');
     }
 
-    // Tautan undangan WA untuk dikirim ke calon penyewa
-    function salinTautanUndangan() {
-      const teks = 'Halo, terima kasih tertarik tinggal di Kost Hade.\n\nUntuk pendaftaran, mohon kirim data berikut ya:\n1. Nama lengkap\n2. Nomor WhatsApp\n3. Kontak darurat (nama)\n4. HP kontak darurat\n5. Tanggal rencana masuk\n6. Foto KTP\n\nCukup balas pesan ini. Terima kasih.\n- Admin Kost Hade';
-      const hp = window.prompt('Nomor WhatsApp calon penyewa (kosongkan untuk hanya menyalin teks):', '');
-      if (hp === null) return;
-      const nomor = String(hp).replace(/[^0-9]/g, '').replace(/^0/, '62');
-      const url = nomor ? `https://wa.me/${nomor}?text=${encodeURIComponent(teks)}` : null;
-      if (url) window.open(url, '_blank', 'noopener');
-      else { navigator.clipboard && navigator.clipboard.writeText(teks); showCustomAlert('Teks Disalin', 'Teks permintaan data sudah disalin. Tempel ke WhatsApp siapa pun.', true); }
+    // ===== Undang calon penyewa lewat WhatsApp (satu alur, tanpa prompt tersembunyi) =====
+    const TEKS_UNDANGAN = 'Halo, terima kasih tertarik tinggal di Kost Hade.\n\nUntuk pendaftaran, mohon kirim data berikut ya:\n1. Nama lengkap\n2. Nomor WhatsApp\n3. Kontak darurat (nama)\n4. HP kontak darurat\n5. Tanggal rencana masuk\n6. Foto KTP\n\nCukup balas pesan ini. Terima kasih.\n- Admin Kost Hade';
+
+    function bukaUndangWa() {
+      const m = document.getElementById('undang-wa-modal');
+      document.getElementById('undang-hp').value = '';
+      document.getElementById('undang-teks').value = TEKS_UNDANGAN;
+      document.getElementById('undang-kirim').disabled = true;
+      m.classList.remove('hidden'); m.classList.add('flex');
+      setTimeout(() => document.getElementById('undang-hp').focus(), 120);
+    }
+    function tutupUndangWa() {
+      const m = document.getElementById('undang-wa-modal');
+      m.classList.remove('flex'); m.classList.add('hidden');
+    }
+    function ubahTeksUndangan() {
+      document.getElementById('undang-kirim').disabled = !document.getElementById('undang-hp').value.replace(/[^0-9]/g, '');
+    }
+    function bukaWaUndangan() {
+      const nomor = document.getElementById('undang-hp').value.replace(/[^0-9]/g, '').replace(/^0/, '62').replace(/^8/, '628');
+      const teks = document.getElementById('undang-teks').value;
+      if (!nomor) { showCustomAlert('Nomor Belum Diisi', 'Isi nomor WhatsApp calon penyewa dulu.', false); return; }
+      window.open(`https://wa.me/${nomor}?text=${encodeURIComponent(teks)}`, '_blank');
+      tutupUndangWa();
+    }
+    async function salinTeksUndangan() {
+      const teks = document.getElementById('undang-teks').value;
+      try {
+        await navigator.clipboard.writeText(teks);
+        showCustomAlert('Teks Disalin', 'Tempel teks ini di WhatsApp mana pun, lalu kirim.', true);
+      } catch (err) {
+        // clipboard diblokir browser: pilih teksnya supaya bisa di-copy manual
+        const ta = document.getElementById('undang-teks');
+        ta.focus(); ta.select();
+        showCustomAlert('Salin Manual', 'Teks sudah diblok. Tekan Ctrl+C (atau salin dari menu HP) untuk menyalin.', true);
+      }
     }
 
     const LABEL_WA = {
