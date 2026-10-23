@@ -1012,9 +1012,7 @@
                   <h4 class="font-extrabold text-slate-800 text-sm mb-1">Kosongkan Semua Log Transaksi</h4>
                   <p class="text-xs text-slate-400 leading-relaxed">Menghapus seluruh history Pembayaran Penghuni dan Buku Ledger Operasional. Unit Kamar dan Kategori akun Anda tetap aman, namun seluruh kamar otomatis dikosongkan (Tersedia).</p>
                 </div>
-                <button onclick="confirmReset('transaksi')" class="w-full md:w-auto px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-xl font-bold text-xs transition whitespace-nowrap">
-                  Reset Transaksi
-                </button>
+                <span class="text-[11px] font-bold text-slate-400 poin-mati">Dinonaktifkan — minta admin sistem</span>
               </div>
 
               <!-- OPTION 2: FULL DATA FACTORY RESET -->
@@ -1023,9 +1021,7 @@
                   <h4 class="font-extrabold text-rose-800 text-sm mb-1">Setelan Pabrik (Full Factory Reset)</h4>
                   <p class="text-xs text-rose-400 leading-relaxed">Menghapus mutlak seluruh database lokal Kost Hade (Kategori, Unit Kamar, Penyewa, & Transaksi) dan menyetel ulang guesthouse ke kondisi demo bawaan awal aplikasi.</p>
                 </div>
-                <button onclick="confirmReset('total')" class="w-full md:w-auto px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs transition whitespace-nowrap shadow-md shadow-red-500/10">
-                  Factory Reset
-                </button>
+                <span class="text-[11px] font-bold text-slate-400 poin-mati">Dinonaktifkan — minta admin sistem</span>
               </div>
             </div>
           </div>
@@ -1109,13 +1105,13 @@
           <div>
             <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Status Kontrak</label>
             <select id="edit-tenant-status" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
-              <option value="Aktif">Aktif</option>
-              <option value="Keluar">Keluar (Check-out)</option>
+              <option value="aktif">Aktif</option>
+              <option value="keluar">Keluar (Check-out)</option>
             </select>
           </div>
           <div>
-            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tenggat Jatuh Tempo</label>
-            <input type="date" id="edit-tenant-tempo" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition font-bold">
+            <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tenggat Jatuh Tempo (tagihan)</label>
+            <input type="date" id="edit-tenant-tempo" disabled class="w-full p-3 bg-slate-100 border border-slate-100 rounded-xl text-slate-500 outline-none text-sm transition font-bold cursor-not-allowed" title="Jatuh tempo mengikuti tagihan. Batalkan pembayaran bila perlu mengulang siklus tagihan.">
           </div>
         </div>
         <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm mt-2">
@@ -1188,6 +1184,29 @@
     // Custom Callback Placeholder for Confirmation Modal Actions
     let modalConfirmCallback = null;
 
+    // Escape SEMUA data dari server sebelum masuk innerHTML (nama penyewa, keterangan, dsb.
+    // bisa berisi <script> atau tanda kutip yang merusak onclick).
+    function esc(v) {
+      return String(v === null || v === undefined ? '' : v)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // Angka rupiah dengan format Indonesia yang konsisten
+    const rp = (v) => 'Rp ' + Number(String(v === null || v === undefined ? 0 : v).replace(/[^0-9-]/g, '') || 0).toLocaleString('id-ID');
+
+    // Aksi tabel memakai data-* + satu listener (bukan onclick inline) supaya nama berkutip
+    // seperti O'Brien tidak mematikan tombol dan tidak bisa menyuntik JS.
+    window.__aksi = {};
+    function daftarAksi(id, fn) { window.__aksi[id] = fn; }
+    document.addEventListener('click', (e) => {
+      const el = e.target.closest('[data-aksi]');
+      if (!el) return;
+      const fn = window.__aksi[el.getAttribute('data-aksi')];
+      if (!fn) return;
+      e.preventDefault();
+      fn(el.dataset);
+    });
+
     // Categories structure loaded dynamically
     let categoryOptions = {
       Pengeluaran: [],
@@ -1195,18 +1214,29 @@
       Neraca: []
     };
 
-    function refreshCategoryOptions() {
-      categoryOptions = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
-      if (window.HADE) {
-        HADE.handlers.getCategories().then(data => {
-          categoryOptions = data;
-          if (typeof refreshCategorySelect === 'function') refreshCategorySelect();
-        }).catch(err => console.warn('[hade] kategori', err));
-      }
+    // Muat kategori lalu ISI ulang dropdown langsung (dulu memanggil refreshCategorySelect
+    // yang tidak ada -> form transaksi bisa berakhir tanpa opsi sama sekali).
+    function refreshCategoryOptions(selesai) {
+      if (!window.HADE) return Promise.resolve();
+      return HADE.handlers.getCategories().then(data => {
+        categoryOptions = data;
+        isiKategoriTransaksi();
+        if (typeof selesai === 'function') selesai();
+      }).catch(err => console.warn('[hade] kategori', err));
     }
 
-    // Run dynamic category init
-    refreshCategoryOptions();
+    function isiKategoriTransaksi() {
+      const select = document.getElementById('trans-kategori');
+      const jenisEl = document.getElementById('trans-jenis');
+      if (!select || !jenisEl) return;
+      // nilai <select> = "Pengeluaran"/"Pendapatan"/"Neraca" (kunci categoryOptions)
+      const daftar = categoryOptions[jenisEl.value] || [];
+      select.innerHTML = daftar.length
+        ? daftar.map(cat => `<option value="${esc(cat.nama)}">${esc(cat.nama)} (${cat.saldoNormal === 'Debet' ? 'D' : 'K'})</option>`).join('')
+        : '<option value="">-- Tidak ada kategori --</option>';
+    }
+
+    // Kategori dimuat setelah login (lihat handleLoginSubmit) — sebelum login endpoint ini 401.
 
     function togglePasswordVisibility() {
       const passwordInput = document.getElementById('login-password');
@@ -1239,6 +1269,7 @@
           document.getElementById('app-container').classList.remove('hidden');
           document.getElementById('app-container').classList.add('flex');
           applyUserRoleUI();
+          refreshCategoryOptions();
           showSection('dashboard', document.querySelector('#sidebar-nav button'));
         })
         .catch(err => {
@@ -1346,6 +1377,20 @@
       } finally { showLoading(false); }
     }
 
+    // Pemetaan tombol tabel -> fungsi yang sudah ada
+    daftarAksi('struk', (d) => viewReceipt(d.tgl, d.nama, d.kamar, Number(d.jumlah || 0), d.ket, d.struk || d.no));
+    daftarAksi('edit-kamar', (d) => openEditRoomModal(d.no, d.tipe, d.bulanan, d.harian));
+    daftarAksi('hapus-kamar', (d) => promptDeleteRoom(d.no, d.status));
+    daftarAksi('edit-penyewa', (d) => openEditTenantModal(d.kode, d.nama, d.hp, d.kamar, d.masuk, d.status, d.tempo));
+    daftarAksi('hapus-penyewa', (d) => promptDeleteTenant(d.kode, d.nama, d.kamar, d.status));
+    daftarAksi('checkout', (d) => promptTenantCheckout(d.kode, d.nama, d.kamar));
+    daftarAksi('bayar-cepat', (d) => quickPayPort(d.nama, d.kamar));
+    daftarAksi('void-ledger', (d) => promptDeleteOpsTransaction(d.id, d.ket));
+    daftarAksi('edit-user', (d) => startEditUser(d.id, d.username, d.fullname, d.role));
+    daftarAksi('hapus-user', (d) => promptDeleteUser(d.id, d.fullname, d.username));
+    daftarAksi('edit-kategori', (d) => startEditCategory(d.id, d.jenis, d.nama, d.saldo));
+    daftarAksi('hapus-kategori', (d) => promptDeleteCategory(d.id, d.nama));
+
     // Toggle simulator user sessions menu
     function toggleUserDropdown(event) {
       event.stopPropagation();
@@ -1425,14 +1470,16 @@
       const modal = document.getElementById('custom-modal');
       modal.classList.remove('flex');
       modal.classList.add('hidden');
+      // tombol Batal / X WAJIB membatalkan aksi — dulu callback tetap tersimpan dan
+      // ikut jalan saat tombol OK modal berikutnya diklik.
+      modalConfirmCallback = null;
     }
 
     // Modal Confirmation Execution Hook
     document.getElementById('modal-confirm-btn').addEventListener('click', () => {
-      if (modalConfirmCallback) {
-        modalConfirmCallback();
-        modalConfirmCallback = null;
-      }
+      const cb = modalConfirmCallback;
+      modalConfirmCallback = null;
+      if (cb) cb();
     });
 
     function showLoading(show) { 
@@ -1463,14 +1510,10 @@
 
     // POPULATE CATEGORY DROPDOWN DYNAMICALLY
     function handleTransTypeChange() {
-      refreshCategoryOptions(); // Sync latest category lists
-      const type = document.getElementById('trans-jenis').value;
-      const selectKategori = document.getElementById('trans-kategori');
-      if (categoryOptions[type]) {
-        selectKategori.innerHTML = categoryOptions[type].map(cat => `<option value="${cat.nama}">${cat.nama} (${cat.saldoNormal === 'Debet' ? 'D' : 'K'})</option>`).join('');
-      } else {
-        selectKategori.innerHTML = `<option value="">-- Tidak ada kategori --</option>`;
-      }
+      // isi dari cache dulu (sinkron), baru segarkan dari server di belakang
+      isiKategoriTransaksi();
+      const kunci = document.getElementById('trans-jenis').value;
+      if (!(categoryOptions[kunci] || []).length) refreshCategoryOptions();
     }
 
     // SUB-TAB TRANS-OPS SWITCHER
@@ -1552,15 +1595,15 @@
         .withFailureHandler(handleError)
         .withSuccessHandler(responseString => {
           cachedData = JSON.parse(responseString);
-          cachedData.ops = (window.__hadeOps || []).map(o => [o[1], o[3], '', '', o[4]]);
+          cachedData.ops = window.__hadeOps || [];      // [id,tgl,jenis,kategori,jumlah,ket]
           renderDashboard(cachedData);
           showLoading(false);
         }).getDashboardData();
-      // muat transaksi ledger lengkap untuk laporan
+      // muat transaksi ledger lengkap untuk laporan (bentuk array sesuai server)
       if (window.HADE) {
         HADE.handlers.getOpsRows().then(rows => {
-          window.__hadeOps = rows.map(r => [r.id, r.tanggal, r.jenis, r.kategori, String(r.jumlah), r.keterangan || '']);
-          if (cachedData) { cachedData.ops = window.__hadeOps.map(o => [o[1], o[3], '', '', o[4]]); }
+          window.__hadeOps = (rows || []).map(r => [r[0], r[1], r[2], r[3], String(r[4]), r[5] || '']);
+          if (cachedData) { cachedData.ops = window.__hadeOps; }
         }).catch(err => console.warn('[hade] ledger', err));
       }
     }
@@ -1605,14 +1648,20 @@
     function generateSelectedReport() {
       const selMonth = parseInt(document.getElementById('filter-laporan-bulan').value);
       const selYear = parseInt(document.getElementById('filter-laporan-tahun').value);
-      
       const targetDiv = document.getElementById('financial-report-content');
-      
-      // Load and consolidate transaction arrays (dari cache dashboard; angka dihitung di DB)
-      const tenantPayments = (cachedData && cachedData.transaksi) || [];
-      const opsTransactions = (cachedData && cachedData.ops) || [];
-      const rooms = (cachedData && cachedData.kamar) || [];
-      const tenants = (cachedData && cachedData.penyewa) || [];
+
+      if (!cachedData) {
+        // buka menu Laporan langsung setelah login: muat dulu, lalu render ulang
+        targetDiv.innerHTML = '<div class="py-16 text-center text-slate-400 text-sm italic">Memuat data laporan…</div>';
+        loadDashboard();
+        return;
+      }
+
+      // Array dari server: [id, tanggal, jenis, kategori, jumlah, keterangan]
+      const tenantPayments = cachedData.transaksi || [];
+      const opsTransactions = cachedData.ops || [];
+      const rooms = cachedData.kamar || [];
+      const tenants = cachedData.penyewa || [];
 
       // MONTH NAMES ARRAY
       const indonesianMonths = [
@@ -1695,18 +1744,16 @@
 
       if (activeReportTab === 'rugi-laba') {
         // --- 1. LAPORAN RUGI LABA ---
-        // Group Expenses by Categories
-        refreshCategoryOptions();
+        // Group Expenses by Categories — dari transaksi itu sendiri, supaya kategori baru
+        // (yang belum ada di cache) tetap muncul di barisnya sendiri, bukan dilempar ke "Lain-lain".
         const expenseGroups = {};
         categoryOptions.Pengeluaran.forEach(cat => expenseGroups[cat.nama] = 0);
         monthlyOps.filter(o => o[2] === 'Pengeluaran').forEach(o => {
-          if (expenseGroups[o[3]] !== undefined) {
-            expenseGroups[o[3]] += Number(o[4]) || 0;
-          } else {
-            if (!expenseGroups["Biaya Lain-lain"]) expenseGroups["Biaya Lain-lain"] = 0;
-            expenseGroups["Biaya Lain-lain"] += Number(o[4]) || 0;
-          }
+          const nama = o[3] || 'Biaya Lain-lain';
+          expenseGroups[nama] = (expenseGroups[nama] || 0) + (Number(o[4]) || 0);
         });
+        // sembunyikan baris kategori bernilai 0
+        Object.keys(expenseGroups).forEach(k => { if (!expenseGroups[k]) delete expenseGroups[k]; });
 
         targetDiv.innerHTML = `
           <div class="text-center mb-8 border-b border-slate-100 pb-6">
@@ -1721,15 +1768,15 @@
               <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">I. Pendapatan Operasional</h4>
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
                 <span class="text-slate-600 font-medium">Pendapatan Sewa Kamar</span>
-                <span class="font-bold text-slate-900">Rp ${activeMonthlyRentIncome.toLocaleString()}</span>
+                <span class="font-bold text-slate-900">${rp(activeMonthlyRentIncome)}</span>
               </div>
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg border-b border-slate-100">
                 <span class="text-slate-600 font-medium">Pendapatan Lain-lain (Auxiliary)</span>
-                <span class="font-bold text-slate-900">Rp ${activeMonthlyOpsIncome.toLocaleString()}</span>
+                <span class="font-bold text-slate-900">${rp(activeMonthlyOpsIncome)}</span>
               </div>
               <div class="flex justify-between py-3 px-2 bg-emerald-50 text-emerald-800 rounded-xl font-extrabold mt-3">
                 <span>TOTAL PENDAPATAN</span>
-                <span>Rp ${totalMonthlyIncome.toLocaleString()}</span>
+                <span>${rp(totalMonthlyIncome)}</span>
               </div>
             </div>
 
@@ -1740,13 +1787,13 @@
                 ${Object.entries(expenseGroups).map(([cat, val]) => `
                   <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                     <span class="text-slate-500">${cat}</span>
-                    <span class="font-semibold text-slate-800">Rp ${val.toLocaleString()}</span>
+                    <span class="font-semibold text-slate-800">${rp(val)}</span>
                   </div>
                 `).join('')}
               </div>
               <div class="flex justify-between py-3 px-2 bg-rose-50 text-rose-800 rounded-xl font-extrabold mt-4">
                 <span>TOTAL BEBAN OPERASIONAL</span>
-                <span>Rp ${activeMonthlyOpsExpenses.toLocaleString()}</span>
+                <span>${rp(activeMonthlyOpsExpenses)}</span>
               </div>
             </div>
 
@@ -1754,7 +1801,7 @@
             <div class="pt-4 border-t border-slate-300">
               <div class="flex justify-between py-4 px-3 ${netMonthlyIncome >= 0 ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white' : 'bg-rose-600 text-white'} rounded-2xl font-black text-base shadow-md">
                 <span>LABA (RUGI) BERSIH</span>
-                <span class="double-underline text-lg">Rp ${netMonthlyIncome.toLocaleString()}</span>
+                <span class="double-underline text-lg">${rp(netMonthlyIncome)}</span>
               </div>
             </div>
           </div>
@@ -1774,20 +1821,20 @@
               <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">Arus Kas Masuk (Inflow)</h4>
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
                 <span class="text-slate-600 font-medium">Penerimaan Pembayaran Sewa Kamar</span>
-                <span class="font-semibold text-slate-800">Rp ${activeMonthlyRentIncome.toLocaleString()}</span>
+                <span class="font-semibold text-slate-800">${rp(activeMonthlyRentIncome)}</span>
               </div>
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
                 <span class="text-slate-600 font-medium">Penerimaan Pendapatan Lain-lain</span>
-                <span class="font-semibold text-slate-800">Rp ${activeMonthlyOpsIncome.toLocaleString()}</span>
+                <span class="font-semibold text-slate-800">${rp(activeMonthlyOpsIncome)}</span>
               </div>
               ${activeMonthlyNeracaInflow > 0 ? `
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg text-blue-600">
                 <span class="font-medium">Penerimaan Modal / Deposit (Neraca)</span>
-                <span class="font-semibold">Rp ${activeMonthlyNeracaInflow.toLocaleString()}</span>
+                <span class="font-semibold">${rp(activeMonthlyNeracaInflow)}</span>
               </div>` : ''}
               <div class="flex justify-between py-2 px-2 font-bold text-emerald-600 border-t border-slate-100 mt-2">
                 <span>Subtotal Kas Masuk</span>
-                <span>Rp ${totalMonthlyInflow.toLocaleString()}</span>
+                <span>${rp(totalMonthlyInflow)}</span>
               </div>
             </div>
 
@@ -1796,16 +1843,16 @@
               <h4 class="font-bold text-slate-900 border-b border-slate-300 pb-1 mb-3 uppercase tracking-wider text-xs">Arus Kas Keluar (Outflow)</h4>
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
                 <span class="text-slate-600 font-medium">Pembayaran Beban Operasional Bulanan</span>
-                <span class="font-semibold text-rose-600">Rp ${activeMonthlyOpsExpenses.toLocaleString()}</span>
+                <span class="font-semibold text-rose-600">${rp(activeMonthlyOpsExpenses)}</span>
               </div>
               ${activeMonthlyNeracaOutflow > 0 ? `
               <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg text-rose-500">
                 <span class="font-medium">Pembelian Aset / Prive / Refund (Neraca)</span>
-                <span class="font-semibold">Rp ${activeMonthlyNeracaOutflow.toLocaleString()}</span>
+                <span class="font-semibold">${rp(activeMonthlyNeracaOutflow)}</span>
               </div>` : ''}
               <div class="flex justify-between py-2 px-2 font-bold text-rose-600 border-t border-slate-100 mt-2">
                 <span>Subtotal Kas Keluar</span>
-                <span>Rp ${totalMonthlyOutflow.toLocaleString()}</span>
+                <span>${rp(totalMonthlyOutflow)}</span>
               </div>
             </div>
 
@@ -1817,18 +1864,18 @@
                 <div class="flex justify-between py-2 px-2 bg-slate-50 rounded-lg">
                   <span class="text-slate-500 font-medium">Arus Kas Bersih (Kenaikan / Penurunan Kas)</span>
                   <span class="font-bold ${netMonthlyCashFlow >= 0 ? 'text-emerald-600' : 'text-rose-600'}">
-                    Rp ${netMonthlyCashFlow.toLocaleString()}
+                    ${rp(netMonthlyCashFlow)}
                   </span>
                 </div>
                 
                 <div class="flex justify-between py-2 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span class="text-slate-500">Saldo Kas Awal Periode</span>
-                  <span class="font-semibold text-slate-800">Rp ${cumulativeCashPrior.toLocaleString()}</span>
+                  <span class="font-semibold text-slate-800">${rp(cumulativeCashPrior)}</span>
                 </div>
 
                 <div class="flex justify-between py-3.5 px-3 bg-slate-800 text-white rounded-xl font-bold text-sm">
                   <span>SALDO KAS AKHIR PERIODE</span>
-                  <span class="double-underline">Rp ${cumulativeCashEnd.toLocaleString()}</span>
+                  <span class="double-underline">${rp(cumulativeCashEnd)}</span>
                 </div>
               </div>
             </div>
@@ -1892,11 +1939,11 @@
                 <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">A. Aset Lancar</p>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Kas dan Setara Kas</span>
-                  <span class="font-semibold text-slate-800">Rp ${cumulativeCashEnd.toLocaleString()}</span>
+                  <span class="font-semibold text-slate-800">${rp(cumulativeCashEnd)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
                   <span>Total Aset Lancar</span>
-                  <span>Rp ${cumulativeCashEnd.toLocaleString()}</span>
+                  <span>${rp(cumulativeCashEnd)}</span>
                 </div>
               </div>
 
@@ -1905,21 +1952,21 @@
                 <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">B. Aset Tetap</p>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Bangunan & Inventaris Guesthouse</span>
-                  <span class="font-semibold text-slate-800">Rp ${assetLandBuildingVal.toLocaleString()}</span>
+                  <span class="font-semibold text-slate-800">${rp(assetLandBuildingVal)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg text-rose-600">
                   <span>Akumulasi Penyusutan Aset Tetap</span>
-                  <span class="font-semibold">Rp ${accumulatedDepreciation.toLocaleString()}</span>
+                  <span class="font-semibold">${rp(accumulatedDepreciation)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
                   <span>Total Aset Tetap (Net)</span>
-                  <span>Rp ${netFixedAssets.toLocaleString()}</span>
+                  <span>${rp(netFixedAssets)}</span>
                 </div>
               </div>
 
               <div class="flex justify-between py-3 px-3 bg-blue-50 text-blue-900 rounded-xl font-extrabold text-sm border border-blue-100">
                 <span>TOTAL AKTIVA (ASET)</span>
-                <span>Rp ${totalAssets.toLocaleString()}</span>
+                <span>${rp(totalAssets)}</span>
               </div>
             </div>
 
@@ -1932,11 +1979,11 @@
                 <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">A. Kewajiban Jangka Pendek</p>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Kewajiban Deposit Jaminan Penghuni</span>
-                  <span class="font-semibold text-slate-800">Rp ${depositLiabilities.toLocaleString()}</span>
+                  <span class="font-semibold text-slate-800">${rp(depositLiabilities)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
                   <span>Total Kewajiban</span>
-                  <span>Rp ${depositLiabilities.toLocaleString()}</span>
+                  <span>${rp(depositLiabilities)}</span>
                 </div>
               </div>
 
@@ -1945,30 +1992,34 @@
                 <p class="font-bold text-slate-500 text-[10px] uppercase mb-2">B. Ekuitas Pemilik</p>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Modal Disetor Pemilik</span>
-                  <span class="font-semibold text-slate-800">Rp ${startingEquityCapital.toLocaleString()}</span>
+                  <span class="font-semibold text-slate-800">${rp(startingEquityCapital)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Laba Ditahan & Berjalan</span>
-                  <span class="font-semibold text-slate-800">Rp ${retainedEarnings.toLocaleString()}</span>
+                  <span class="font-semibold text-slate-800">${rp(retainedEarnings)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
                   <span>Total Ekuitas</span>
-                  <span>Rp ${totalEquity.toLocaleString()}</span>
+                  <span>${rp(totalEquity)}</span>
                 </div>
               </div>
 
               <div class="flex justify-between py-3 px-3 bg-emerald-50 text-emerald-900 rounded-xl font-extrabold text-sm border border-emerald-100">
                 <span>TOTAL PASIVA (KEWAJIBAN & EKUITAS)</span>
-                <span>Rp ${totalLiabilitiesEquity.toLocaleString()}</span>
+                <span>${rp(totalLiabilitiesEquity)}</span>
               </div>
             </div>
           </div>
 
-          <!-- BALANCED INDICATOR STAMP -->
+          <!-- BALANCED INDICATOR: dihitung, bukan dicap begitu saja -->
           <div class="mt-8 flex justify-center">
+            ${Math.abs(totalAssets - totalLiabilitiesEquity) < 1 ? `
             <span class="px-4 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
-              <i class="fas fa-check-double animate-pulse"></i> Balance sheet verified
-            </span>
+              <i class="fas fa-check-double"></i> Neraca seimbang
+            </span>` : `
+            <span class="px-4 py-1.5 bg-rose-100 text-rose-800 border border-rose-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
+              <i class="fas fa-triangle-exclamation"></i> Selisih ${(totalAssets - totalLiabilitiesEquity).toLocaleString('id-ID')}
+            </span>`}
           </div>
         `;
       }
@@ -2054,11 +2105,11 @@
                   <i class="fas fa-exclamation-triangle"></i>
                 </div>
                 <div>
-                  <h4 class="font-extrabold text-slate-900 text-xs md:text-sm">${p[1]} <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[9px] font-black uppercase">${p[3]}</span></h4>
+                  <h4 class="font-extrabold text-slate-900 text-xs md:text-sm">${esc(p[1])} <span class="px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[9px] font-black uppercase">${esc(p[3])}</span></h4>
                   <p class="text-[11px] text-rose-600 font-bold mt-0.5"><i class="far fa-clock mr-1"></i>Status: Menunggak ${lateDays} Hari (Batas: ${dueStr})</p>
                 </div>
               </div>
-              <button onclick="quickPayPort('${p[1]}', '${p[3]}')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition shadow-sm">
+              <button data-aksi="bayar-cepat" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition shadow-sm">
                 Catat Bayar
               </button>
             </div>
@@ -2073,11 +2124,11 @@
                   <i class="fas fa-bell"></i>
                 </div>
                 <div>
-                  <h4 class="font-extrabold text-slate-900 text-xs md:text-sm">${p[1]} <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-black uppercase">${p[3]}</span></h4>
+                  <h4 class="font-extrabold text-slate-900 text-xs md:text-sm">${esc(p[1])} <span class="px-2 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-black uppercase">${esc(p[3])}</span></h4>
                   <p class="text-[11px] text-amber-600 font-bold mt-0.5"><i class="far fa-hourglass mr-1"></i>Jatuh Tempo: Sisa ${diffDays} Hari (Batas: ${dueStr})</p>
                 </div>
               </div>
-              <button onclick="quickPayPort('${p[1]}', '${p[3]}')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition shadow-sm">
+              <button data-aksi="bayar-cepat" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition shadow-sm">
                 Catat Bayar
               </button>
             </div>
@@ -2113,11 +2164,11 @@
       document.getElementById('stat-total-penyewa').innerText = data.stats.totalPenyewa;
       
       // Sisa Saldo Kas (Net Profit)
-      document.getElementById('stat-pendapatan').innerText = "Rp " + data.stats.sisaKas.toLocaleString();
+      document.getElementById('stat-pendapatan').innerText = rp(data.stats.sisaKas);
       
       // Unified financial summary panel updates
-      document.getElementById('sum-total-pendapatan').innerText = "Rp " + data.stats.totalPendapatan.toLocaleString();
-      document.getElementById('sum-total-pengeluaran').innerText = "Rp " + data.stats.totalPengeluaran.toLocaleString();
+      document.getElementById('sum-total-pendapatan').innerText = rp(data.stats.totalPendapatan);
+      document.getElementById('sum-total-pengeluaran').innerText = rp(data.stats.totalPengeluaran);
       
       // Calculate & update occupancy percentages & bars
       const rawPercentage = data.stats.totalKamar > 0 ? (data.stats.kamarTerisi / data.stats.totalKamar) * 100 : 0;
@@ -2138,13 +2189,13 @@
           return `
             <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700">
               <td class="py-3 px-6 text-center font-bold text-slate-400 text-xs">${idx + 1}</td>
-              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">${t[0]}</td>
-              <td class="py-3 px-4 font-bold text-xs md:text-sm text-slate-900">${t[1]}</td>
-              <td class="py-3 px-4"><span class="bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tight">${t[2]}</span></td>
-              <td class="py-3 px-4 text-emerald-600 font-extrabold text-xs md:text-sm whitespace-nowrap">Rp ${Number(angkaBersih).toLocaleString()}</td>
-              <td class="py-3 px-4 text-xs text-slate-500 max-w-[180px] truncate" title="${t[4]}">${t[4]}</td>
+              <td class="py-3 px-4 text-xs text-slate-500 whitespace-nowrap">${esc(t[0])}</td>
+              <td class="py-3 px-4 font-bold text-xs md:text-sm text-slate-900">${esc(t[1])}</td>
+              <td class="py-3 px-4"><span class="bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tight">${esc(t[2])}</span></td>
+              <td class="py-3 px-4 text-emerald-600 font-extrabold text-xs md:text-sm whitespace-nowrap">${rp(angkaBersih)}</td>
+              <td class="py-3 px-4 text-xs text-slate-500 max-w-[180px] truncate" title="${esc(t[4])}">${esc(t[4])}</td>
               <td class="py-3 px-6 text-center">
-                <button onclick="viewReceipt('${t[0]}', '${t[1]}', '${t[2]}', ${angkaBersih}, '${t[4]}')" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-rose-600 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat Struk">
+                <button data-aksi="struk" data-tgl="${esc(t[0])}" data-nama="${esc(t[1])}" data-kamar="${esc(t[2])}" data-jumlah="${angkaBersih}" data-ket="${esc(t[4])}" data-no="${esc(t[5] || '')}" data-struk="${esc(String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/) ? String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/)[0] : '')}" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-rose-600 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat Struk">
                   <i class="fas fa-file-invoice text-xs"></i>
                 </button>
               </td>
@@ -2180,26 +2231,26 @@
           <div class="bg-white p-5 rounded-2xl shadow-sm border-t-4 ${isOccupied ? 'border-t-blue-500' : 'border-t-rose-500'} transition duration-250 hover:shadow-md flex flex-col justify-between h-52 premium-card border border-slate-100">
             <div>
               <div class="flex justify-between items-center mb-3">
-                <span class="text-xl font-black text-slate-800">${k[0]}</span>
+                <span class="text-xl font-black text-slate-800">${esc(k[0])}</span>
                 <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${isOccupied ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}">${k[4]}</span>
               </div>
-              <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">${k[1]}</p>
+              <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">${esc(k[1])}</p>
               <div class="space-y-1">
-                <p class="text-xs font-semibold text-slate-500">Bln: <span class="text-rose-600 font-extrabold text-sm">Rp ${Number(bulananClean).toLocaleString()}</span></p>
-                <p class="text-xs font-semibold text-slate-500">Har: <span class="text-blue-600 font-extrabold text-sm">Rp ${Number(harianClean).toLocaleString()}</span></p>
+                <p class="text-xs font-semibold text-slate-500">Bln: <span class="text-rose-600 font-extrabold text-sm">${rp(bulananClean)}</span></p>
+                <p class="text-xs font-semibold text-slate-500">Har: <span class="text-blue-600 font-extrabold text-sm">${rp(harianClean)}</span></p>
               </div>
             </div>
             <div class="pt-3 border-t border-slate-100 text-xs flex justify-between items-center mt-3">
               <div class="flex-1 min-w-0 pr-2">
                 ${isOccupied 
-                  ? `<p class="text-slate-600 font-semibold truncate" title="${k[5]}"><i class="fas fa-user-circle mr-1.5 text-blue-500"></i>${k[5]}</p>` 
+                  ? `<p class="text-slate-600 font-semibold truncate" title="${esc(k[5])}"><i class="fas fa-user-circle mr-1.5 text-blue-500"></i>${esc(k[5])}</p>` 
                   : `<span class="text-rose-500 italic font-medium"><i class="fas fa-check-circle mr-1 text-rose-500"></i> Siap Disewa</span>`}
               </div>
               <div class="flex gap-1.5 shrink-0">
-                <button onclick="openEditRoomModal('${k[0]}', '${k[1]}', '${k[2]}', '${k[3]}')" class="w-7 h-7 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Edit Kamar">
+                <button data-aksi="edit-kamar" data-no="${esc(k[0])}" data-tipe="${esc(k[1])}" data-bulanan="${esc(k[2])}" data-harian="${esc(k[3])}" class="w-7 h-7 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Edit Kamar">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteRoom('${k[0]}', '${k[4]}')" class="w-7 h-7 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100 btn-delete-action" title="Hapus Kamar">
+                <button data-aksi="hapus-kamar" data-no="${esc(k[0])}" data-status="${esc(k[4])}" class="w-7 h-7 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100 btn-delete-action" title="Hapus Kamar">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -2286,40 +2337,40 @@
             <td class="py-4 px-6">
               <div class="flex items-center gap-2.5">
                 <div class="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center font-bold text-slate-500 text-[10px] shrink-0 border border-slate-100">
-                  ${p[0].substring(0, 5)}
+                  ${esc(p[0].substring(0, 5))}
                 </div>
                 <div>
-                  <p class="font-extrabold text-slate-900 leading-tight">${p[1]}</p>
-                  <p class="text-[9px] text-slate-400 font-mono mt-0.5">${p[0]}</p>
+                  <p class="font-extrabold text-slate-900 leading-tight">${esc(p[1])}</p>
+                  <p class="text-[9px] text-slate-400 font-mono mt-0.5">${esc(p[0])}</p>
                 </div>
               </div>
             </td>
             <td class="py-4 px-4">
-              <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 font-black text-[10px] uppercase">${p[3]}</span>
+              <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 font-black text-[10px] uppercase">${esc(p[3])}</span>
             </td>
-            <td class="py-4 px-4 font-medium text-slate-500">${p[2]}</td>
+            <td class="py-4 px-4 font-medium text-slate-500">${esc(p[2])}</td>
             <td class="py-4 px-4 font-medium text-slate-400">
-              <div>${p[4]}</div>
-              ${p[6] ? `<div class="text-[9px] text-rose-500 font-bold mt-0.5">Tempo: ${p[6]}</div>` : ''}
+              <div>${esc(p[4])}</div>
+              ${p[6] ? `<div class="text-[9px] text-rose-500 font-bold mt-0.5">Tempo: ${esc(p[6])}</div>` : ''}
             </td>
             <td class="py-4 px-4">
               <span class="px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${statusActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-400 border border-slate-200'}">
-                ${p[5]}
+                ${esc(p[5])}
               </span>
             </td>
             <td class="py-4 px-6">
               <div class="flex items-center justify-center gap-1.5">
-                <a href="${waLink}" target="_blank" class="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 flex items-center justify-center transition" title="Kirim Pengingat WA">
+                <a href="${waLink}" target="_blank" rel="noopener" class="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 flex items-center justify-center transition" title="Kirim Pengingat WA">
                   <i class="fab fa-whatsapp text-xs"></i>
                 </a>
-                <button onclick="openEditTenantModal('${p[0]}', '${p[1]}', '${p[2]}', '${p[3]}', '${p[4]}', '${p[5]}', '${p[6] || ''}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Penyewa">
+                <button data-aksi="edit-penyewa" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-hp="${esc(p[2])}" data-kamar="${esc(p[3])}" data-masuk="${esc(p[4])}" data-status="${esc(p[5])}" data-tempo="${esc(p[6] || '')}" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Penyewa">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteTenant('${p[0]}', '${p[1]}', '${p[3]}', '${p[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Penyewa">
+                <button data-aksi="hapus-penyewa" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" data-status="${esc(p[5])}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Penyewa">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
                 ${statusActive ? `
-                  <button onclick="promptTenantCheckout('${p[0]}', '${p[1]}', '${p[3]}')" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 text-[9px] font-black tracking-widest uppercase transition btn-delete-action" title="Keluarkan Penyewa / Check-out">
+                  <button data-aksi="checkout" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 text-[9px] font-black tracking-widest uppercase transition btn-delete-action" title="Keluarkan Penyewa / Check-out">
                     Checkout
                   </button>
                 ` : ''}
@@ -2341,7 +2392,9 @@
 
     function loadActiveTenants() {
       if (cachedData) {
-        const tenants = cachedData.penyewa.filter(p => p[5] === 'Aktif').map(p => ({nama: p[1], kamar: p[3]}));
+        // sertakan nominal tagihan (p[7]) & jatuh tempo supaya form bayar bisa mengisi angka yang benar
+        const tenants = cachedData.penyewa.filter(p => p[5] === 'Aktif')
+          .map(p => ({ nama: p[1], kamar: p[3], tagihan: p[7] || '', tempo: p[6] || '' }));
         renderActiveTenants(tenants);
         return;
       }
@@ -2358,7 +2411,7 @@
     function renderActiveTenants(tenants) {
       const select = document.getElementById('select-penyewa');
       select.innerHTML = tenants.length > 0 
-        ? '<option value="">-- Pilih Penyewa --</option>' + tenants.map(t => `<option value="${t.nama}" data-kamar="${t.kamar}">${t.nama} (${t.kamar})</option>`).join('') 
+        ? '<option value="">-- Pilih Penyewa --</option>' + tenants.map(t => `<option value="${esc(t.nama)}" data-kamar="${esc(t.kamar)}" data-tagihan="${esc(t.tagihan || '')}" data-tempo="${esc(t.tempo || '')}">${esc(t.nama)} (${esc(t.kamar)})</option>`).join('') 
         : '<option value="">Tidak ada penyewa aktif</option>';
     }
 
@@ -2388,6 +2441,16 @@
       calculateBilling();
     }
 
+    // 31 Jan + 1 bulan -> 28/29 Feb (Date.setMonth langsung meluber ke 3 Maret)
+    function addBulan(iso, bulan) {
+      const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+      const total = y * 12 + (m - 1) + bulan;
+      const ny = Math.floor(total / 12), nm = (total % 12) + 1;
+      const akhir = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+      const pad = (v) => String(v).padStart(2, '0');
+      return `${ny}-${pad(nm)}-${pad(Math.min(d, akhir))}`;
+    }
+
     // AUTO CALCULATE DATES AND CASH INFLOW ESTIMATES FOR RENTS
     function calculateBilling() {
       const select = document.getElementById('select-penyewa');
@@ -2402,29 +2465,11 @@
       if (!selectedOption || selectedOption.value === "") return;
 
       const kamarNo = selectedOption.getAttribute('data-kamar');
-      // harga dari master kamar (bukan hardcode nomor 106/107 seperti versi lama)
-      const room = (cachedData && cachedData.kamar || []).find(k => k[0] === kamarNo) || [];
-      let basePrice = Number(type === 'Harian' ? (room[3] || 0) : (room[2] || 0));
-      if (!basePrice) basePrice = type === 'Harian' ? 100000 : 1100000;
-
-      // Compute pricing
-      const totalCost = basePrice * durasi;
-      inputJumlah.value = totalCost;
-
-      // Compute due date
-      const payDate = tglBayarStr ? new Date(tglBayarStr) : new Date();
-      if (type === 'Bulanan') {
-        payDate.setMonth(payDate.getMonth() + durasi);
-      } else {
-        payDate.setDate(payDate.getDate() + durasi);
-      }
-
-      const yyyy = payDate.getFullYear();
-      let mm = payDate.getMonth() + 1;
-      let dd = payDate.getDate();
-      if (dd < 10) dd = '0' + dd;
-      if (mm < 10) mm = '0' + mm;
-      const formattedDate = `${yyyy}-${mm}-${dd}`;
+      // Server hanya menerima nominal yang SAMA dengan tagihan terbuka, jadi form menampilkan
+      // tagihan itu (dulu memakai harga kamar/harian -> ditolak 409 saat menyimpan).
+      inputJumlah.value = Number(selectedOption.getAttribute('data-tagihan') || 0);
+      // Jatuh tempo = tagihan nyata dari server (bukan hitungan sendiri dari tanggal bayar)
+      const formattedDate = selectedOption.getAttribute('data-tempo') || addBulan(tglBayarStr || new Date().toLocaleDateString('en-CA'), durasi);
       inputJatuhTempo.value = formattedDate;
 
       // Populate auto description helper
@@ -2461,12 +2506,12 @@
             <td class="py-4 px-6 text-slate-500 whitespace-nowrap">${t[0]}</td>
             <td class="py-4 px-4 font-bold text-slate-900">${t[1]}</td>
             <td class="py-4 px-4">
-              <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-black uppercase">${t[2]}</span>
+              <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-black uppercase">${esc(t[2])}</span>
             </td>
-            <td class="py-4 px-4 font-extrabold text-emerald-600">Rp ${Number(angkaBersih).toLocaleString()}</td>
-            <td class="py-4 px-4 text-slate-500 font-medium">${t[4]}</td>
+            <td class="py-4 px-4 font-extrabold text-emerald-600">${rp(angkaBersih)}</td>
+            <td class="py-4 px-4 text-slate-500 font-medium">${esc(t[4])}</td>
             <td class="py-4 px-6 text-center">
-              <button onclick="viewReceipt('${t[0]}', '${t[1]}', '${t[2]}', ${angkaBersih}, '${t[4]}')" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat/Print Struk">
+              <button data-aksi="struk" data-tgl="${esc(t[0])}" data-nama="${esc(t[1])}" data-kamar="${esc(t[2])}" data-jumlah="${angkaBersih}" data-ket="${esc(t[4])}" data-no="${esc(t[5] || '')}" data-struk="${esc(String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/) ? String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/)[0] : '')}" class="w-8 h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat/Print Struk">
                 <i class="fas fa-file-invoice text-xs"></i>
               </button>
             </td>
@@ -2485,35 +2530,28 @@
     }
 
     // AUTOMATIC DEFAULT PRICING & TYPE HANDLERS
+    // Saran harga hanya untuk kamar yang BELUM ada di database. Kalau nomor kamar sudah terdaftar,
+    // jangan sentuh isian (dulu mengetik ulang nomor saat edit diam-diam mengubah harga kamar).
+    function saranHargaKamar(no, room) {
+      if (!/^\d+$/.test(no) || !room) return;
+      const sudahAda = (cachedData && cachedData.kamar || []).some(k => k[0] === no);
+      if (sudahAda) return;
+      const deluxe = ['106', '107'].includes(no);
+      room.tipe.value = deluxe ? 'Deluxe' : 'Standar';
+      room.bulanan.value = deluxe ? 1250000 : 1100000;
+      room.harian.value = 100000;
+    }
+
     document.querySelector('input[name="noKamar"]').addEventListener('input', function() {
-      const roomVal = this.value.trim();
-      const tipeInput = document.querySelector('input[name="tipe"]');
-      const bulananInput = document.querySelector('input[name="hargaBulanan"]');
-      const harianInput = document.querySelector('input[name="hargaHarian"]');
-      if (roomVal === '106' || roomVal === '107') {
-        tipeInput.value = 'Deluxe';
-        bulananInput.value = 1250000;
-      } else {
-        tipeInput.value = 'Standar';
-        bulananInput.value = 1100000;
-      }
-      harianInput.value = 100000;
+      saranHargaKamar(this.value.trim(), {
+        tipe: document.querySelector('input[name="tipe"]'),
+        bulanan: document.querySelector('input[name="hargaBulanan"]'),
+        harian: document.querySelector('input[name="hargaHarian"]'),
+      });
     });
 
-    document.getElementById('edit-noKamar').addEventListener('input', function() {
-      const roomVal = this.value.trim();
-      const tipeInput = document.getElementById('edit-tipe');
-      const bulananInput = document.getElementById('edit-hargaBulanan');
-      const harianInput = document.getElementById('edit-hargaHarian');
-      if (roomVal === '106' || roomVal === '107') {
-        tipeInput.value = 'Deluxe';
-        bulananInput.value = 1250000;
-      } else {
-        tipeInput.value = 'Standar';
-        bulananInput.value = 1100000;
-      }
-      harianInput.value = 100000;
-    });
+    // (Auto-isi harga saat edit DIHAPUS: mengetik nomor kamar tidak boleh mengubah tipe/harga
+    // yang sudah tersimpan — harga hanya berubah bila diisi manual di form edit.)
 
     // OPEN & CLOSE EDIT TENANT MODAL
     function openEditTenantModal(id, nama, hp, kamar, tglMasuk, status, jatuhTempo) {
@@ -2522,7 +2560,7 @@
       document.getElementById('edit-tenant-hp').value = hp;
       document.getElementById('edit-tenant-old-kamar').value = kamar;
       document.getElementById('edit-tenant-tglmasuk').value = tglMasuk;
-      document.getElementById('edit-tenant-status').value = status;
+      document.getElementById('edit-tenant-status').value = (String(status).toLowerCase() === 'keluar') ? 'keluar' : 'aktif';
       document.getElementById('edit-tenant-tempo').value = jatuhTempo;
 
       const select = document.getElementById('edit-tenant-kamar');
@@ -2633,13 +2671,13 @@
                 ${item[2]}
               </span>
             </td>
-            <td class="py-4 px-4 font-bold text-slate-800">${item[3]}</td>
+            <td class="py-4 px-4 font-bold text-slate-800">${esc(item[3])}</td>
             <td class="py-4 px-4 font-extrabold ${textCol} whitespace-nowrap">
-              ${displaySign} Rp ${Number(item[4]).toLocaleString()}
+              ${displaySign} ${rp(item[4])}
             </td>
-            <td class="py-4 px-4 text-slate-500 font-medium max-w-[200px] truncate" title="${item[5]}">${item[5]}</td>
+            <td class="py-4 px-4 text-slate-500 font-medium max-w-[200px] truncate" title="${esc(item[5])}">${esc(item[5])}</td>
             <td class="py-4 px-6 text-center">
-              <button onclick="promptDeleteOpsTransaction('${item[0]}', '${item[5]}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition btn-delete-action" title="Hapus Transaksi">
+              <button data-aksi="void-ledger" data-id="${esc(item[0])}" data-ket="${esc(item[5])}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition btn-delete-action" title="Hapus Transaksi">
                 <i class="fas fa-trash-alt text-[10px]"></i>
               </button>
             </td>
@@ -2717,8 +2755,8 @@
         const isAdmin = u.role === 'admin' || u.role === 'Administrator';
         return `
           <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
-            <td class="py-4 px-6 font-bold text-slate-800">${u.username}</td>
-            <td class="py-4 px-4 font-semibold">${u.fullname}</td>
+            <td class="py-4 px-6 font-bold text-slate-800">${esc(u.username)}</td>
+            <td class="py-4 px-4 font-semibold">${esc(u.fullname)}</td>
             <td class="py-4 px-4">
               <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isAdmin ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}">
                 ${u.role}
@@ -2727,10 +2765,10 @@
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
                 ${u.aktif === 0 ? '<span class="text-[9px] font-black text-slate-400 uppercase">Nonaktif</span>' : ''}
-                <button onclick="startEditUser('${u.id}', '${u.username}', '${u.fullname}', '${u.role}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                <button data-aksi="edit-user" data-id="${esc(u.id)}" data-username="${esc(u.username)}" data-fullname="${esc(u.fullname)}" data-role="${esc(u.role)}" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteUser('${u.id}', '${u.fullname}', '${u.username}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
+                <button data-aksi="hapus-user" data-id="${esc(u.id)}" data-fullname="${esc(u.fullname)}" data-username="${esc(u.username)}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -2856,7 +2894,7 @@
                 ${item.jenis}
               </span>
             </td>
-            <td class="py-4 px-4 font-bold text-slate-800">${item.nama}</td>
+            <td class="py-4 px-4 font-bold text-slate-800">${esc(item.nama)}</td>
             <td class="py-4 px-4 text-center">
               <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${snBadge}">
                 ${item.saldoNormal}
@@ -2864,10 +2902,10 @@
             </td>
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
-                <button onclick="startEditCategory(${item.id}, '${item.jenis}', '${item.nama}', '${item.saldoNormal}')" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                <button data-aksi="edit-kategori" data-id="${esc(item.id)}" data-jenis="${esc(item.jenis)}" data-nama="${esc(item.nama)}" data-saldo="${esc(item.saldoNormal)}" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button onclick="promptDeleteCategory(${item.id}, '${item.nama}')" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
+                <button data-aksi="hapus-kategori" data-id="${esc(item.id)}" data-nama="${esc(item.nama)}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -3082,7 +3120,6 @@
       const kamar = document.getElementById('edit-tenant-kamar').value;
       const tglMasuk = document.getElementById('edit-tenant-tglmasuk').value;
       const status = document.getElementById('edit-tenant-status').value;
-      const jatuhTempo = document.getElementById('edit-tenant-tempo').value;
 
       google.script.run.withFailureHandler(handleError).withSuccessHandler(msg => {
         cachedData = null;
@@ -3094,11 +3131,9 @@
         id: id,
         nama: nama,
         hp: hp,
-        oldKamar: oldKamar,
         kamar: kamar,
         tglMasuk: tglMasuk,
-        status: status,
-        jatuhTempo: jatuhTempo
+        status: status
       });
     };
 
@@ -3133,14 +3168,15 @@
     };
 
     // DIGITAL RECEIPT ACTIONS
-    function viewReceipt(tgl, nama, kamar, jumlah, keterangan) {
+    function viewReceipt(tgl, nama, kamar, jumlah, keterangan, nomorStruk) {
       document.getElementById('rcp-tgl').innerText = tgl;
-      const invoiceHash = "INV-" + Math.floor(100000 + Math.random() * 900000);
-      document.getElementById('rcp-id').innerText = invoiceHash;
+      // nomor struk asli dari database (STR-YYYYMMDD-NNN); dulu dicetak nomor acak INV-xxxxxx
+      const m = String(keterangan || '').match(/STR-\d{8}-\d{3}/);
+      document.getElementById('rcp-id').innerText = String((m && m[0]) || nomorStruk || '-');
       document.getElementById('rcp-nama').innerText = nama;
       document.getElementById('rcp-kamar').innerText = kamar;
       document.getElementById('rcp-ket').innerText = keterangan;
-      document.getElementById('rcp-total').innerText = "Rp " + jumlah.toLocaleString();
+      document.getElementById('rcp-total').innerText = rp(jumlah);
 
       const modal = document.getElementById('receipt-modal');
       modal.classList.remove('hidden');
@@ -3256,6 +3292,20 @@
     // DETEKSI JALUR & EMULASI FULLY INTERAKTIF UNTUK PREVIEW
     // =======================================================
     // (Blok emulator localStorage dihapus — backend sekarang D1 lewat d1-adapter.js)
+
+    // Filter laporan default = bulan berjalan (dulu selalu "Mei" karena selected di HTML)
+    (function initFilterLaporan() {
+      const d = new Date();
+      const bln = document.getElementById('filter-laporan-bulan');
+      const thn = document.getElementById('filter-laporan-tahun');
+      if (bln) bln.value = String(d.getMonth() + 1);
+      if (thn) {
+        if (![...thn.options].some(o => o.value === String(d.getFullYear()))) {
+          thn.insertAdjacentHTML('beforeend', `<option value="${d.getFullYear()}">${d.getFullYear()}</option>`);
+        }
+        thn.value = String(d.getFullYear());
+      }
+    })();
 
     window.onload = () => { initUserSession(); };
   </script>

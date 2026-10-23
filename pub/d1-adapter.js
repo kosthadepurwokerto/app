@@ -56,7 +56,7 @@
 
     getActiveTenants: async () => {
       const d = await segar();
-      return d.penyewa.filter((p) => p[5] === 'Aktif').map((p) => ({ nama: p[1], kamar: p[3] }));
+      return d.penyewa.filter((p) => p[5] === 'Aktif').map((p) => ({ nama: p[1], kamar: p[3], tagihan: p[7] || '', tempo: p[6] || '' }));
     },
 
     getOpsRows: async () => {
@@ -87,9 +87,7 @@
     addTenant: (d) => aksi('tenants.create', d).then((m) => { data.dashboard = null; return m; }),
     checkoutTenant: (id, kamar) => aksi('tenants.checkout', { id, kamar }).then((m) => { data.dashboard = null; return m; }),
     deleteTenant: (id, kamar) => aksi('tenants.delete', { id, kamar }).then((m) => { data.dashboard = null; return m; }),
-    editTenant: async () => {
-      throw new Error('Edit penyewa belum tersedia di versi D1. Check-out lalu daftarkan ulang bila perlu.');
-    },
+    editTenant: (d) => aksi('tenants.update', d).then((m) => { data.dashboard = null; return m; }),
 
     // ---------------- PEMBAYARAN ----------------
     recordPayment: (d) => aksi('payments.create', d).then((m) => { data.dashboard = null; return m; }),
