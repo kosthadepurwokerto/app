@@ -44,9 +44,12 @@ export function addMonths(iso, months) {
 // Tanggal jatuh tempo selalu 1-28: mencegah "31 Mar -> 31 Apr (tidak ada)" yang membuat
 // bulan berikutnya terlewat, tanpa mengubah perilaku normal (tanggal 1-28 tidak disentuh).
 export function klemJatuhTempo(iso) {
+  // Jatuh tempo mengikuti TANGGAL MASUK penyewa (25 Mei -> 25 Jun -> 25 Jul ...), bukan dipaksa 28.
+  // addMonths() sudah memakai hari terakhir bulan pendek (31 Mar -> 30 Apr -> 30 Mei),
+  // jadi klem di sini hanya jaring pengaman untuk nilai rusak, bukan aturan bisnis.
   const [y, m, d] = iso.split('-').map(Number);
   const p = (x) => String(x).padStart(2, '0');
-  return `${y}-${p(m)}-${p(Math.min(d, 28))}`;
+  return `${y}-${p(m)}-${p(Math.max(1, Math.min(31, d || 1)))}`;
 }
 
 export const num = (v) => {

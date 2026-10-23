@@ -167,6 +167,16 @@ ck "Kamar milik penyewa yang check-out kembali Tersedia" "$(jq_ "(k=>k[4])(d.kam
 ck "Hapus penyewa berriwayat ditolak 409" "$(actj $J '{"action":"tenants.delete","data":{"id":"TEN-0001","kamar":"101"}}')" "409"
 ck "Hapus penyewa yang masih punya tagihan tertunggak ditolak 409" "$(actj $J "{\"action\":\"tenants.delete\",\"data\":{\"id\":\"$ID_TANPA\",\"kamar\":\"103\"}}")" "409"
 
+echo "== JATUH TEMPO IKUT TANGGAL MASUK =="
+actj $J '{"action":"rooms.create","data":{"noKamar":"107","tipe":"Standar","hargaBulanan":800000}}' >/dev/null
+actj $J '{"action":"rooms.create","data":{"noKamar":"108","tipe":"Standar","hargaBulanan":800000}}' >/dev/null
+actj $J '{"action":"tenants.create","data":{"nama":"Masuk Tgl25","hp":"81211112222","kamar":"107","tglMasuk":"2026-05-25"}}' >/dev/null
+actj $J '{"action":"tenants.create","data":{"nama":"Masuk Tgl31","hp":"81211113333","kamar":"108","tglMasuk":"2026-03-31"}}' >/dev/null
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Masuk 25 Mei -> jatuh tempo 25 Jun" "$(jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl25')[6]")" "2026-06-25"
+ck "Masuk 31 Mar -> jatuh tempo 30 Apr (bukan 28)" "$(jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl31')[6]")" "2026-04-30"
+ck "Bayar 2 bulan dari 25 Jun -> 25 Agu" "$(actj $J '{"action":"payments.create","data":{"kamar":"107","jumlah":1600000,"bulan":2,"tanggal":"'$TODAY'"}}' >/dev/null; code -b $J "$B/api/dashboard" >/dev/null; jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl25')[6]")" "2026-08-25"
+
 echo "== KATEGORI & PENGGUNA =="
 ck "Tambah kategori" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori","saldoNormal":"Debet"}}')" "200"
 ck "Kategori dobel ditolak 409" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori"}}')" "409"
