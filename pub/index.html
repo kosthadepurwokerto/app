@@ -660,6 +660,37 @@
               </div>
             </div>
 
+            <!-- PENGINGAT WHATSAPP (tanpa biaya: WA dibuka di HP Anda, Anda yang menekan Send) -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mt-6">
+              <div class="p-4 md:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <h3 class="font-extrabold text-slate-900 text-sm"><i class="fab fa-whatsapp text-emerald-500 mr-2"></i>Pengingat WhatsApp</h3>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Tagihan belum lunas. Klik <b>Kirim</b> — WhatsApp terbuka dengan pesan siap kirim, Anda tinggal tekan Send.</p>
+                </div>
+                <div class="flex gap-2">
+                  <button onclick="muatPengingat()" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition">Segarkan</button>
+                  <button onclick="kirimSemuaPengingat()" class="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition">Buka semua yang belum diingatkan</button>
+                </div>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead class="bg-slate-50 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                    <tr>
+                      <th class="py-3 px-5">Penyewa</th>
+                      <th class="py-3 px-4">Kamar</th>
+                      <th class="py-3 px-4">Jatuh Tempo</th>
+                      <th class="py-3 px-4">Tagihan</th>
+                      <th class="py-3 px-4">Status</th>
+                      <th class="py-3 px-5 text-center">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="table-pengingat" class="divide-y divide-slate-100">
+                    <tr><td colspan="6" class="py-8 text-center text-slate-400 text-sm italic">Memuat…</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -1425,6 +1456,7 @@
     daftarAksi('checkout', (d) => promptTenantCheckout(d.kode, d.nama, d.kamar));
     daftarAksi('bayar-cepat', (d) => quickPayPort(d.nama, d.kamar));
     daftarAksi('void-ledger', (d) => promptDeleteOpsTransaction(d.id, d.ket));
+    daftarAksi('wa-pengingat', (d) => kirimPengingatWa(d.bill));
     daftarAksi('edit-user', (d) => startEditUser(d.id, d.username, d.fullname, d.role));
     daftarAksi('hapus-user', (d) => promptDeleteUser(d.id, d.fullname, d.username));
     daftarAksi('edit-kategori', (d) => startEditCategory(d.id, d.jenis, d.nama, d.saldo));
@@ -1593,6 +1625,7 @@
         loadAllTenantsList();
       }
       if(sectionId === 'pembayaran') {
+        muatPengingat();
         const tgl = document.getElementById('input-tgl-pembayaran');
         if (tgl && !tgl.value) tgl.value = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD lokal
         loadActiveTenants();
@@ -2557,6 +2590,81 @@
           </tr>
         `;
       }).join('');
+    }
+
+    // ================= PENGINGAT WHATSAPP =================
+    // Alur tanpa biaya: aplikasi menyiapkan pesan, WhatsApp dibuka di perangkat Anda,
+    // Anda menekan Send. Setelah itu pengingat ditandai terkirim (tidak dikirim dobel).
+    let daftarPengingat = [];
+
+    function pesanPengingat(p) {
+      const tgl = String(p.jatuhTempo || '').slice(0, 10);
+      const nominal = rp(p.jumlah);
+      const kapan = p.terlambat > 0
+        ? `sudah melewati jatuh tempo ${p.terlambat} hari`
+        : (p.terlambat === 0 ? 'jatuh tempo hari ini' : `jatuh tempo ${Math.abs(p.terlambat)} hari lagi`);
+      return `Halo ${p.nama},\n\nIni pengingat dari Kost Hade untuk tagihan sewa Kamar ${p.kamar} sebesar ${nominal} (${kapan}, tanggal ${tgl}).\n\nMohon diselesaikan agar penghunian tetap lancar. Bila sudah transfer, mohon balas pesan ini dengan bukti transfer. Terima kasih.\n\n- Admin Kost Hade`;
+    }
+
+    function linkWa(hp, pesan) {
+      let nomor = String(hp || '').replace(/[^0-9]/g, '');
+      if (nomor.startsWith('0')) nomor = '62' + nomor.slice(1);
+      if (!nomor) return null;
+      return `https://wa.me/${nomor}?text=${encodeURIComponent(pesan)}`;
+    }
+
+    async function muatPengingat() {
+      const tbody = document.getElementById('table-pengingat');
+      try {
+        const r = await fetch('/api/pengingat', { credentials: 'same-origin' });
+        if (!r.ok) throw new Error('Gagal memuat daftar pengingat.');
+        daftarPengingat = await r.json();
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-rose-500 text-sm">${esc(err.message)}</td></tr>`;
+        return;
+      }
+      if (!daftarPengingat.length) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-emerald-600 text-sm font-bold">Semua tagihan sudah lunas 🎉</td></tr>`;
+        return;
+      }
+      tbody.innerHTML = daftarPengingat.map((p) => {
+        const lewat = p.terlambat > 0;
+        const status = p.sudahDiingatkan
+          ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-emerald-50 text-emerald-600 border border-emerald-100">Sudah diingatkan</span>`
+          : (lewat
+              ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-rose-50 text-rose-600 border border-rose-100">Terlambat ${p.terlambat} hr</span>`
+              : `<span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-50 text-amber-600 border border-amber-100">${p.terlambat === 0 ? 'Hari ini' : 'H-' + Math.abs(p.terlambat)}</span>`);
+        return `
+          <tr class="hover:bg-slate-50 transition text-slate-700 text-xs md:text-sm">
+            <td class="py-3 px-5 font-bold text-slate-900">${esc(p.nama)}<div class="text-[9px] text-slate-400 font-mono">${esc(p.kode)}</div></td>
+            <td class="py-3 px-4">${esc(p.kamar)}</td>
+            <td class="py-3 px-4 whitespace-nowrap">${esc(String(p.jatuhTempo).slice(0, 10))}</td>
+            <td class="py-3 px-4 font-extrabold text-slate-800 whitespace-nowrap">${rp(p.jumlah)}</td>
+            <td class="py-3 px-4">${status}</td>
+            <td class="py-3 px-5 text-center whitespace-nowrap">
+              ${p.hp ? `<button data-aksi="wa-pengingat" data-bill="${esc(p.billId)}" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] uppercase tracking-wide transition"><i class="fab fa-whatsapp mr-1"></i>Kirim</button>` : '<span class="text-[10px] text-rose-400 font-bold">HP belum diisi</span>'}
+            </td>
+          </tr>`;
+      }).join('');
+    }
+
+    // buka WhatsApp + tandai terkirim
+    function kirimPengingatWa(billId) {
+      const p = daftarPengingat.find((x) => String(x.billId) === String(billId));
+      if (!p) return;
+      const tautan = linkWa(p.hp, pesanPengingat(p));
+      if (!tautan) { showCustomAlert('HP Kosong', 'Isi nomor WhatsApp penyewa lebih dulu di menu Penyewa.', false); return; }
+      window.open(tautan, '_blank', 'noopener');
+      HADE.handlers.catatPengingat(billId).then(() => muatPengingat()).catch((err) => console.warn('[hade] pengingat', err));
+    }
+
+    function kirimSemuaPengingat() {
+      const belum = daftarPengingat.filter((p) => !p.sudahDiingatkan && p.hp);
+      if (!belum.length) { showCustomAlert('Tidak Ada', 'Semua tagihan sudah diingatkan atau belum ada HP.', false); return; }
+      showCustomAlert('Buka Pengingat', `Membuka ${belum.length} percakapan WhatsApp. Browser biasanya memblokir banyak tab sekaligus — buka beberapa pada satu waktu?`, true, true, () => {
+        belum.slice(0, 5).forEach((p, i) => setTimeout(() => kirimPengingatWa(p.billId), i * 800));
+        if (belum.length > 5) showCustomAlert('Sisa Antrian', `${belum.length - 5} penyewa lagi belum dibuka. Klik kirim per baris setelah ini.`, true);
+      });
     }
 
     function filterPayments() {

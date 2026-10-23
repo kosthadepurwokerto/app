@@ -110,6 +110,8 @@
     editUser: (d) => aksi('users.update', d).then((m) => { data.dashboard = null; return m; }),
     deleteUser: (id) => aksi('users.delete', { id }).then((m) => { data.dashboard = null; return m; }),
 
+    catatPengingat: (billId) => aksi('pengingat.catat', { billId }),
+
     // ---------------- FOTO KTP ----------------
     // Unggah ke R2 lewat Worker; yang disimpan di database hanya kunci berkasnya.
     uploadKtp: async (file) => {

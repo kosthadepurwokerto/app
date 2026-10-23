@@ -177,6 +177,47 @@ async function lihatKtp(env, kunci, sesi) {
   });
 }
 
+// ---------- PENGINGAT WHATSAPP (sekali klik, tanpa biaya) ----------
+// Aplikasi tidak mengirim WhatsApp sendiri; ia menyiapkan daftar + pesan siap kirim.
+// Riwayat kirim disimpan supaya tagihan yang sama tidak diingatkan dua kali.
+async function daftarPengingat(env) {
+  const r = await env.DB.prepare(`
+    select b.id as bill_id, b.jatuh_tempo, b.jumlah, t.kode, t.nama, t.hp, r.no_kamar,
+           cast(julianday(date('now','localtime')) - julianday(b.jatuh_tempo) as integer) as terlambat,
+           p.created_at as diingatkan_pada
+      from bills b
+      join tenants t on t.id = b.tenant_id
+      left join rooms r on r.id = t.kamar_id
+      left join pengingat_wa p on p.bill_id = b.id
+     where b.status = 'belum_bayar' and t.status = 'aktif'
+     order by b.jatuh_tempo, t.nama
+  `).all();
+  return (r.results || []).map((x) => ({
+    billId: x.bill_id,
+    kode: x.kode,
+    nama: x.nama,
+    kamar: x.no_kamar || '',
+    hp: x.hp || '',
+    jatuhTempo: x.jatuh_tempo,
+    jumlah: x.jumlah,
+    terlambat: x.terlambat,                 // >0 = sudah lewat; <0 = belum jatuh tempo
+    sudahDiingatkan: !!x.diingatkan_pada,
+    diingatkanPada: x.diingatkan_pada || null,
+  }));
+}
+
+async function catatPengingat(ctx, billId) {
+  const id = Number(billId);
+  if (!Number.isInteger(id) || id <= 0) throw logic.httpError(400, 'ID tagihan tidak valid.');
+  const b = await ctx.db.prepare(`select b.id, b.tenant_id, b.jumlah, b.jatuh_tempo, t.nama, t.hp
+                                     from bills b join tenants t on t.id=b.tenant_id where b.id=?`).bind(id).first();
+  if (!b) throw logic.httpError(404, 'Tagihan tidak ditemukan.');
+  await ctx.db.prepare('insert or ignore into pengingat_wa (bill_id, tenant_id, hp, dikirim_oleh) values (?,?,?,?)')
+    .bind(b.id, b.tenant_id, b.hp || null, ctx.user.id).run();
+  await ctx.audit('wa.ingatkan', 'bills', b.id, null, { nama: b.nama, hp: b.hp, jumlah: b.jumlah, jatuh_tempo: b.jatuh_tempo });
+  return `Pengingat untuk ${b.nama} dicatat terkirim.`;
+}
+
 // ---------- rute ----------
 // Aksi yang hanya boleh dilakukan admin. Aksi lain boleh untuk semua user aktif.
 const KEPERLUAN = {
@@ -208,6 +249,7 @@ const AKSI = {
   'categories.create': addCategory,
   'categories.update': updateCategory,
   'categories.delete': deleteCategory,
+  'pengingat.catat': (ctx, d) => catatPengingat(ctx, d.billId || d.id),
   'users.create': addUser,
   'users.update': updateUser,
   'users.delete': deleteUser,
@@ -477,6 +519,7 @@ export default {
         return lihatKtp(env, t.ktp_key, sesi);
       }
       if (url.pathname.startsWith('/api/ktp/')) return lihatKtp(env, decodeURIComponent(url.pathname.slice('/api/ktp/'.length)), sesi);
+      if (url.pathname === '/api/pengingat') return json(await daftarPengingat(env));
       if (url.pathname === '/api/dashboard') return json(await dashboard(env));
       if (url.pathname === '/api/ops') return json(await listLedger(env));
 

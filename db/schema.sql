@@ -92,6 +92,19 @@ create table if not exists bills (
 );
 create index if not exists idx_bills_open on bills(tenant_id, status);
 
+-- ---------- PENGINGAT WHATSAPP ----------
+-- satu baris per tagihan yang sudah diingatkan (mencegah kiriman dobel)
+create table if not exists pengingat_wa (
+  id          integer primary key autoincrement,
+  bill_id     integer not null references bills(id) on delete cascade,
+  tenant_id   integer not null references tenants(id) on delete cascade,
+  hp          text,
+  dikirim_oleh text references users(id),
+  created_at  text not null default (datetime('now')),
+  unique (bill_id)
+);
+create index if not exists idx_pengingat_tanggal on pengingat_wa(created_at);
+
 -- ---------- PEMBAYARAN ----------
 create table if not exists payments (
   id           integer primary key autoincrement,

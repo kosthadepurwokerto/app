@@ -149,6 +149,20 @@ ck "Staff boleh mencatat transaksi" "$(actj $S "{\"action\":\"ledger.create\",\"
 code -b $S "$B/api/bootstrap" >/dev/null
 ck "Bootstrap untuk staff tidak memuat daftar user" "$(jq_ 'd.users.length')" "0"
 
+echo "== PENGINGAT WHATSAPP =="
+# TEN-0003 didaftarkan di sini supaya tagihannya pasti terbuka (TEN-0001/0002 kondisinya sudah berubah)
+actj $J '{"action":"rooms.create","data":{"noKamar":"104","tipe":"Standar","hargaBulanan":950000}}' >/dev/null
+actj $J "{\"action\":\"tenants.create\",\"data\":{\"nama\":\"Rina Pengingat\",\"hp\":\"81211110000\",\"kamar\":\"104\",\"tglMasuk\":\"2026-01-01\"}}" >/dev/null
+code -b $J "$B/api/pengingat" >/dev/null
+ck "Daftar pengingat memuat tagihan belum lunas" "$(jq_ "d.filter(p=>p.nama==='Rina Pengingat').length")" "1"
+ck "Pengingat berisi kamar, nominal, jatuh tempo & keterlambatan" "$(jq_ "(p=>[p.kamar,p.jumlah,p.jatuhTempo, p.terlambat>0].join('|'))(d.find(p=>p.nama==='Rina Pengingat'))")" "104|950000|2026-02-01|true"
+PBID=$(jq_ "d.find(p=>p.nama==='Rina Pengingat').billId")
+ck "Tandai pengingat terkirim" "$(actj $J "{\"action\":\"pengingat.catat\",\"data\":{\"billId\":$PBID}}")" "200"
+code -b $J "$B/api/pengingat" >/dev/null
+ck "Pengingat tercatat (tidak dikirim dobel)" "$(jq_ "d.find(p=>p.billId===$PBID).sudahDiingatkan")" "true"
+ck "ID tagihan tidak valid ditolak 400" "$(actj $J '{"action":"pengingat.catat","data":{"billId":0}}')" "400"
+ck "Tagihan tidak dikenal ditolak 404" "$(actj $J '{"action":"pengingat.catat","data":{"billId":99999}}')" "404"
+
 echo "== GANTI PASSWORD =="
 ck "Ganti password: password lama salah ditolak 401" "$(code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"salah","baru":"Baru123456"}' "$B/api/password")" "401"
 ck "Ganti password: baru < 8 karakter ditolak 400" "$(code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"Staffpass123","baru":"123"}' "$B/api/password")" "400"
