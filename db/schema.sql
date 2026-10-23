@@ -62,6 +62,8 @@ create table if not exists tenants (
   ktp_tipe    text,                          -- image/jpeg | image/png | image/webp
   sumber      text not null default 'manual', -- manual = diinput petugas, wa = dikirim penyewa via WhatsApp
   tgl_masuk   text not null,                 -- YYYY-MM-DD
+  tgl_mulai_tagihan text,                    -- tanggal acuan jatuh tempo tagihan (null = sama dengan tgl_masuk)
+  hari_penuh  integer not null default 1,    -- 0 = bulan pertama dihitung prorata per hari
   tgl_keluar  text,
   status      text not null default 'aktif' check (status in ('aktif','keluar')),
   created_at  text not null default (datetime('now'))

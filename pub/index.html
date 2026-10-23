@@ -474,6 +474,21 @@
                   </div>
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Mulai Ditagih Tanggal</label>
+                      <input type="date" id="input-mulai-tagihan" name="mulaiTagihan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                      <p class="text-[10px] text-slate-400 mt-1">Kosongkan = sama dengan tanggal check-in.</p>
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Bulan Pertama</label>
+                      <select id="select-hari-penuh" name="hariPenuh" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
+                        <option value="1">Penuh satu bulan</option>
+                        <option value="0">Prorata (dihitung per hari)</option>
+                      </select>
+                      <p class="text-[10px] text-slate-400 mt-1" id="info-prorata">Contoh: harga sewa satu bulan penuh.</p>
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
                       <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kontak Darurat</label>
                       <input type="text" name="kontakDarurat" placeholder="Nama keluarga / hubungan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-rose-500 text-sm transition">
                     </div>
@@ -3704,6 +3719,33 @@
       if (!pertahankanFile) document.getElementById('input-ktp').value = '';
     }
 
+    // --- tanggal mulai tagihan: default mengikuti tanggal check-in ---
+    function perbaruiInfoTagihan() {
+      const masuk = document.getElementById('form-penyewa').tglMasuk.value;
+      const mulaiEl = document.getElementById('input-mulai-tagihan');
+      const penuh = document.getElementById('select-hari-penuh').value !== '0';
+      if (!mulaiEl.dataset.diubah) mulaiEl.value = masuk || '';
+      const info = document.getElementById('info-prorata');
+      const kamarNo = document.getElementById('form-penyewa').kamar.value;
+      const kamar = ((cachedData && cachedData.kamar) || []).find((k) => k[0] === kamarNo);
+      const harga = kamar ? Number(kamar[2]) || 0 : 0;
+      const tgl = mulaiEl.value;
+      if (!harga || !tgl) { info.innerText = 'Pilih kamar untuk melihat nominal bulan pertama.'; return; }
+      if (penuh) { info.innerText = `Nominal bulan pertama ${rp(harga)} (satu bulan penuh).`; return; }
+      const [y, m, d] = tgl.split('-').map(Number);
+      const hariBulan = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      const sisa = hariBulan - d + 1;
+      const nilai = Math.min(harga, Math.max(1000, Math.round((harga * sisa) / hariBulan / 1000) * 1000));
+      info.innerText = `Prorata ${sisa} dari ${hariBulan} hari = ${rp(nilai)} (dibulatkan ke ribuan).`;
+    }
+
+    ['tglMasuk', 'kamar'].forEach((n) => {
+      const el = document.querySelector(`#form-penyewa [name="${n}"]`);
+      if (el) el.addEventListener('change', perbaruiInfoTagihan);
+    });
+    document.getElementById('input-mulai-tagihan').addEventListener('change', function () { this.dataset.diubah = '1'; perbaruiInfoTagihan(); });
+    document.getElementById('select-hari-penuh').addEventListener('change', perbaruiInfoTagihan);
+
     document.getElementById('form-penyewa').onsubmit = async function(e) {
       e.preventDefault();
       const form = this;
@@ -3718,6 +3760,8 @@
         }
         const data = {
           nama: form.nama.value, hp: form.hp.value, kamar: form.kamar.value, tglMasuk: form.tglMasuk.value,
+          mulaiTagihan: document.getElementById('input-mulai-tagihan').value || '',
+          hariPenuh: document.getElementById('select-hari-penuh').value !== '0',
           kontakDarurat: form.kontakDarurat.value, hpDarurat: form.hpDarurat.value,
           ktpKey: ktpTerpilih ? ktpTerpilih.kunci : '', ktpTipe: ktpTerpilih ? ktpTerpilih.tipe : '',
         };
@@ -3726,6 +3770,9 @@
           showLoading(false);
           showCustomAlert("Sukses", msg, true);
           form.reset();
+          const mt = document.getElementById('input-mulai-tagihan');
+          mt.value = ''; delete mt.dataset.diubah;
+          document.getElementById('select-hari-penuh').value = '1';
           hapusPratinjauKtp(true);
           showSection('dashboard', document.querySelector('#sidebar-nav button'));
         }).addTenant(data);

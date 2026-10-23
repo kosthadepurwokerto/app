@@ -177,6 +177,22 @@ ck "Masuk 25 Mei -> jatuh tempo 25 Jun" "$(jq_ "d.penyewa.find(p=>p[1]==='Masuk 
 ck "Masuk 31 Mar -> jatuh tempo 30 Apr (bukan 28)" "$(jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl31')[6]")" "2026-04-30"
 ck "Bayar 2 bulan dari 25 Jun -> 25 Agu" "$(actj $J '{"action":"payments.create","data":{"kamar":"107","jumlah":1600000,"bulan":2,"tanggal":"'$TODAY'"}}' >/dev/null; code -b $J "$B/api/dashboard" >/dev/null; jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl25')[6]")" "2026-08-25"
 
+echo "== TANGGAL MULAI TAGIHAN & PRORATA =="
+actj $J '{"action":"rooms.create","data":{"noKamar":"109","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null
+actj $J '{"action":"rooms.create","data":{"noKamar":"110","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null
+# masuk 25 Feb, ditagih mulai 1 Mar, bulan penuh
+ck "Mulai tagihan 1 Mar (dari masuk 25 Feb)" "$(actj $J '{"action":"tenants.create","data":{"nama":"Mulai Maret","hp":"81200001111","kamar":"109","tglMasuk":"2026-02-25","mulaiTagihan":"2026-03-01","hariPenuh":true}}')" "200"
+# masuk 20 Feb, bulan pertama prorata
+ck "Bulan pertama prorata diterima" "$(actj $J '{"action":"tenants.create","data":{"nama":"Prorata Feb","hp":"81200002222","kamar":"110","tglMasuk":"2026-02-20","hariPenuh":false}}')" "200"
+ck "Tanggal mulai tagihan > 1 tahun ditolak 400" "$(actj $J '{"action":"tenants.create","data":{"nama":"Jauh","kamar":"101","tglMasuk":"2026-01-01","mulaiTagihan":"2028-01-01"}}')" "400"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Mulai 1 Mar -> jatuh tempo 1 Apr" "$(jq_ "d.penyewa.find(p=>p[1]==='Mulai Maret')[6]")" "2026-04-01"
+ck "Prorata 20 Feb (9/28 hari) = 354.000" "$(jq_ "d.penyewa.find(p=>p[1]==='Prorata Feb')[7]")" "354000"
+ck "Prorata: jatuh tempo tetap 20 Mar" "$(jq_ "d.penyewa.find(p=>p[1]==='Prorata Feb')[6]")" "2026-03-20"
+ck "Bayar tagihan prorata sesuai nominalnya" "$(actj $J '{"action":"payments.create","data":{"kamar":"110","jumlah":354000,"tanggal":"'$TODAY'"}}')" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Setelah lunas prorata, bulan berikutnya harga penuh 1.100.000" "$(jq_ "d.penyewa.find(p=>p[1]==='Prorata Feb')[7]")" "1100000"
+
 echo "== KATEGORI & PENGGUNA =="
 ck "Tambah kategori" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori","saldoNormal":"Debet"}}')" "200"
 ck "Kategori dobel ditolak 409" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori"}}')" "409"

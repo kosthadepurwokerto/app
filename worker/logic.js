@@ -43,6 +43,17 @@ export function addMonths(iso, months) {
 
 // Tanggal jatuh tempo selalu 1-28: mencegah "31 Mar -> 31 Apr (tidak ada)" yang membuat
 // bulan berikutnya terlewat, tanpa mengubah perilaku normal (tanggal 1-28 tidak disentuh).
+// Nominal bulan pertama bila sewa tidak penuh satu bulan.
+// Dihitung per hari: harga bulanan / jumlah hari di bulan mulai × sisa hari (termasuk hari mulai).
+// Tidak pernah lebih dari harga bulanan penuh.
+export function nominalProrata(hargaBulanan, tglMulai) {
+  const [y, m, d] = tglMulai.split('-').map(Number);
+  const hariBulan = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const sisaHari = hariBulan - d + 1;
+  const nilai = Math.round((hargaBulanan * sisaHari) / hariBulan / 1000) * 1000; // bulat ke ribuan
+  return Math.min(hargaBulanan, Math.max(1000, nilai));
+}
+
 export function klemJatuhTempo(iso) {
   // Jatuh tempo mengikuti TANGGAL MASUK penyewa (25 Mei -> 25 Jun -> 25 Jul ...), bukan dipaksa 28.
   // addMonths() sudah memakai hari terakhir bulan pendek (31 Mar -> 30 Apr -> 30 Mei),
@@ -140,6 +151,20 @@ export async function createTenant(ctx, data) {
   const tglMasuk = toISODate(data.tglMasuk);
   if (!tglMasuk) throw httpError(400, 'Tanggal check-in tidak valid.');
   if (tglMasuk > ctx.today) throw httpError(400, 'Tanggal check-in tidak boleh di masa depan.');
+
+  // ---- tanggal mulai tagihan -------------------------------------------------
+  // Default = tanggal masuk. Bisa diisi lebih lambat (mis. masuk 25 Feb, ditagih mulai 1 Mar)
+  // atau lebih awal (masuk 20 Feb, sewa dihitung dari 15 Feb). Maksimal 1 tahun dari tanggal masuk.
+  // `hariPenuh` true = sewa utuh satu bulan; false = bulan pertama dihitung prorata per hari.
+  const mulaiKirim = String(data.mulaiTagihan || data.tglMulaiTagihan || '').trim();
+  const tglMulai = mulaiKirim ? toISODate(mulaiKirim) : tglMasuk;
+  if (!tglMulai) throw httpError(400, 'Tanggal mulai tagihan tidak valid.');
+  const selisihHari = Math.round((Date.parse(tglMulai) - Date.parse(tglMasuk)) / 86400000);
+  if (selisihHari < -365 || selisihHari > 365)
+    throw httpError(400, 'Tanggal mulai tagihan terlalu jauh dari tanggal masuk (maksimal 1 tahun).');
+  // HTML mengirim "1"/"0" dari <select>, jadi jangan pakai Boolean() mentah ("0" itu truthy)
+  const hariPenuh = data.hariPenuh === undefined ? true
+    : !['0', 'false', 'tidak', 'no', ''].includes(String(data.hariPenuh).toLowerCase());
   const noKamar = String(data.kamar || '').trim();
   const room = await ctx.db.prepare('select * from rooms where no_kamar = ?').bind(noKamar).first();
   if (!room) throw httpError(404, `Kamar ${noKamar} tidak ditemukan.`);
@@ -179,6 +204,7 @@ export async function createTenant(ctx, data) {
         `insert into tenants (kode, nama, hp, kamar_id, kontak_darurat, hp_darurat, ktp_key, ktp_tipe, sumber, tgl_masuk, status)
          values (?,?,?,?,?,?,?,?,?,?,?)`
       ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, sumber, tglMasuk, 'aktif').run();
+      await ctx.db.prepare('update tenants set tgl_mulai_tagihan=?, hari_penuh=? where id=?').bind(tglMulai, hariPenuh ? 1 : 0, insRes.meta.last_row_id).run();
       ins = insRes;
       tenantId = insRes.meta.last_row_id;
     } catch (e) {
@@ -196,11 +222,16 @@ export async function createTenant(ctx, data) {
   }
 
   await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
-    // jatuh tempo tunduk pada klem 1-28 (tanggal 31 Jan -> 28 Feb, supaya rantai bulan tidak melompat)
-    .bind(tenantId, bulanPeriode(tglMasuk), klemJatuhTempo(addMonths(tglMasuk, 1)), num(room.harga_bulanan), 'belum_bayar').run();
+    // Jatuh tempo pertama = tanggal mulai tagihan + 1 bulan (25 Feb -> 25 Mar).
+    // Bila bulan pertama tidak penuh, nominal dihitung per hari sisa bulan berjalan.
+    .bind(tenantId, bulanPeriode(tglMulai), klemJatuhTempo(addMonths(tglMulai, 1)),
+      hariPenuh ? num(room.harga_bulanan) : nominalProrata(num(room.harga_bulanan), tglMulai), 'belum_bayar').run();
   await ctx.audit('create_tenant', 'tenants', tenantId, null, { kode, nama, kamar: noKamar });
 
-  return `Registrasi ${nama} di Kamar ${noKamar} berhasil (${kode}). Tagihan ${rupiah(room.harga_bulanan)} jatuh tempo ${addMonths(tglMasuk, 1)}.`;
+  const jtPertama = klemJatuhTempo(addMonths(tglMulai, 1));
+  const nominalPertama = hariPenuh ? num(room.harga_bulanan) : nominalProrata(num(room.harga_bulanan), tglMulai);
+  const catMulai = tglMulai === tglMasuk ? '' : ` (tagihan mulai ${tglMulai})`;
+  return `Registrasi ${nama} di Kamar ${noKamar} berhasil (${kode})${catMulai}. Tagihan ${rupiah(nominalPertama)} jatuh tempo ${jtPertama}.`;
 }
 
 export async function recordPayment(ctx, data) {
@@ -280,8 +311,13 @@ export async function recordPayment(ctx, data) {
       for (const b of daftar.filter((x) => x.baru)) {
         stmts.push(ctx.db.prepare("update bills set status='lunas' where tenant_id=? and periode=?").bind(t.id, b.periode));
       }
-      if (!dup) stmts.push(ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
-        .bind(t.id, nextPeriode, nextJt, daftar[0].jumlah, 'belum_bayar'));
+      if (!dup) {
+        // nominal bulan berikutnya = harga kamar saat ini (bukan nominal prorata bulan pertama)
+        const kamarNow = await ctx.db.prepare('select harga_bulanan from rooms where id=?').bind(t.kamar_id).first();
+        const nominalNext = num(kamarNow && kamarNow.harga_bulanan) || num(daftar[0].jumlah);
+        stmts.push(ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+          .bind(t.id, nextPeriode, nextJt, nominalNext, 'belum_bayar'));
+      }
       bukti = await ctx.db.batch(stmts);
     } catch (e) {
       if (!/UNIQUE/i.test(String(e && e.message))) throw e;
