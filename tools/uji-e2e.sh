@@ -11,6 +11,8 @@ code() { curl -s -o /tmp/hade_body -w '%{http_code}' "$@"; }
 # jq_ "<ekspresi JS>"  -> cetak nilai ekspresi (d tersedia = isi /tmp/hade_body terakhir)
 jq_() { node -e "const fs=require('fs');const d=JSON.parse(fs.readFileSync('/tmp/hade_body'));const fn=new Function('d','return ('+process.argv[1]+')');const v=fn(d);console.log(typeof v==='object'&&v!==null?JSON.stringify(v):v)" "$1"; }
 actj() { code -b "$1" -X POST -H 'content-type: application/json' -d "$2" "$B/api/action"; }
+# loginj <username> <password> -> status HTTP login (tanpa mengganggu jar cookies yang ada)
+loginj() { curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"username\":\"$1\",\"password\":\"$2\"}" "$B/api/login"; }
 
 # --- tunggu server siap ---
 for i in $(seq 1 40); do curl -s -o /dev/null "$B/api/session" && break; sleep 1; done
@@ -232,6 +234,18 @@ actj $J '{"action":"tenants.create","data":{"nama":"Penyewa Baru Kode","hp":"812
 code -b $J "$B/api/dashboard" >/dev/null
 # kategori sama sekali tidak relevan dengan pengulangan kode: counter harus naik walau penyewa lama masih ada
 ck "Kode penyewa baru terus naik (counter, bukan max setelah hapus)" "$(jq_ "(d.penyewa.find(p=>p[1]==='Penyewa Baru Kode')[0] !== '$KODE_HAPUS') ? 'beda' : 'dipakai ulang'")" "beda"
+
+echo "== LAPORAN MEMAKAI KATEGORI DINAMIS =="
+actj $J '{"action":"categories.create","data":{"jenis":"Neraca","nama":"Pinjaman Bank","saldoNormal":"Kredit"}}' >/dev/null
+ck "Kategori neraca baru bisa dicatat" "$(actj $J "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"Neraca\",\"kategori\":\"Pinjaman Bank\",\"jumlah\":20000000,\"tanggal\":\"$TODAY\"}}")" "200"
+code -b $J "$B/api/bootstrap" >/dev/null
+ck "Kategori baru membawa saldoNormal Kredit ke klien" "$(jq_ "((d.kategori.Neraca||[]).find(c=>c.nama==='Pinjaman Bank')||{}).saldoNormal || 'tidak ada'")" "Kredit"
+ck "Kas dashboard ikut naik (kategori dinamis dihitung server)" "$(jq_ "d.stats.sisaKas >= 20000000 ? 'naik' : 'tidak'")" "naik"
+
+echo "== BATAS PERCOBAAN LOGIN ==="
+for i in $(seq 1 10); do curl -s -o /dev/null -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah$i"}' "$B/api/login"; done
+ck "Setelah 10x salah, login benar pun ditolak 429" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "429"
+ck "Akun lain tidak ikut terkunci" "$(actj $J '{"action":"users.create","data":{"username":"cek-login","password":"Cekpass12345","role":"staff"}}' >/dev/null; loginj cek-login Cekpass12345)" "200"
 
 echo "== KATEGORI & PENGGUNA =="
 ck "Tambah kategori" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori","saldoNormal":"Debet"}}')" "200"

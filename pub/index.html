@@ -66,7 +66,25 @@
     body.role-user li.restricted-user-view { display: none !important; }
     body.role-user section.restricted-user-view { display: none !important; }
     body.role-admin li.restricted-user-view { display: block !important; }
-  </style>
+        /* Tabel data di HP: ditampilkan sebagai kartu bertumpuk supaya tombol aksi
+         (WA/Edit/Hapus/Checkout) tidak perlu digeser ke samping. */
+      @media (max-width: 640px) {
+        .tabel-hp { min-width: 0 !important; }
+        .tabel-hp thead { display: none !important; }
+        .tabel-hp, .tabel-hp tbody, .tabel-hp tr, .tabel-hp td { display: block !important; width: 100% !important; }
+        .tabel-hp tr { border: 1px solid #e2e8f0; border-radius: 12px; margin: 8px; padding: 8px 10px; background: #fff; }
+        .tabel-hp td { border: none !important; padding: 3px 2px !important; text-align: left !important; min-width: 0 !important; }
+        .tabel-hp td:empty { display: none !important; }
+        .tabel-hp td:last-child { padding-top: 6px !important; }
+        .tabel-hp td:last-child > div { justify-content: flex-start !important; }
+      }
+      @media print {
+        body.mode-cetak * { visibility: hidden !important; }
+        body.mode-cetak .area-cetak,
+        body.mode-cetak .area-cetak * { visibility: visible !important; }
+        body.mode-cetak .area-cetak { position: absolute; left: 0; top: 0; width: 100%; padding: 12px; background: #fff; }
+      }
+</style>
 </head>
 <body class="bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0">
 
@@ -80,7 +98,7 @@
         </div>
       </div>
       <p class="text-sm text-slate-800 font-bold mb-1 text-center">Sinkronisasi Cloud...</p>
-      <p class="text-[11px] text-slate-400 text-center italic">Enkripsi Data Aman Aktif</p>
+      <p class="text-[11px] text-slate-400 text-center italic">Data tersimpan aman di server</p>
       <button onclick="showLoading(false)" class="mt-4 px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg text-[10px] text-slate-500 hover:text-rose-600 font-semibold transition border border-slate-200">Tutup Paksa</button>
     </div>
   </div>
@@ -241,15 +259,10 @@
         </div>
 
         <!-- Quick Session Simulator Dropdown menu -->
-        <div id="quick-user-dropdown" class="absolute bottom-16 left-4 right-4 bg-white border border-slate-200/80 rounded-xl shadow-2xl p-2 hidden z-[1000] animate-fade-in">
-          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2.5 py-1.5">Ganti Sesi Pengguna</p>
+        <div id="quick-user-dropdown" class="absolute bottom-16 md:bottom-16 max-md:top-full max-md:bottom-auto md:top-auto left-4 right-4 bg-white border border-slate-200/80 rounded-xl shadow-2xl p-2 hidden z-[1000] animate-fade-in">
+          <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest px-2.5 py-1.5">Akun Saya</p>
           <div id="quick-user-options" class="space-y-0.5 max-h-40 overflow-y-auto hide-scrollbar">
             <!-- Dynamically filled with simulated users -->
-          </div>
-          <div class="border-t border-slate-100 mt-1.5 pt-1.5">
-            <button onclick="handleLogout()" class="w-full text-left px-2.5 py-2 rounded-lg hover:bg-rose-50 text-rose-600 transition flex items-center gap-2 text-xs font-extrabold">
-              <i class="fas fa-sign-out-alt"></i> Keluar Sesi (Logout)
-            </button>
           </div>
         </div>
       </div>
@@ -295,7 +308,7 @@
             <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
               <div class="flex justify-between items-start mb-2">
                 <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Total Suite</p>
-                <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
+                <div class="w-11 h-11 md:w-8 md:h-8 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
                   <i class="fas fa-door-open text-blue-600 text-xs"></i>
                 </div>
               </div>
@@ -306,7 +319,7 @@
             <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
               <div class="flex justify-between items-start mb-2">
                 <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Kamar Terisi</p>
-                <div class="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
+                <div class="w-11 h-11 md:w-8 md:h-8 bg-blue-50 rounded-lg flex items-center justify-center border border-blue-100">
                   <i class="fas fa-bed text-blue-600 text-xs"></i>
                 </div>
               </div>
@@ -319,7 +332,7 @@
             <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
               <div class="flex justify-between items-start mb-2">
                 <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Penyewa Aktif</p>
-                <div class="w-7 h-7 bg-rose-50 rounded-lg flex items-center justify-center border border-rose-100">
+                <div class="w-11 h-11 md:w-8 md:h-8 bg-rose-50 rounded-lg flex items-center justify-center border border-rose-100">
                   <i class="fas fa-user-check text-rose-600 text-xs"></i>
                 </div>
               </div>
@@ -330,7 +343,7 @@
             <div class="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between overflow-hidden relative premium-card">
               <div class="flex justify-between items-start mb-2">
                 <p class="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider">Sisa Saldo Kas</p>
-                <div class="w-7 h-7 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100">
+                <div class="w-11 h-11 md:w-8 md:h-8 bg-emerald-50 rounded-lg flex items-center justify-center border border-emerald-100">
                   <i class="fas fa-wallet text-emerald-600 text-xs"></i>
                 </div>
               </div>
@@ -373,7 +386,7 @@
               </button>
             </div>
             <div class="overflow-x-auto">
-              <table class="w-full text-left min-w-[700px] border-collapse">
+              <table class="w-full text-left min-w-[700px] tabel-hp border-collapse">
                 <thead>
                   <tr class="bg-slate-50/50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                     <th class="py-3 px-6 text-center w-12">No</th>
@@ -415,7 +428,7 @@
 
                 <!-- Tenant Responsive Table -->
                 <div class="overflow-x-auto">
-                  <table class="w-full text-left min-w-[750px] border-collapse">
+                  <table class="w-full text-left min-w-[750px] tabel-hp border-collapse">
                     <thead>
                       <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-3.5 px-6">ID / Penyewa</th>
@@ -583,7 +596,7 @@
               <div class="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div class="min-w-0">
                   <h3 class="font-extrabold text-slate-900 text-sm flex items-center gap-2">
-                    <span class="w-7 h-7 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0"><i class="fab fa-whatsapp text-emerald-600 text-xs"></i></span>
+                    <span class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center shrink-0"><i class="fab fa-whatsapp text-emerald-600 text-xs"></i></span>
                     Pengingat WhatsApp
                   </h3>
                   <p class="text-[11px] text-slate-400 mt-1 leading-relaxed">Tagihan yang belum lunas. Klik <b class="text-slate-500">Kirim</b> — WhatsApp terbuka dengan pesan siap kirim, Anda tinggal tekan Send.</p>
@@ -716,7 +729,7 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                  <table class="w-full text-left min-w-[650px] border-collapse">
+                  <table class="w-full text-left min-w-[650px] tabel-hp border-collapse">
                     <thead>
                       <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-3.5 px-6">Tanggal</th>
@@ -829,7 +842,7 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                  <table class="w-full text-left min-w-[650px] border-collapse">
+                  <table class="w-full text-left min-w-[650px] tabel-hp border-collapse">
                     <thead>
                       <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-3.5 px-6">Tanggal</th>
@@ -909,7 +922,7 @@
                 </div>
 
                 <div class="overflow-x-auto">
-                  <table class="w-full text-left min-w-[550px] border-collapse">
+                  <table class="w-full text-left min-w-[550px] tabel-hp border-collapse">
                     <thead>
                       <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-3.5 px-6 w-16 text-center">No</th>
@@ -1026,7 +1039,7 @@
 
                 <!-- User Responsive Table -->
                 <div class="overflow-x-auto">
-                  <table class="w-full text-left min-w-[550px] border-collapse">
+                  <table class="w-full text-left min-w-[550px] tabel-hp border-collapse">
                     <thead>
                       <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-3.5 px-6">Nama Pengguna (Username)</th>
@@ -1694,7 +1707,7 @@
         loadingTimeout = setTimeout(() => {
           if (!loader.classList.contains('hidden')) {
             loader.classList.add('hidden');
-            showCustomAlert("Enkripsi Timeout", "⚠️ Saluran Google Workspace API tidak merespons dalam siklus standar. Memuat instans lokal offline.", false);
+            showCustomAlert("Koneksi Lambat", "Server lambat merespons. Periksa koneksi internet Anda, lalu coba lagi.", false);
           }
         }, 12000);
       } else {
@@ -1789,7 +1802,7 @@
     function syncData() {
       cachedData = null;
       loadDashboard();
-      showCustomAlert("Sinkronisasi Sukses", "Data cloud & cache eksklusif didekripsi secara real-time.", true);
+      showCustomAlert("Sinkronisasi Sukses", "Data terbaru sudah dimuat.", true);
     }
 
     function loadDashboard() {
@@ -1905,20 +1918,7 @@
         const parsed = parseDateObj(o[1]);
         const opsDate = new Date(parsed.year, parsed.month - 1, 1);
         const targetDate = new Date(selYear, selMonth - 1, 1);
-        if (opsDate < targetDate) {
-          const val = Number(o[4]) || 0;
-          if (o[2] === 'Pendapatan') {
-            cumulativeCashPrior += val;
-          } else if (o[2] === 'Pengeluaran') {
-            cumulativeCashPrior -= val;
-          } else if (o[2] === 'Neraca') {
-            if (o[3] === "Setoran Modal Pemilik" || o[3] === "Penerimaan Deposit Jaminan") {
-              cumulativeCashPrior += val;
-            } else if (o[3] === "Pembelian Aset Tetap" || o[3] === "Penarikan Prive Pemilik" || o[3] === "Pengembalian Deposit Jaminan") {
-              cumulativeCashPrior -= val;
-            }
-          }
-        }
+        if (opsDate < targetDate) cumulativeCashPrior += dampakKas(o);
       });
 
       // Calculate totals for active selected month
@@ -1930,12 +1930,9 @@
       let activeMonthlyNeracaInflow = 0;
       let activeMonthlyNeracaOutflow = 0;
       monthlyOps.filter(o => o[2] === 'Neraca').forEach(o => {
-        const val = Number(o[4]) || 0;
-        if (o[3] === "Setoran Modal Pemilik" || o[3] === "Penerimaan Deposit Jaminan") {
-          activeMonthlyNeracaInflow += val;
-        } else if (o[3] === "Pembelian Aset Tetap" || o[3] === "Penarikan Prive Pemilik" || o[3] === "Pengembalian Deposit Jaminan") {
-          activeMonthlyNeracaOutflow += val;
-        }
+        const d = dampakKas(o);
+        if (d > 0) activeMonthlyNeracaInflow += d;
+        else if (d < 0) activeMonthlyNeracaOutflow += -d;
       });
 
       const totalMonthlyIncome = activeMonthlyRentIncome + activeMonthlyOpsIncome;
@@ -2104,19 +2101,23 @@
           const targetDate = new Date(selYear, selMonth - 1, 1);
           
           if (oDate <= targetDate && o[2] === 'Neraca') {
+            // Pengelompokan neraca sebelumnya memakai daftar nama tetap sehingga kategori buatan
+            // pengguna (mis. "Pinjaman Bank") hilang dari aset/kewajiban. Sekarang dikenali dari
+            // kata kunci, dan apa pun yang tidak dikenali tetap masuk lewat selisih (retained earnings)
+            // sehingga persamaan Aset = Kewajiban + Ekuitas tetap seimbang.
             const val = Number(o[4]) || 0;
-            if (o[3] === "Pembelian Aset Tetap") {
-              assetLandBuildingVal += val;
-            } else if (o[3] === "Penyusutan Aset Tetap") {
-              accumulatedDepreciation -= val; // Increase depreciation reserve
-            } else if (o[3] === "Penerimaan Deposit Jaminan") {
-              depositLiabilities += val;
-            } else if (o[3] === "Pengembalian Deposit Jaminan") {
-              depositLiabilities -= val;
-            } else if (o[3] === "Setoran Modal Pemilik") {
-              startingEquityCapital += val;
-            } else if (o[3] === "Penarikan Prive Pemilik") {
-              startingEquityCapital -= val;
+            const nama = String(o[3] || '').toLowerCase();
+            const kredit = infoKategori('Neraca', o[3]).kredit;
+            if (/penyusutan|depresiasi/.test(nama)) {
+              accumulatedDepreciation -= val;               // menambah akumulasi penyusutan (aset turun)
+            } else if (kredit) {
+              // saldo normal kredit: modal / pinjaman / deposito jaminan
+              if (/deposit|jaminan/.test(nama)) depositLiabilities += val;
+              else startingEquityCapital += val;
+            } else {
+              // saldo normal debet: aset bertambah, prive/penarikan mengurangi ekuitas
+              if (/prive|penarikan|pengembalian/.test(nama)) startingEquityCapital -= val;
+              else assetLandBuildingVal += val;
             }
           }
         });
@@ -2455,10 +2456,10 @@
                   : `<span class="text-rose-500 italic font-medium"><i class="fas fa-check-circle mr-1 text-rose-500"></i> Siap Disewa</span>`}
               </div>
               <div class="flex gap-1.5 shrink-0">
-                <button data-aksi="edit-kamar" data-no="${esc(k[0])}" data-tipe="${esc(k[1])}" data-bulanan="${esc(k[2])}" data-harian="${esc(k[3])}" class="w-7 h-7 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Edit Kamar">
+                <button data-aksi="edit-kamar" data-no="${esc(k[0])}" data-tipe="${esc(k[1])}" data-bulanan="${esc(k[2])}" data-harian="${esc(k[3])}" class="w-11 h-11 md:w-8 md:h-8 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg flex items-center justify-center transition border border-slate-100" title="Edit Kamar">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button data-aksi="hapus-kamar" data-no="${esc(k[0])}" data-status="${esc(k[4])}" class="w-7 h-7 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100 btn-delete-action" title="Hapus Kamar">
+                <button data-aksi="hapus-kamar" data-no="${esc(k[0])}" data-status="${esc(k[4])}" class="w-11 h-11 md:w-8 md:h-8 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg flex items-center justify-center transition border border-slate-100 btn-delete-action" title="Hapus Kamar">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -2571,13 +2572,13 @@
             </td>
             <td class="py-4 px-6">
               <div class="flex items-center justify-center gap-1.5">
-                <a href="${waLink}" target="_blank" rel="noopener" class="w-7 h-7 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 flex items-center justify-center transition" title="Kirim Pengingat WA">
+                <a href="${waLink}" target="_blank" rel="noopener" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 flex items-center justify-center transition" title="Kirim Pengingat WA">
                   <i class="fab fa-whatsapp text-xs"></i>
                 </a>
-                <button data-aksi="edit-penyewa" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-hp="${esc(p[2])}" data-kamar="${esc(p[3])}" data-masuk="${esc(p[4])}" data-status="${esc(p[5])}" data-tempo="${esc(p[6] || '')}" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Penyewa">
+                <button data-aksi="edit-penyewa" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-hp="${esc(p[2])}" data-kamar="${esc(p[3])}" data-masuk="${esc(p[4])}" data-status="${esc(p[5])}" data-tempo="${esc(p[6] || '')}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Penyewa">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button data-aksi="hapus-penyewa" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" data-status="${esc(p[5])}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Penyewa">
+                <button data-aksi="hapus-penyewa" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" data-status="${esc(p[5])}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Penyewa">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
                 ${statusActive ? `
@@ -2732,6 +2733,38 @@
           </tr>
         `;
       }).join('');
+    }
+
+    // ================= ATURAN KAS & NERACA (sumber tunggal) =================
+    // Server menghitung sisa kas dari categories.saldo_normal: Kredit (+), Debet (-),
+    // dan kategori dengan arus_kas = 0 (mis. Penyusutan) tidak menggerakkan kas.
+    // Laporan DULU memakai daftar nama kategori tetap sehingga kategori baru tidak dihitung.
+    function petaKategori() {
+      const k = (cachedData && cachedData.kategori) || {};
+      const map = {};
+      ['Pendapatan', 'Pengeluaran', 'Neraca'].forEach((j) => {
+        (k[j] || []).forEach((c) => { map[j + '|' + c.nama] = c; });
+      });
+      return map;
+    }
+    function infoKategori(jenis, nama) {
+      const c = petaKategori()[String(jenis) + '|' + String(nama)];
+      const kredit = c ? String(c.saldoNormal || 'Debet') === 'Kredit' : false;
+      const arusKas = c ? c.arusKas !== false : true;
+      return { kredit, arusKas, ada: !!c };
+    }
+    // dampak arus kas: pendapatan +, pengeluaran -, neraca mengikuti saldo normal
+    function dampakKas(o) {
+      const val = Number(o[4]) || 0;
+      const j = o[2];
+      if (j === 'Pendapatan') return val;
+      if (j === 'Pengeluaran') return -val;
+      if (j === 'Neraca') {
+        const info = infoKategori(j, o[3]);
+        if (!info.arusKas) return 0;
+        return info.kredit ? val : -val;
+      }
+      return 0;
     }
 
     // ================= IMPOR PENYEWA DARI WHATSAPP =================
@@ -3189,11 +3222,12 @@
           textCol = 'text-rose-600';
         } else if (item[2] === 'Neraca') {
           colorClass = 'bg-blue-50 text-blue-600 border border-blue-100';
-          if (item[3] === "Setoran Modal Pemilik" || item[3] === "Penerimaan Deposit Jaminan") {
+          const dNeraca = dampakKas(item);
+          if (dNeraca > 0) {
             isIncome = true;
             displaySign = '+';
             textCol = 'text-emerald-600';
-          } else if (item[3] === "Pembelian Aset Tetap" || item[3] === "Penarikan Prive Pemilik" || item[3] === "Pengembalian Deposit Jaminan") {
+          } else if (dNeraca < 0) {
             isIncome = false;
             displaySign = '-';
             textCol = 'text-rose-600';
@@ -3218,7 +3252,7 @@
             </td>
             <td class="py-4 px-4 text-slate-500 font-medium max-w-[200px] truncate" title="${esc(item[5])}">${esc(item[5])}</td>
             <td class="py-4 px-6 text-center">
-              <button data-aksi="void-ledger" data-id="${esc(item[0])}" data-ket="${esc(item[5])}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition btn-delete-action" title="Hapus Transaksi">
+              <button data-aksi="void-ledger" data-id="${esc(item[0])}" data-ket="${esc(item[5])}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center mx-auto transition btn-delete-action" title="Hapus Transaksi">
                 <i class="fas fa-trash-alt text-[10px]"></i>
               </button>
             </td>
@@ -3306,10 +3340,10 @@
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
                 ${u.aktif === 0 ? '<span class="text-[9px] font-black text-slate-400 uppercase">Nonaktif</span>' : ''}
-                <button data-aksi="edit-user" data-id="${esc(u.id)}" data-username="${esc(u.username)}" data-fullname="${esc(u.fullname)}" data-role="${esc(u.role)}" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                <button data-aksi="edit-user" data-id="${esc(u.id)}" data-username="${esc(u.username)}" data-fullname="${esc(u.fullname)}" data-role="${esc(u.role)}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button data-aksi="hapus-user" data-id="${esc(u.id)}" data-fullname="${esc(u.fullname)}" data-username="${esc(u.username)}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
+                <button data-aksi="hapus-user" data-id="${esc(u.id)}" data-fullname="${esc(u.fullname)}" data-username="${esc(u.username)}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -3443,10 +3477,10 @@
             </td>
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
-                <button data-aksi="edit-kategori" data-id="${esc(item.id)}" data-jenis="${esc(item.jenis)}" data-nama="${esc(item.nama)}" data-saldo="${esc(item.saldoNormal)}" class="w-7 h-7 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                <button data-aksi="edit-kategori" data-id="${esc(item.id)}" data-jenis="${esc(item.jenis)}" data-nama="${esc(item.nama)}" data-saldo="${esc(item.saldoNormal)}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
-                <button data-aksi="hapus-kategori" data-id="${esc(item.id)}" data-nama="${esc(item.nama)}" class="w-7 h-7 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
+                <button data-aksi="hapus-kategori" data-id="${esc(item.id)}" data-nama="${esc(item.nama)}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Kategori">
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
               </div>
@@ -3895,7 +3929,33 @@
       modal.classList.add('hidden');
     }
 
+    // Cetak lewat area cetak di dokumen yang sama (tanpa popup): di HP popup sering diblokir
+    // dan dulu tombol Cetak tampak "tidak terjadi apa-apa".
+    function cetakArea(idArea) {
+      const area = document.getElementById(idArea);
+      if (!area) { showCustomAlert('Gagal Cetak', 'Isi yang mau dicetak tidak ditemukan.', false); return; }
+      document.body.classList.add('mode-cetak');
+      area.classList.add('area-cetak');
+      const bersihkan = () => {
+        document.body.classList.remove('mode-cetak');
+        area.classList.remove('area-cetak');
+        window.removeEventListener('afterprint', bersihkan);
+      };
+      window.addEventListener('afterprint', bersihkan);
+      try {
+        window.print();
+      } catch (err) {
+        bersihkan();
+        showCustomAlert('Gagal Cetak', 'Perangkat tidak mendukung cetak langsung. Coba dari menu peramban.', false);
+      }
+      // pengaman untuk peramban yang tidak memicu afterprint
+      setTimeout(bersihkan, 60000);
+    }
+
     function printReceipt() {
+      cetakArea('receipt-print-area');
+      return;
+      // (jalur popup lama dipertahankan di bawah hanya sebagai rujukan)
       const printContents = document.getElementById('receipt-print-area').innerHTML;
       const printWindow = window.open('', '_blank');
       printWindow.document.write(`

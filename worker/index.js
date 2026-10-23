@@ -43,7 +43,9 @@ async function dashboard(env) {
   const rooms = await env.DB.prepare('select * from rooms order by no_kamar').all();
   const tenants = await env.DB.prepare('select * from tenants order by created_at desc').all();
   const bills = await env.DB.prepare("select * from bills where status='belum_bayar' order by jatuh_tempo, id").all();
-  const pays = await env.DB.prepare('select * from payments where voided_at is null order by tgl_bayar desc, id desc limit 10').all();
+  // 200 transaksi terakhir: cukup untuk cetak ulang struk beberapa bulan ke belakang
+  // (dulu hanya 10 sehingga struk lama tidak bisa dicetak lagi). Arsip lengkap ada di laporan.
+  const pays = await env.DB.prepare('select * from payments where voided_at is null order by tgl_bayar desc, id desc limit 200').all();
 
   // JANGAN memakai view untuk angka kas: di D1 view bisa mengembalikan nilai basi
   // sesaat setelah penulisan (terbukti: modal 5.000.000 baru ditarik kembali muncul lagi).
@@ -541,14 +543,34 @@ export default {
         if (req.method !== 'POST') return json({ error: 'Gunakan POST untuk login.' }, 405);
         const { username, password } = await req.json().catch(() => ({}));
         const uname = String(username || '').trim().toLowerCase();
+        // ---- batas percobaan login (anti tebak sandi) ----
+        // Dihitung per nama pengguna + alamat IP, jendela 15 menit. Setelah 10 kali gagal,
+        // akun dikunci sementara walau sandi akhirnya benar.
+        const ip = req.headers.get('cf-connecting-ip') || 'lokal';
+        const jendela = "datetime('now','-15 minutes')";
+        try {
+          const gagal = await env.DB.prepare(
+            'select count(*) as n from login_percobaan where username=? and ip=? and berhasil=0 and created_at > datetime(\'now\',\'-15 minutes\')'
+          ).bind(uname, ip).first();
+          if (gagal && gagal.n >= 10) {
+            return json({ error: 'Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.' }, 429);
+          }
+        } catch (_) { /* tabel belum ada (migrasi belum jalan): jangan blokir login */ }
+
         const u = await env.DB.prepare('select * from users where username=? and aktif=1').bind(uname).first();
-        if (!u || !(await logic.verifyPassword(String(password || ''), u.password_hash)))
+        const cocok = u ? await logic.verifyPassword(String(password || ''), u.password_hash) : false;
+        await env.DB.prepare('insert into login_percobaan (username, ip, berhasil) values (?,?,?)')
+          .bind(uname, ip, cocok ? 1 : 0).run().catch(() => {});
+        if (!cocok) {
+          await logic.audit(env, { id: null, username: uname, role: 'sistem' }, 'login.gagal', 'users', uname, null, { ip }).catch(() => {});
           return json({ error: 'Kombinasi nama pengguna atau kata sandi tidak sesuai.' }, 401);
+        }
         const token = logic.randomToken();
         const exp = new Date(Date.now() + SESI_HARI * 86400000).toISOString();
         await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at) values (?,?,?)')
           .bind(await logic.sha256hex(token), u.id, exp).run();
         await env.DB.prepare("delete from sessions where expires_at < datetime('now')").run().catch(() => {});
+        await env.DB.prepare("delete from login_percobaan where created_at < datetime('now','-2 days')").run().catch(() => {});
         return json({ ok: true, user: { username: u.username, fullname: u.fullname, role: u.role } },
           200, { 'set-cookie': setSesiCookie(token, secure) });
       }

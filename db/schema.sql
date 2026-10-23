@@ -68,6 +68,16 @@ create table if not exists tenants (
   status      text not null default 'aktif' check (status in ('aktif','keluar')),
   created_at  text not null default (datetime('now'))
 );
+-- percobaan login (anti tebak sandi): dihitung per nama pengguna + IP dalam 15 menit
+create table if not exists login_percobaan (
+  id         integer primary key autoincrement,
+  username   text not null,
+  ip         text not null default '-',
+  berhasil   integer not null default 0,
+  created_at text not null default (datetime('now'))
+);
+create index if not exists idx_login_percobaan on login_percobaan(username, ip, created_at);
+
 -- counter nomor berurutan (kode penyewa tidak boleh dipakai ulang setelah dihapus)
 create table if not exists counters (
   nama  text primary key,
