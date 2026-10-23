@@ -100,7 +100,7 @@ async function dashboard(env) {
     transaksi: (pays.results || []).map((p) => {
       const t = (tenants.results || []).find((x) => x.id === p.tenant_id);
       return [p.tgl_bayar, t ? t.nama : '-', t ? (roomMap[t.kamar_id] || '') : '', String(p.jumlah),
-              (p.keterangan || '') + ' • ' + p.nomor_struk, String(p.id)];
+              (p.keterangan || '') + ' • ' + p.nomor_struk, String(p.id), p.bukti_key || ''];
     }),
   };
 }
@@ -120,6 +120,80 @@ const KUNCI_KTP = logic.KUNCI_KTP;
 
 // Catatan: handler khusus ini membalas JSON sendiri (bukan melempar) — error object yang
 // dilempar dari dalam pemrosesan multipart tidak sampai ke penangkap error utama Worker.
+// ---------- BUKTI PEMBAYARAN ----------
+// Berkas bukti transfer/QRIS dari penyewa atau petugas. Disimpan seperti foto KTP
+// (R2 bila aktif, cadangan D1) dengan awalan "bukti/". Bisa PDF selain gambar.
+const BUKTI_TIPE = { ...KTP_TIPE, 'application/pdf': 'pdf' };
+const BUKTI_MAKS = 5 * 1024 * 1024;
+const KUNCI_BUKTI = /^bukti\/\d{4}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|pdf)$/;
+
+async function unggahBerkas(req, env, sesi, opsi) {
+  const pakaiR2 = logic.KTP_MODE === 'r2' && !!env.KTP;
+  let form;
+  try { form = await req.formData(); } catch { return json({ error: 'Unggahan tidak valid. Kirim sebagai multipart/form-data.' }, 400); }
+  const file = form.get('file');
+  if (!file || typeof file === 'string' || !file.size) return json({ error: `Berkas ${opsi.label} wajib diunggah.` }, 400);
+  const ext = opsi.tipe[file.type];
+  if (!ext) return json({ error: `Format ${opsi.label} harus ${opsi.format}.` }, 400);
+  if (file.size > opsi.maks) return json({ error: `Ukuran ${opsi.label} maksimal ${opsi.maks / 1048576} MB.` }, 400);
+  const isi = await file.arrayBuffer();
+  const kunciBaru = `${opsi.awalan}/${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`;
+  try {
+    if (pakaiR2) {
+      await env.KTP.put(kunciBaru, isi, { httpMetadata: { contentType: file.type } });
+    } else {
+      await env.DB.prepare('insert into ktp_berkas (kunci, tipe, ukuran, isi) values (?,?,?,?)')
+        .bind(kunciBaru, file.type, file.size, new Uint8Array(isi)).run();
+    }
+  } catch (e) {
+    console.error('[hade] simpan berkas', e);
+    return json({ error: 'Gagal menyimpan berkas. Coba lagi.' }, 500);
+  }
+  await logic.audit(env, sesi, `${opsi.awalan}.upload`, opsi.tabel, null, null, { kunci: kunciBaru, bytes: file.size, simpan: pakaiR2 ? 'r2' : 'd1' });
+  return json({ ok: true, kunci: kunciBaru, tipe: file.type });
+}
+
+async function unggahBukti(req, env, sesi) {
+  return unggahBerkas(req, env, sesi, {
+    label: 'bukti pembayaran', awalan: 'bukti', tabel: 'payments',
+    tipe: BUKTI_TIPE, maks: BUKTI_MAKS, format: 'JPG, PNG, WEBP, atau PDF',
+  });
+}
+
+async function lihatBerkas(env, kunci, sesi, opsi) {
+  await logic.audit(env, sesi, `${opsi.awalan}.lihat`, opsi.tabel, kunci, null, null);
+  let body, tipe;
+  if (logic.KTP_MODE === 'r2' && env.KTP) {
+    const obj = await env.KTP.get(kunci);
+    if (!obj) return json({ error: 'Berkas tidak ditemukan.' }, 404);
+    body = obj.body;
+    tipe = (obj.httpMetadata && obj.httpMetadata.contentType) || 'application/octet-stream';
+  } else {
+    const row = await env.DB.prepare('select tipe, isi from ktp_berkas where kunci=?').bind(kunci).first();
+    if (!row) return json({ error: 'Berkas tidak ditemukan.' }, 404);
+    const isi = row.isi;
+    if (isi instanceof ArrayBuffer) body = new Uint8Array(isi);
+    else if (ArrayBuffer.isView(isi)) body = isi;
+    else if (Array.isArray(isi)) body = new Uint8Array(isi);
+    else if (typeof isi === 'string') body = new TextEncoder().encode(isi);
+    else body = isi;
+    tipe = row.tipe;
+  }
+  // Bukti bayar adalah dokumen keuangan: tidak di-cache publik, hanya untuk user login
+  return new Response(body, {
+    headers: {
+      'content-type': tipe,
+      'cache-control': 'private, no-store',
+      'content-disposition': `inline; filename="${kunci.split('/').pop()}"`,
+    },
+  });
+}
+
+async function lihatBukti(env, kunci, sesi) {
+  if (!KUNCI_BUKTI.test(kunci)) return json({ error: 'Kunci bukti tidak valid.' }, 400);
+  return lihatBerkas(env, kunci, sesi, { awalan: 'bukti', tabel: 'payments' });
+}
+
 async function unggahKtp(req, env, sesi) {
   const pakaiR2 = logic.KTP_MODE === 'r2' && !!env.KTP;
   let form;
@@ -520,6 +594,11 @@ export default {
         return json({ ...d, ops, kategori, users });
       }
       if (url.pathname === '/api/ktp' && req.method === 'POST') return unggahKtp(req, env, sesi);
+      if (url.pathname === '/api/bukti' && req.method === 'POST') return unggahBukti(req, env, sesi);
+      if (url.pathname.startsWith('/api/bukti/') && req.method === 'GET') {
+        // staff dan admin boleh melihat bukti bayar (dokumen transaksi, bukan data pribadi)
+        return lihatBukti(env, decodeURIComponent(url.pathname.slice('/api/bukti/'.length)), sesi);
+      }
       if (url.pathname.startsWith('/api/ktp/penyewa/')) {
         // URL stabil per penyewa (dipakai tombol "Lihat foto"); kunci R2 tidak pernah dikirim ke browser
         const kode = decodeURIComponent(url.pathname.slice('/api/ktp/penyewa/'.length));

@@ -177,6 +177,21 @@ ck "Masuk 25 Mei -> jatuh tempo 25 Jun" "$(jq_ "d.penyewa.find(p=>p[1]==='Masuk 
 ck "Masuk 31 Mar -> jatuh tempo 30 Apr (bukan 28)" "$(jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl31')[6]")" "2026-04-30"
 ck "Bayar 2 bulan dari 25 Jun -> 25 Agu" "$(actj $J '{"action":"payments.create","data":{"kamar":"107","jumlah":1600000,"bulan":2,"tanggal":"'$TODAY'"}}' >/dev/null; code -b $J "$B/api/dashboard" >/dev/null; jq_ "d.penyewa.find(p=>p[1]==='Masuk Tgl25')[6]")" "2026-08-25"
 
+echo "== BUKTI PEMBAYARAN =="
+actj $J '{"action":"rooms.create","data":{"noKamar":"111","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null
+actj $J '{"action":"tenants.create","data":{"nama":"Bukti Bayar","hp":"81200003333","kamar":"111","tglMasuk":"2026-05-10"}}' >/dev/null
+/usr/bin/python3 -c "import base64,sys;sys.stdout.buffer.write(base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='))" > /tmp/bukti.png
+ck "Unggah bukti bayar (PNG) berhasil" "$(code -b $J -X POST -F "file=@/tmp/bukti.png;type=image/png" "$B/api/bukti" >/dev/null; jq_ "(d.kunci || '').startsWith('bukti/') || 'gagal'")" "true"
+BK=$(jq_ "d.kunci")
+ck "Bukti bisa diambil kembali (200)" "$(code -b $J "$B/api/bukti/$BK")" "200"
+ck "Kunci bukti ngawur ditolak 400" "$(code -b $J "$B/api/bukti/bukti/2026/..%2F..%2Fetc")" "400"
+ck "Unggah bukti: format tidak dikenal ditolak 400" "$(code -b $J -X POST -F "file=@/tmp/bukti.png;type=text/plain" "$B/api/bukti")" "400"
+ck "Unggah bukti tanpa berkas ditolak 400" "$(code -b $J -X POST -F "x=1" "$B/api/bukti")" "400"
+ck "Pembayaran 2 bulan dengan bukti tersimpan" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"111\",\"jumlah\":2200000,\"bulan\":2,\"tanggal\":\"$TODAY\",\"buktiKey\":\"$BK\"}}")" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Dashboard menampilkan kunci bukti pada transaksi" "$(jq_ "(d.transaksi.find(t=>t[2]==='111')||[])[6] || 'kosong'")" "$BK"
+ck "Kunci bukti palsu saat bayar ditolak 400" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"111\",\"jumlah\":1100000,\"tanggal\":\"$TODAY\",\"buktiKey\":\"ktp/2026/x.png\"}}")" "400"
+
 echo "== TANGGAL MULAI TAGIHAN & PRORATA =="
 actj $J '{"action":"rooms.create","data":{"noKamar":"109","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null
 actj $J '{"action":"rooms.create","data":{"noKamar":"110","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null

@@ -125,6 +125,19 @@
       if (!res.ok) throw new Error((payload && payload.error) || `Unggah foto gagal (${res.status}).`);
       return payload;                       // { kunci, tipe }
     },
+    uploadBukti: async (file) => {
+      if (!file) return null;
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(API + '/bukti', { method: 'POST', body: fd, credentials: 'same-origin' });
+      let payload = null;
+      try { payload = await res.json(); } catch (_) { /* bukan JSON */ }
+      if (res.status === 401 && typeof window.onSesiBerakhir === 'function') window.onSesiBerakhir();
+      if (!res.ok) throw new Error((payload && payload.error) || `Unggah bukti gagal (${res.status}).`);
+      return payload;                       // { kunci, tipe }
+    },
+    urlBukti: (kunci) => (kunci ? API + '/bukti/' + kunci.split('/').map(encodeURIComponent).join('/') : null),
+
     urlKtp: (kunci) => (kunci ? API + '/ktp/' + kunci.split('/').map(encodeURIComponent).join('/') : null),
 
     // ---------------- cadangan ----------------

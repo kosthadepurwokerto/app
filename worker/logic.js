@@ -131,6 +131,7 @@ export const KTP_MODE = 'r2';
 // tipe foto KTP yang diterima (ekstensi dipakai untuk kunci R2)
 export const KTP_TIPE = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 // bentuk kunci yang kita terbitkan sendiri: ktp/<tahun>/<uuid>.<ext>
+export const KUNCI_BUKTI = /^bukti\/\d{4}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp|pdf)$/;
 export const KUNCI_KTP = /^ktp\/\d{4}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
 
 // ---------- aksi bisnis ----------
@@ -247,6 +248,9 @@ export async function recordPayment(ctx, data) {
   ).bind(noKamar).first();
   if (!t) throw httpError(404, `Tidak ada penyewa aktif di kamar ${noKamar}.`);
 
+  const buktiKey = String(data.buktiKey || '').trim();
+  if (buktiKey && !KUNCI_BUKTI.test(buktiKey)) throw httpError(400, 'Kunci bukti pembayaran tidak valid.');
+
   // ---- bayar N bulan sekaligus -------------------------------------------------
   // `bulan` = jumlah bulan yang dibayar (default 1). Tagihan dilunasi berurutan mulai
   // yang paling awal, dan tagihan bulan-bulan berikutnya dibuat bila belum ada.
@@ -297,8 +301,8 @@ export async function recordPayment(ctx, data) {
           .bind(t.id, b.periode, b.jatuh_tempo, b.jumlah, 'belum_bayar'));
       }
       // satu baris pembayaran untuk seluruh bulan (struk menampilkan jumlah bulan bayar)
-      stmts.push(ctx.db.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, created_by) values (?,?,?,?,?,?,?)')
-        .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), ctx.user.id));
+      stmts.push(ctx.db.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, bukti_key, created_by) values (?,?,?,?,?,?,?,?)')
+        .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), buktiKey || null, ctx.user.id));
       if (bulan > 1) {
         // jumlah bulan disimpan di keterangan; void memakainya untuk tahu berapa bulan dibatalkan
         stmts.push(ctx.db.prepare("update payments set bulan=? where nomor_struk=?").bind(bulan, nomor));

@@ -118,6 +118,7 @@ create table if not exists payments (
   created_by   text references users(id),
   voided_at    text,
   bulan        integer not null default 1,   -- jumlah bulan yang dibayar dalam satu struk
+  bukti_key    text,                        -- berkas bukti bayar (foto/PDF) di R2 / D1
   created_at   text not null default (datetime('now'))
 );
 create index if not exists idx_payments_tgl on payments(tgl_bayar desc);
