@@ -9,6 +9,11 @@ const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } });
 
 function cookieValue(req, name) {
+  // APK Android memuat halaman dari dalam aplikasi (file://) lalu memanggil API lintas-asal.
+  // Token sesi dikirim lewat header ini karena cookie lintas-asal sering diblokir WebView;
+  // tetap dicocokkan dengan tabel sessions, jadi keamanannya sama.
+  const dariHeader = req.headers.get('x-sesi-apk');
+  if (dariHeader) return dariHeader;
   const raw = req.headers.get('cookie') || '';
   const m = raw.match(new RegExp('(?:^|;\\s*)' + name + '=([^;]+)'));
   return m ? decodeURIComponent(m[1]) : null;
@@ -16,6 +21,23 @@ function cookieValue(req, name) {
 
 function setSesiCookie(token, secure, maxAge = SESI_HARI * 86400) {
   return `hade_sesi=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` + (secure ? '; Secure' : '');
+}
+
+// APK Android memuat halaman dari file:// sehingga origin-nya "null" dan setiap permintaan
+// ke API dianggap lintas-asal. Tanpa header ini WebView menolak semua balasan.
+const ASAL_APK = new Set(['null', 'file://']);
+function corsApk(req, res) {
+  const asal = req.headers.get('origin');
+  if (asal && ASAL_APK.has(asal)) {
+    const h = new Headers(res.headers);
+    h.set('access-control-allow-origin', 'null');   // JANGAN pakai "*" bersama kredensial
+    h.set('access-control-allow-credentials', 'true');
+    h.set('access-control-allow-headers', 'content-type, x-sesi-apk');
+    h.set('access-control-allow-methods', 'GET, POST, OPTIONS');
+    h.set('vary', 'origin');
+    return new Response(res.body, { status: res.status, headers: h });
+  }
+  return res;
 }
 
 async function sesiAktif(env, req) {
@@ -533,6 +555,19 @@ export default {
     const secure = (env.COOKIE_SECURE ?? 'true') !== 'false';
     const today = logic.todayISO();
 
+    // preflight dari APK (halaman file://) — dijawab sebelum autentikasi
+    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
+      return corsApk(req, new Response(null, { status: 204 }));
+    }
+    if (url.pathname.startsWith('/api/')) {
+      return corsApk(req, await tanganiApi(req, env, url, secure, today));
+    }
+    return env.ASSETS.fetch(req);                    // UI statis (index.html)
+  },
+};
+
+async function tanganiApi(req, env, url, secure, today) {
+
     if (!url.pathname.startsWith('/api/')) {
       return env.ASSETS.fetch(req);                    // UI statis (index.html)
     }
@@ -571,7 +606,9 @@ export default {
           .bind(await logic.sha256hex(token), u.id, exp).run();
         await env.DB.prepare("delete from sessions where expires_at < datetime('now')").run().catch(() => {});
         await env.DB.prepare("delete from login_percobaan where created_at < datetime('now','-2 days')").run().catch(() => {});
-        return json({ ok: true, user: { username: u.username, fullname: u.fullname, role: u.role } },
+        // `token` hanya dipakai APK (halaman dari file://) yang tidak bisa memakai cookie
+        // lintas-asal. Browser biasa tetap memakai cookie HttpOnly dan mengabaikan nilai ini.
+        return json({ ok: true, token, user: { username: u.username, fullname: u.fullname, role: u.role } },
           200, { 'set-cookie': setSesiCookie(token, secure) });
       }
 
@@ -672,5 +709,4 @@ export default {
       const pesanAman = status >= 500 ? 'Permintaan tidak valid.' : (e.message || 'Permintaan tidak valid.');
       return json({ error: pesanAman }, status);
     }
-  },
-};
+}

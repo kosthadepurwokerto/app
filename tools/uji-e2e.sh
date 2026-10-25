@@ -242,10 +242,19 @@ code -b $J "$B/api/bootstrap" >/dev/null
 ck "Kategori baru membawa saldoNormal Kredit ke klien" "$(jq_ "((d.kategori.Neraca||[]).find(c=>c.nama==='Pinjaman Bank')||{}).saldoNormal || 'tidak ada'")" "Kredit"
 ck "Kas dashboard ikut naik (kategori dinamis dihitung server)" "$(jq_ "d.stats.sisaKas >= 20000000 ? 'naik' : 'tidak'")" "naik"
 
+TOKEN_APK=$(curl -s -H 'Origin: null' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
 echo "== BATAS PERCOBAAN LOGIN ==="
 for i in $(seq 1 10); do curl -s -o /dev/null -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah$i"}' "$B/api/login"; done
 ck "Setelah 10x salah, login benar pun ditolak 429" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "429"
 ck "Akun lain tidak ikut terkunci" "$(actj $J '{"action":"users.create","data":{"username":"cek-login","password":"Cekpass12345","role":"staff"}}' >/dev/null; loginj cek-login Cekpass12345)" "200"
+
+echo "== AKSES DARI APK (origin null) ==="
+ck "Preflight OPTIONS dari APK dijawab 204" "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: null' -H 'Access-Control-Request-Method: POST' "$B/api/login")" "204"
+ck "Header CORS untuk origin null terkirim" "$(curl -s -D - -o /dev/null -H 'Origin: null' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah"}' "$B/api/login" | grep -ci 'access-control-allow-origin: null')" "1"
+ck "Login membalas token untuk APK" "$(loginj token admin Kostsaya12345 >/dev/null; echo ok)" "ok"
+ck "Token APK didapat dari login" "$([ -n "$TOKEN_APK" ] && echo ya || echo tidak)" "ya"
+ck "Token APK dipakai lewat header x-sesi-apk (bukan cookie)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TOKEN_APK" "$B/api/bootstrap")" "200"
+ck "Header sesi palsu ditolak 401" "$(curl -s -o /dev/null -w '%{http_code}' -H 'x-sesi-apk: palsu123' "$B/api/bootstrap")" "401"
 
 echo "== KATEGORI & PENGGUNA =="
 ck "Tambah kategori" "$(actj $J '{"action":"categories.create","data":{"jenis":"pengeluaran","nama":"Uji Kategori","saldoNormal":"Debet"}}')" "200"
