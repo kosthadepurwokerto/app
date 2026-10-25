@@ -24,6 +24,10 @@
       background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px);
       display: flex; align-items: center; justify-content: center; z-index: 10000;
     }
+    /* .hidden (Tailwind) berada di berkas yang dimuat SEBELUM style ini, jadi tanpa aturan
+       setara ini overlay "Sinkronisasi Cloud" tidak pernah bisa ditutup: layar login
+       tertutup abu-abu terus walau data sudah selesai dimuat. */
+    .loading-overlay.hidden { display: none !important; white-space: nowrap; }
     
     /* Premium Blue to Red Gradient for Active Navigation */
     .nav-btn-active {
@@ -109,12 +113,11 @@
     }
     body.tanpa-tailwind #login-screen > div { position: static !important; }
     body.tanpa-tailwind #app-container, body.tanpa-tailwind #loading { display: none !important; }
-    #login-screen { position: fixed; inset: 0; z-index: 9999; overflow: auto; background: #eff6ff; }
-    #login-screen h2 { display: block; font-size: 24px; font-weight: 800; text-align: center; margin: 0 0 4px; color: #0f172a; }
-    #login-screen p { display: block; font-size: 12px; margin: 0 0 12px; color: #475569; }
-    #login-screen form { display: block; padding: 16px; }
-    #login-screen input, #login-screen button { display: block; width: 100%; margin: 8px 0; padding: 12px; font-size: 15px; }
-    #login-screen img { display: inline-block; max-width: 80px; }
+    /* Aturan cadangan di bawah INI SANGAT TERBATAS (#status-lanjut saja).
+       Sebelumnya ada aturan lebar seperti `#login-screen { position:fixed }`,
+       `#login-screen p {display:block}` dan `#login-screen input, button {width:100%}` yang
+       berada SETELAH Tailwind sehingga menang atas kelas Tailwind: kartu login jadi
+       transparan/bertumpuk dan tombol memanjang penuh — tampak seperti layar kosong. */
     #status-lanjut { display: block; text-align: center; font-size: 12px; color: #475569; padding: 12px; }
   </style>
 
@@ -1581,9 +1584,27 @@
 
     // USER SESSIONS MANAGEMENT & INITIALIZATION
     /** Tulis status ke layar login supaya pengguna tahu aplikasi terhenti di mana. */
-    /** Aktifkan mode aman bila Tailwind (CDN) gagal dimuat. */
+    /** Aktifkan mode aman HANYA bila CSS Tailwind lokal gagal dimuat.
+     *  Dulu deteksinya memakai variabel global dari CDN Tailwind. Sejak Tailwind dibangun
+     *  lokal, CDN sudah tidak dipakai — pemeriksaan lama selalu menganggap Tailwind tidak
+     *  ada, sehingga mode aman aktif terus dan #login-screen dipaksa position:static
+     *  (kartu login terdorong ke bawah, layar tampak putih kosong). */
+    function tailwindSiap() {
+      try {
+        const probe = document.createElement('div');
+        probe.className = 'hidden';
+        document.body.appendChild(probe);
+        const sembunyi = getComputedStyle(probe).display === 'none';
+        probe.className = 'flex';
+        const fleks = getComputedStyle(probe).display === 'flex';
+        probe.remove();
+        return sembunyi && fleks;
+      } catch (e) {
+        return false;
+      }
+    }
     function pasangModeAman() {
-      if (typeof tailwind === 'undefined') document.body.classList.add('tanpa-tailwind');
+      document.body.classList.toggle('tanpa-tailwind', !tailwindSiap());
     }
     if (document.readyState !== 'loading') pasangModeAman();
     else document.addEventListener('DOMContentLoaded', pasangModeAman);
@@ -1595,7 +1616,7 @@
 
     function initUserSession() {
       statusLanjut('Menghubungkan ke server…');
-      if (typeof tailwind === 'undefined') { pasangModeAman(); statusLanjut('Tampilan sederhana (layanan CDN tidak terjangkau). Menghubungkan…'); }
+      if (!tailwindSiap()) { pasangModeAman(); statusLanjut('Tampilan sederhana (berkas tampilan tidak termuat). Menghubungkan…'); }
       if (!window.HADE) {
         statusLanjut('Komponen aplikasi tidak termuat (d1-adapter.js). Muat ulang halaman.');
         document.getElementById('login-setup-hint').classList.remove('hidden');

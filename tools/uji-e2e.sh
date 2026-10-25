@@ -338,6 +338,10 @@ ck "Tidak ada lagi template CSS dari CDN" "$(curl -s "$B/" | grep -c 'cdn.tailwi
 ck "Manifest PWA tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/manifest.webmanifest")" "200"
 ck "Ikon 192 tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/ikon-192.png")" "200"
 ck "Tailwind lokal tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/tailwind.css")" "200"
+ck "Halaman tidak memakai deteksi CDN lama (mode aman palsu)" "$(curl -s "$B/" | grep -c "typeof tailwind === \"undefined\"")" "0"
+curl -s "$B/" -o /tmp/hal2.html
+ck "Overlay loading bisa disembunyikan (.loading-overlay.hidden + .hidden)" "$(grep -c 'loading-overlay' /tmp/hal2.html | head -1) $(grep -c 'loading-overlay.hidden { display: none !important' /tmp/hal2.html)" "3 1"
+ck "Tidak ada aturan #login-screen lebar yang menimpa Tailwind" "$(curl -s "$B/" | grep -c '^    #login-screen {')" "0"
 ck "Opsi CORS untuk origin lain TIDAK dikirim" "$(curl -s -D - -o /dev/null -H 'Origin: https://jahat.example' "$B/api/session" | grep -ci 'access-control-allow-origin')" "0"
 
 # 2) Batas laju per IP (header x-forwarded-for dipakai untuk membedakan klien di lokal).
