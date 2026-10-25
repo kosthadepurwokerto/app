@@ -23,6 +23,59 @@ function setSesiCookie(token, secure, maxAge = SESI_HARI * 86400) {
   return `hade_sesi=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}` + (secure ? '; Secure' : '');
 }
 
+// =====================================================================
+// PERTAHANAN PERIMETER (diterapkan ke SEMUA respons, termasuk galat)
+// - Header keamanan: halaman dan API tidak boleh dibingkai (anti clickjacking),
+//   tidak boleh ditebak tipenya, dan API tidak di-cache.
+// Batas laju sederhana: penghitung di memori isolate. Servis satu pengguna
+//   3–10 kamar tidak butuh Durable Object, tapi tetap bisa menahan banjir permintaan.
+//   Kuota login lebih longgar dari penguncian per akun (10 gagal/15 menit) supaya
+//   penguncian akun tetap yang memberi pesan jelas; batas ini menahan banjir kasar.
+// =====================================================================
+const BATAS_LAJU = { jendelaMs: 60000, baca: 3000, login: 60, tulis: 600, sandi: 100, post: 300 };
+const _hitung = new Map();  // kunci -> { n, mulai }
+
+function kepalaKeamanan(h, api) {
+  h.set('x-frame-options', 'DENY');  h.set('x-content-type-options', 'nosniff');
+  h.set('referrer-policy', 'same-origin');
+  h.set('x-permitted-cross-domain-policies', 'none');
+  h.set('permissions-policy', 'geolocation=(), camera=(), microphone=()');
+  if (api) {
+    h.set('cache-control', 'no-store');
+    h.set('vary', 'origin');
+    // Kebijakan isi ketat: hanya skrip/gaya dari asal sendiri.
+    h.set('content-security-policy',
+      "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+  }
+  return h;
+}
+
+// true = boleh lanjut, false = kena batas
+function bolehLewat(kunci, maks) {
+  const now = Date.now();
+  const c = _hitung.get(kunci);
+  if (!c || now - c.mulai > BATAS_LAJU.jendelaMs) {
+    _hitung.set(kunci, { n: 1, mulai: now });
+    if (_hitung.size > 5000) {                       // cegah memori isolate membengkak
+      for (const [k, v] of _hitung) if (now - v.mulai > BATAS_LAJU.jendelaMs) _hitung.delete(k);
+    }
+    return true;
+  }
+  c.n += 1;
+  return c.n <= maks;
+}
+
+function ipKlien(req) {
+  // Cloudflare selalu menimpa cf-connecting-ip dengan IP asli klien; header lain
+  // (x-real-ip) hanya dipakai saat berjalan lokal.
+  return req.headers.get('cf-connecting-ip') || req.headers.get('x-real-ip') || `lokal:${req.headers.get('host') || '?'}`;
+}
+
+function jawabApi(req, data, status = 200, headers = {}) {
+  const h = kepalaKeamanan(new Headers({ 'content-type': 'application/json; charset=utf-8', ...headers }), true);
+  return new Response(JSON.stringify(data), { status, headers: h });
+}
+
 // APK Android memuat halaman dari file:// sehingga origin-nya "null" dan setiap permintaan
 // ke API dianggap lintas-asal. Tanpa header ini WebView menolak semua balasan.
 const ASAL_APK = new Set(['null', 'file://']);
@@ -203,15 +256,18 @@ async function lihatBerkas(env, kunci, sesi, opsi) {
     else body = isi;
     tipe = row.tipe;
   }
-  // Bukti bayar adalah dokumen keuangan: tidak di-cache publik, hanya untuk user login
+  // Bukti bayar adalah dokumen keuangan: tidak di-cache publik, hanya untuk user login.
+  // Berkas yang tersimpan tanpa tipe yang dikenal diperlakukan sebagai unduhan, bukan
+  // halaman — mencegah berkas tak dikenal dirender sebagai HTML di asal aplikasi.
+  const aman = BUKTI_TIPE[tipe] ? tipe : 'application/octet-stream';
   return new Response(body, {
-    headers: {
-      'content-type': tipe,
+    headers: kepalaKeamanan(new Headers({
+      'content-type': aman,
       'cache-control': 'private, no-store',
       // jangan biarkan browser menebak tipe lain (berkas bisa disajikan sebagai HTML)
       'x-content-type-options': 'nosniff',
       'content-disposition': `inline; filename="${kunci.split('/').pop()}"`,
-    },
+    }), true),
   });
 }
 
@@ -273,12 +329,12 @@ async function lihatKtp(env, kunci, sesi) {
     tipe = row.tipe;
   }
   return new Response(body, {
-    headers: {
-      'content-type': tipe,
+    headers: kepalaKeamanan(new Headers({
+      'content-type': BUKTI_TIPE[tipe] ? tipe : 'application/octet-stream',
       'cache-control': 'private, no-store',          // data pribadi: jangan di-cache proxy
       'content-disposition': 'inline',
       'x-content-type-options': 'nosniff',
-    },
+    }), true),
   });
 }
 
@@ -490,10 +546,12 @@ async function addUser(ctx, d) {
   const dup = await ctx.db.prepare('select id from users where username=?').bind(username).first();
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai.`);
   const hash = await logic.hashPassword(password);
-  await ctx.db.prepare('insert into users (id, username, fullname, role, password_hash, aktif) values (?,?,?,?,?,1)')
+  // Password yang dibuatkan admin adalah password awal: pemilik akun wajib menggantinya
+  // saat login pertama (dijaga juga di API, bukan hanya di UI).
+  await ctx.db.prepare('insert into users (id, username, fullname, role, password_hash, aktif, must_change_password) values (?,?,?,?,?,1,1)')
     .bind('usr_' + crypto.randomUUID().slice(0, 8), username, fullname, role, hash).run();
   await ctx.audit('user.create', 'users', username, null, { username, role });
-  return `Pengguna ${username} (${role}) dibuat.`;
+  return `Pengguna ${username} (${role}) dibuat. Pemilik akun wajib mengganti password saat login pertama.`;
 }
 
 async function updateUser(ctx, d) {
@@ -554,23 +612,58 @@ export default {
     const url = new URL(req.url);
     const secure = (env.COOKIE_SECURE ?? 'true') !== 'false';
     const today = logic.todayISO();
+    const api = url.pathname.startsWith('/api/');
+
+    // ---- batas laju (per IP): login paling ketat, tulis lebih ketat dari baca ----
+    // Untuk GET cukup satu kuota longgar; POST dipisah per kelompok rute supaya
+    // perubahan data, login, dan konfirmasi password tidak saling memakan kuota.
+    if (api) {
+      const ip = ipKlien(req);
+      const jalur = url.pathname === '/api/login' ? 'login'
+                  : url.pathname === '/api/password' ? 'sandi'
+                  : url.pathname === '/api/action' ? 'tulis'
+                  : (req.method === 'POST' ? 'post' : 'baca');
+      const maks = jalur === 'login' ? BATAS_LAJU.login
+                 : jalur === 'sandi' ? BATAS_LAJU.sandi
+                 : jalur === 'baca' ? BATAS_LAJU.baca
+                 : BATAS_LAJU.tulis;
+      // Penghitung batas laju tidak permanen: isolate Cloudflare berpindah-pindah sehingga
+    // hitungan lokal bisa dipakai bergantian. Tiap menit peta dibersihkan agar kuota
+    // selalu segar (cukup untuk menahan banjir, tanpa risiko "terkunci selamanya").
+    const nowMs = Date.now();
+    for (const [k, v] of _hitung) if (nowMs - v.mulai > BATAS_LAJU.jendelaMs) _hitung.delete(k);
+    if (!bolehLewat(`laju:${jalur}:${ip}`, maks)) {
+        return corsApk(req, jawabApi(req, { error: 'Terlalu banyak permintaan. Coba lagi sebentar.' }, 429,
+          { 'retry-after': '60' }));
+      }
+    }
 
     // preflight dari APK (halaman file://) — dijawab sebelum autentikasi
-    if (req.method === 'OPTIONS' && url.pathname.startsWith('/api/')) {
-      return corsApk(req, new Response(null, { status: 204 }));
+    if (req.method === 'OPTIONS' && api) {
+      return corsApk(req, new Response(null, { status: 204, headers: kepalaKeamanan(new Headers(), true) }));
     }
-    if (url.pathname.startsWith('/api/')) {
-      return corsApk(req, await tanganiApi(req, env, url, secure, today));
+
+    if (api) {
+      const res = await tanganiApi(req, env, url, secure, today);
+      const h = kepalaKeamanan(new Headers(res.headers), true);
+      return corsApk(req, new Response(res.body, { status: res.status, headers: h }));
     }
-    return env.ASSETS.fetch(req);                    // UI statis (index.html)
+
+    // UI statis. Lapisan aset Cloudflare melayani / dan /index.html lebih dulu (dapur
+    // produksi maupun wrangler dev), sehingga Worker hanya menangani berkas lain (mis.
+    // /d1-adapter.js). Header keamanan halaman dipasang lewat pub/_headers; untuk berkas
+    // yang lewat Worker, header ditempel pada objek respons apa adanya (jangan dibuat ulang —
+    // respons aset bisa berupa stream dan akan kehilangan isinya).
+    const res = await env.ASSETS.fetch(req);
+    res.headers.set('x-frame-options', 'DENY');
+    res.headers.set('x-content-type-options', 'nosniff');
+    res.headers.set('referrer-policy', 'same-origin');
+    res.headers.set('permissions-policy', 'geolocation=(), camera=(), microphone=()');
+    return res;
   },
 };
 
 async function tanganiApi(req, env, url, secure, today) {
-
-    if (!url.pathname.startsWith('/api/')) {
-      return env.ASSETS.fetch(req);                    // UI statis (index.html)
-    }
 
     try {
       // ---------- auth ----------
@@ -626,6 +719,15 @@ async function tanganiApi(req, env, url, secure, today) {
                     : json({ logged_in: false });
       }
       if (!sesi) return json({ error: 'Sesi berakhir. Silakan login ulang.' }, 401);
+
+      // Password awal (dari tools/buat-akun.mjs) wajib diganti sebelum menyentuh data.
+      // Tanpa ini, ?view=password cukup dilewati dengan memanggil API lain langsung,
+      // sehingga sandi awal tetap bisa dipakai mengelola aplikasi.
+      const bolehTanpaGanti = url.pathname === '/api/password' || url.pathname === '/api/logout'
+                           || url.pathname === '/api/session';
+      if (sesi.must_change_password && !bolehTanpaGanti) {
+        return json({ error: 'Anda wajib mengganti password terlebih dahulu.', kode: 'ganti_password' }, 403);
+      }
 
       // ---------- ganti password sendiri ----------
       if (url.pathname === '/api/password' && req.method === 'POST') {

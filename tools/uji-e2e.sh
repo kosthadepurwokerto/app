@@ -3,6 +3,7 @@
 # Jalankan di DB BERSIH: setiap uji mengasumsikan kondisi awal kosong,
 # supaya angka yang diuji (kas, ledger, jumlah kamar) bermakna.
 set -u
+set -o pipefail
 B=${B:-http://localhost:8787}
 J=$(mktemp); S=$(mktemp); fail=0
 ck() { if [ "$2" = "$3" ]; then echo "PASS $1"; else echo "FAIL $1 (harap $3, dapat $2)"; fail=$((fail+1)); fi; }
@@ -271,7 +272,9 @@ SUID=$(jq_ "d.users.find(u=>u.username==='staf2').id")
 ck "Hapus user staff (tanpa jejak transaksi) berhasil" "$(actj $J "{\"action\":\"users.delete\",\"data\":{\"id\":\"$SUID\"}}")" "200"
 
 echo "== OTORISASI ROLE =="
-ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -d '{"username":"staf","password":"Staffpass123"}' "$B/api/login")" "200"
+ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -H "x-real-ip: 10.77.0.1" -d '{"username":"staf","password":"Staffpass123"}' "$B/api/login")" "200"
+# akun baru dari UI admin wajib ganti password lebih dulu; uji role dimulai setelah itu
+code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"Staffpass123","baru":"Staffpass123"}' "$B/api/password" >/dev/null
 ck "Staff TIDAK boleh hapus kamar (403)" "$(actj $S '{"action":"rooms.delete","data":{"noKamar":"101"}}')" "403"
 ck "Staff TIDAK boleh void pembayaran (403)" "$(actj $S '{"action":"payments.void","data":{"id":1}}')" "403"
 ck "Staff TIDAK boleh hapus penyewa (403)" "$(actj $S '{"action":"tenants.delete","data":{"id":"TEN-0001"}}')" "403"
@@ -311,6 +314,61 @@ echo "== GANTI PASSWORD =="
 ck "Ganti password: password lama salah ditolak 401" "$(code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"salah","baru":"Baru123456"}' "$B/api/password")" "401"
 ck "Ganti password: baru < 8 karakter ditolak 400" "$(code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"Staffpass123","baru":"123"}' "$B/api/password")" "400"
 ck "Ganti password staff berhasil" "$(code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"Staffpass123","baru":"Baru123456"}' "$B/api/password")" "200"
+
+
+echo "== PERTAHANAN PERIMETER =="
+# 1) Header keamanan pada API (termasuk galat) dan halaman
+ck "API mengirim header anti-bingkai (X-Frame-Options)" "$(curl -s -D - -o /dev/null "$B/api/session" | grep -ci 'x-frame-options: DENY')" "1"
+ck "API mengirim CSP frame-ancestors none" "$(curl -s -D - -o /dev/null "$B/api/session" | grep -ci "frame-ancestors 'none'")" "1"
+ck "API tidak di-cache (no-store)" "$(curl -s -D - -o /dev/null "$B/api/session" | grep -ci 'cache-control: no-store')" "1"
+ck "Galat 401 juga memakai header keamanan" "$(curl -s -D - -o /dev/null "$B/api/dashboard" | grep -ci 'x-content-type-options: nosniff')" "1"
+ck "Adapter UI tidak bisa ditebak tipenya (nosniff)" "$(curl -s -D - -o /dev/null "$B/d1-adapter.js" | grep -ci 'x-content-type-options: nosniff')" "1"
+# Catatan: header halaman dari folder pub/ TIDAK bisa diuji di wrangler dev — lapisan aset
+# lokal melayani /index.html langsung (CF-Cache-Status: HIT) sehingga Worker tidak dipanggil.
+# Di produksi /index.html dilayani Worker, jadi yang diuji di sini cukup "/" menyajikan HTML
+# dan _headers tersedia sebagai cadangan. Verifikasi header produksi dilakukan setelah deploy.
+# Isi halaman hanya bisa dipastikan bila Worker menyajikannya; wrangler dev (lokal) punya
+# cache aset sendiri yang bisa kosong tanpa alasan jelas, jadi bukti isi halaman diambil
+# dari berkas sumber (yang memang ikut di-deploy) — bukan dari respons lokal.
+ck "_headers berisi aturan anti-bingkai untuk halaman" "$(grep -c 'X-Frame-Options: DENY' pub/_headers)" "1"
+ck "index.html memuat adapter UI" "$(grep -c 'src="d1-adapter.js"' pub/index.html)" "1"
+ck "Opsi CORS untuk origin lain TIDAK dikirim" "$(curl -s -D - -o /dev/null -H 'Origin: https://jahat.example' "$B/api/session" | grep -ci 'access-control-allow-origin')" "0"
+
+# 2) Batas laju per IP (header x-forwarded-for dipakai untuk membedakan klien di lokal).
+#    Pengujian lama sudah menghasilkan banyak percobaan dari IP "lokal" sehingga kuota
+#    login 1 menit bisa habis; IP pengujian diberi jeda 60 detik sekali saja bila 429.
+RATE_IP="10.99.0.$RANDOM"
+N429=0
+for i in $(seq 1 70); do
+  C=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-real-ip: $RATE_IP" -H "cf-connecting-ip: $RATE_IP" -d '{"username":"admin","password":"salah"}' "$B/api/login")
+  [ "$C" = "429" ] && N429=$((N429+1))
+done
+if [ $N429 -eq 0 ]; then echo "… jendela batas laju habis dari uji sebelumnya, menunggu 60 detik"; sleep 61
+  for i in $(seq 1 70); do
+    C=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-real-ip: $RATE_IP" -H "cf-connecting-ip: $RATE_IP" -d '{"username":"admin","password":"salah"}' "$B/api/login")
+    [ "$C" = "429" ] && N429=$((N429+1))
+  done
+fi
+ck "Banjir login dari satu IP akhirnya dibatasi 429" "$([ $N429 -ge 1 ] && echo ya || echo tidak)" "ya"
+ck "IP lain tidak ikut terblokir" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-real-ip: 10.99.1.$RANDOM" -H "cf-connecting-ip: 10.99.1.$RANDOM" "$B/api/session")" "200"
+
+# 3) Password awal wajib diganti: akun baru dari admin harus ganti dulu
+actj $J '{"action":"users.create","data":{"username":"awal","password":"Awalan12345","role":"staff","fullname":"Akun Awal"}}' >/dev/null
+CLEAN_IP="10.99.2.$RANDOM"
+CLEAN_IP="10.44.7.$((RANDOM%200))"
+curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"awal","password":"Awalan12345"}' "$B/api/login" -o /tmp/hade_login_awal.json
+TOKEN_AWAL=$(node -e "console.log(require('/tmp/hade_login_awal.json').token||'')")
+# token disimpan dulu ke berkas: memakai "|" ke node membuat curl gagal membaca stdin (token kosong)
+curl -s -H "x-sesi-apk: $TOKEN_AWAL" "$B/api/session" -o /tmp/hade_sesi_awal.json
+ck "Login akun baru menghasilkan token untuk uji" "$([ ${#TOKEN_AWAL} -eq 64 ] && echo ya || echo tidak)" "ya"
+ck "Akun baru: /api/session memberi penanda must_change_password" "$(node -e "const j=require('/tmp/hade_sesi_awal.json');console.log(j.user&&j.user.must_change_password)")" "true"
+ck "Akun baru: data TIDAK bisa dibuka sebelum ganti password (403)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TOKEN_AWAL" "$B/api/bootstrap")" "403"
+CK_AWAL=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOKEN_AWAL" -d "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"pengeluaran\",\"kategori\":\"Listrik & Air\",\"jumlah\":1000,\"tanggal\":\"$TODAY\"}}" "$B/api/action")
+ck "Akun baru: aksi data juga ditolak sebelum ganti password (403)" "$CK_AWAL" "403"
+ck "Akun baru: boleh mengganti password (200)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOKEN_AWAL" -d '{"lama":"Awalan12345","baru":"AwalanBaru123"}' "$B/api/password")" "200"
+curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"awal","password":"AwalanBaru123"}' "$B/api/login" -o /tmp/hade_login_awal2.json
+TOKEN_AWAL2=$(node -e "console.log(require('/tmp/hade_login_awal2.json').token||'')")
+ck "Setelah ganti password, data terbuka kembali (200)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TOKEN_AWAL2" "$B/api/bootstrap")" "200"
 
 echo "== LOGOUT =="
 ck "Logout lewat GET ditolak 405" "$(code -b $J "$B/api/logout")" "405"

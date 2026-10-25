@@ -26,7 +26,7 @@ npx wrangler d1 execute hadekost-db --local --file=db/schema.sql
 node tools/buat-akun.mjs admin 'PasswordKuat123' admin 'Administrator'   # salin hasilnya:
 npx wrangler d1 execute hadekost-db --local --command "<hasil perintah di atas>"
 npm run dev            # http://localhost:8787
-npm test   # atau: bash tools/uji-lokal.sh  (137 pemeriksaan, DB lokal terpisah)
+npm test   # atau: bash tools/uji-lokal.sh  (163 pemeriksaan, DB lokal terpisah)
 ```
 
 ## Deploy (sekali)
@@ -69,8 +69,10 @@ Setelah deploy, aplikasi tersedia di `https://hadekost.<subdomain>.workers.dev`.
 
 ## Yang belum tersedia di versi D1
 
-- Edit data penyewa, check-out, pindah kamar, bayar N bulan sekaligus, bukti bayar (foto/PDF).
-- Kelola kategori & pengguna dari dalam aplikasi (lewat SQL/`tools/buat-akun.mjs`).
+- Pindah kamar (check-out, edit penyewa, bayar N bulan, bukti bayar sudah ada).
+- Foto KTP lewat R2: kode sudah siap, butuh token API Cloudflare berizin
+  **Workers R2 Storage** (`npx wrangler r2 bucket create hadekost-ktp`, lalu aktifkan blok
+  `[[r2_buckets]]` di `wrangler.toml`). Selama belum aktif, foto disimpan di tabel `ktp_berkas`.
 
 ## Migrasi database
 
@@ -99,6 +101,6 @@ Memulihkan: buat database baru, lalu impor berkas dengan
 
 ## Uji
 
-`npm test` menjalankan seluruh uji E2E (137 pemeriksaan) pada D1 lokal terpisah; database produksi
+`npm test` menjalankan seluruh uji E2E (163 pemeriksaan) pada D1 lokal terpisah; database produksi
 tidak tersentuh. Uji mencakup otorisasi role, perhitungan kas/tunggakan, void, bayar N bulan,
 prorata, bukti bayar, dan regresi bug yang pernah terjadi.

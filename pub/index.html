@@ -1496,6 +1496,10 @@
         .then(() => HADE.session())
         .then(sess => {
           if (!sess.logged_in) throw new Error('Akun belum memiliki profil. Hubungi admin.');
+          // Password awal wajib diganti sebelum masuk aplikasi (dijaga juga oleh API).
+          if (sess.user && sess.user.must_change_password) {
+            return tuntutGantiPassword(sess.user);
+          }
           activeUser = sess.user;
           usersList = [sess.user];
           document.getElementById('login-screen').classList.add('hidden');
@@ -1512,6 +1516,48 @@
           btn.disabled = false;
           btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Masuk Sistem';
         });
+    }
+
+    /**
+     * Password awal (dibuat admin / tools/buat-akun.mjs) wajib diganti saat login pertama.
+     * Mengembalikan Promise yang selesai setelah password berhasil diganti, sehingga alur
+     * login bisa menunggu; bila pengguna membatalkan, sesi diakhiri (logout).
+     */
+    function tuntutGantiPassword(user) {
+      return new Promise((resolve, reject) => {
+        const baru = window.prompt(`Halo ${user.fullname || user.username}.\nPassword awal Anda wajib diganti sebelum memakai aplikasi.\n\nMasukkan password baru (minimal 8 karakter):`);
+        if (baru === null) {
+          HADE.logout().catch(() => {});
+          reject(new Error('Password belum diganti. Login dibatalkan.'));
+          return;
+        }
+        if (String(baru).length < 8) {
+          HADE.logout().catch(() => {});
+          reject(new Error('Password baru minimal 8 karakter. Silakan login ulang.'));
+          return;
+        }
+        const ulang = window.prompt('Ulangi password baru:');
+        if (ulang !== baru) {
+          HADE.logout().catch(() => {});
+          reject(new Error('Ulangi password tidak sama. Silakan login ulang.'));
+          return;
+        }
+        // Password awal tidak diketahui pengguna? Ia baru saja memakainya untuk login,
+        // tapi agar tidak menahannya, minta password lama sekali lagi bila perlu.
+        const lama = window.prompt('Masukkan password awal (yang baru saja dipakai):');
+        if (lama === null) {
+          HADE.logout().catch(() => {});
+          reject(new Error('Password belum diganti. Login dibatalkan.'));
+          return;
+        }
+        HADE.handlers.gantiPassword(lama, baru)
+          .then((r) => {
+            showCustomAlert('Password Diganti', (r && r.message) || 'Password berhasil diganti. Silakan masuk lagi.', true);
+            HADE.logout().catch(() => {});
+            reject(new Error('Password berhasil diganti. Silakan login ulang.'));
+          })
+          .catch((e) => reject(new Error((e && e.message) || 'Password gagal diganti.')));
+      });
     }
 
     function handleLogout() {
