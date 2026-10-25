@@ -4,7 +4,20 @@
 
 // ---------- tanggal ----------
 export function todayISO(d = new Date()) {
+  // workerd menulis tanggal lokal tanpa offset (2026-10-26 00:00), jadi utcToLocalISO()
+  // mengembalikan null dan jatuh ke tanggal UTC. Akibatnya aplikasi mengira "hari ini"
+  // masih kemarin setiap pukul 00:00–08:00 WITA: check-in hari ini ditolak
+  // ("tidak boleh di masa depan") dan pembayaran hari ini juga. Tanggal acuan harus
+  // tanggal di zona pengguna (Asia/Makassar), bukan UTC.
   const p = (x) => String(x).padStart(2, '0');
+  try {
+    const bagian = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Makassar', year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(d);
+    const ambil = (jenis) => (bagian.find((b) => b.type === jenis) || {}).value;
+    const y = ambil('year'), m = ambil('month'), hari = ambil('day');
+    if (y && m && hari) return `${y}-${m}-${hari}`;
+  } catch (_) { /* jatuh ke tanggal lokal proses */ }
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
