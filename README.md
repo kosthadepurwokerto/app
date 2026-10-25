@@ -104,3 +104,24 @@ Memulihkan: buat database baru, lalu impor berkas dengan
 `npm test` menjalankan seluruh uji E2E (163 pemeriksaan) pada D1 lokal terpisah; database produksi
 tidak tersentuh. Uji mencakup otorisasi role, perhitungan kas/tunggakan, void, bayar N bulan,
 prorata, bukti bayar, dan regresi bug yang pernah terjadi.
+
+## Aplikasi Android (APK)
+
+Pembungkus WebView ada di `~/projects/hadekost-android` (repo terpisah):
+
+```bash
+cd ~/projects/hadekost-android && ./build-apk.sh   # -> hadekost-1.0.0.apk
+```
+
+Alamat server ditanam saat build; ganti dengan `./build-apk.sh --alamat https://...`.
+Berkas kunci `kosthade-release.jks` harus disimpan — pembaruan APK wajib memakai kunci sama.
+
+## UI & aset
+
+- `pub/app.html` disajikan oleh Worker untuk `/` (dan `/index.html`) supaya header keamanan
+  benar-benar terpasang; jangan menamainya `index.html` lagi — lapisan aset akan
+  melayaninya lebih dulu dan memotong header.
+- Tailwind dibangun lokal (`npm run ui` → `pub/tailwind.css`), tanpa CDN, supaya tampilan
+  tetap benar saat sinyal lambat atau CDN diblokir. `npm run deploy` menjalankan build UI
+  lebih dulu.
+- Manifest PWA + ikon: `/manifest.webmanifest`, `/ikon-192.png`, `/ikon-512.png`.
