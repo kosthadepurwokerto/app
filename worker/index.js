@@ -649,11 +649,19 @@ export default {
       return corsApk(req, new Response(res.body, { status: res.status, headers: h }));
     }
 
-    // UI statis. Lapisan aset Cloudflare melayani / dan /index.html lebih dulu (dapur
-    // produksi maupun wrangler dev), sehingga Worker hanya menangani berkas lain (mis.
-    // /d1-adapter.js). Header keamanan halaman dipasang lewat pub/_headers; untuk berkas
-    // yang lewat Worker, header ditempel pada objek respons apa adanya (jangan dibuat ulang —
-    // respons aset bisa berupa stream dan akan kehilangan isinya).
+    // ---- UI: halaman disajikan Worker supaya header keamanan benar-benar terpasang ----
+    // Lapisan aset Cloudflare melayani / dan /index.html sendiri (dengan cache + _headers),
+    // sehingga header di bawah tidak pernah sampai ke browser. Karena itu index.html
+    // disimpan sebagai pub/app.html (bukan nama yang dilayani otomatis) dan disajikan
+    // dari sini untuk "/" dan "/index.html".
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      const hal = SajikanHalaman(env, url);
+      if (hal) return hal;
+    }
+
+    // Berkas statis lain (d1-adapter.js, ikon, manifest) tetap lewat lapisan aset.
+    // Header ditempel pada objek respons apa adanya (jangan dibuat ulang — respons aset
+    // bisa berupa stream dan akan kehilangan isinya).
     const res = await env.ASSETS.fetch(req);
     res.headers.set('x-frame-options', 'DENY');
     res.headers.set('x-content-type-options', 'nosniff');
@@ -662,6 +670,80 @@ export default {
     return res;
   },
 };
+
+// =====================================================================
+// HALAMAN (UI) — disajikan Worker, bukan lapisan aset, agar header aman ikut.
+// Berkas sumbernya pub/app.html. Disimpan di memori isolate supaya permintaan
+// berikutnya tidak perlu mengambil aset lagi (isolate hidup beberapa menit).
+// =====================================================================
+const HALAMAN_BERKAS = '/app.html';
+let _halaman = null;                                  // { isi, rilisAkhir }
+
+async function bacaHalaman(env) {
+  const res = await env.ASSETS.fetch(`http://aset.internal${HALAMAN_BERKAS}`);
+  if (!res.ok) return null;
+  const isi = await res.text();
+  if (!isi || !/<html/i.test(isi)) return null;
+  _halaman = { isi, rilisAkhir: res.headers.get('last-modified') || '' };
+  return _halaman;
+}
+
+// CSP halaman: skrip/gaya sebaris dipakai oleh index.html, jadi 'unsafe-inline' diperlukan.
+// Yang tetap ditutup: frame (anti clickjacking), plugin, dan pengiriman data keluar.
+const CSP_HALAMAN = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join('; ');
+
+async function SajikanHalaman(env, url) {
+  const jalur = url.pathname;
+  const mauHalaman = jalur === '/' || jalur === '/index.html'
+                  || jalur === '/app.html'                       // cegah sumber mentah diakses langsung
+                  || jalur === '/manifest.webmanifest';
+  if (!mauHalaman) return null;
+
+  if (jalur === '/manifest.webmanifest') {
+    return new Response(JSON.stringify({
+      name: 'Kost Hade — Manajemen Kost',
+      short_name: 'Kost Hade',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      background_color: '#f8fafc',
+      theme_color: '#2563eb',
+      lang: 'id',
+      icons: [
+        { src: '/ikon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+        { src: '/ikon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+      ],
+    }), {
+      headers: kepalaKeamanan(new Headers({ 'content-type': 'application/manifest+json; charset=utf-8' }), false),
+    });
+  }
+
+  const hal = _halaman || (await bacaHalaman(env));
+  if (!hal) {
+    return new Response('Halaman aplikasi belum tersedia.', {
+      status: 500,
+      headers: kepalaKeamanan(new Headers({ 'content-type': 'text/plain; charset=utf-8' }), false),
+    });
+  }
+  const h = kepalaKeamanan(new Headers({
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-cache',                       // selalu revalidasi supaya pembaruan UI cepat sampai
+  }), false);
+  h.set('content-security-policy', CSP_HALAMAN);
+  if (hal.rilisAkhir) h.set('last-modified', hal.rilisAkhir);
+  return new Response(hal.isi, { status: 200, headers: h });
+}
 
 async function tanganiApi(req, env, url, secure, today) {
 

@@ -1,10 +1,13 @@
-/index.html
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: same-origin
-  Permissions-Policy: geolocation=(), camera=(), microphone=()
-  Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'
-
 /d1-adapter.js
   X-Content-Type-Options: nosniff
   Cache-Control: public, max-age=0, must-revalidate
+
+/tailwind.css
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=0, must-revalidate
+
+/ikon-192.png
+  Cache-Control: public, max-age=86400
+
+/ikon-512.png
+  Cache-Control: public, max-age=86400

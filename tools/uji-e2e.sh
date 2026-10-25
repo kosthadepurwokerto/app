@@ -330,8 +330,14 @@ ck "Adapter UI tidak bisa ditebak tipenya (nosniff)" "$(curl -s -D - -o /dev/nul
 # Isi halaman hanya bisa dipastikan bila Worker menyajikannya; wrangler dev (lokal) punya
 # cache aset sendiri yang bisa kosong tanpa alasan jelas, jadi bukti isi halaman diambil
 # dari berkas sumber (yang memang ikut di-deploy) — bukan dari respons lokal.
-ck "_headers berisi aturan anti-bingkai untuk halaman" "$(grep -c 'X-Frame-Options: DENY' pub/_headers)" "1"
-ck "index.html memuat adapter UI" "$(grep -c 'src="d1-adapter.js"' pub/index.html)" "1"
+ck "Halaman disajikan Worker dengan header anti-bingkai" "$(curl -s -D - -o /dev/null "$B/" | grep -ci 'x-frame-options: DENY')" "1"
+ck "Halaman mengirim CSP frame-ancestors none" "$(curl -s -D - -o /dev/null "$B/" | grep -ci "frame-ancestors 'none'")" "1"
+ck "Halaman memuat adapter UI" "$(curl -s "$B/" | grep -qc 'd1-adapter.js' && echo ya || echo tidak)" "ya"
+ck "Halaman memakai Tailwind lokal (bukan CDN)" "$(curl -s "$B/" | grep -qc 'tailwind.css' && echo ya || echo tidak)" "ya"
+ck "Tidak ada lagi template CSS dari CDN" "$(curl -s "$B/" | grep -c 'cdn.tailwindcss.com')" "0"
+ck "Manifest PWA tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/manifest.webmanifest")" "200"
+ck "Ikon 192 tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/ikon-192.png")" "200"
+ck "Tailwind lokal tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/tailwind.css")" "200"
 ck "Opsi CORS untuk origin lain TIDAK dikirim" "$(curl -s -D - -o /dev/null -H 'Origin: https://jahat.example' "$B/api/session" | grep -ci 'access-control-allow-origin')" "0"
 
 # 2) Batas laju per IP (header x-forwarded-for dipakai untuk membedakan klien di lokal).
