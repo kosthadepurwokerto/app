@@ -50,6 +50,14 @@
     }
     .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     .hide-scrollbar::-webkit-scrollbar { display: none; }
+    /* Menu di HP: 10 tombol tidak muat sebaris, dan karena scrollbar disembunyikan tidak
+       ada tanda bahwa daftar bisa digeser (menu terakhir tampak terpotong). Beri pola
+       dua baris yang membungkus, dan pertahankan geser-samping di layar sangat sempit. */
+    @media (max-width: 767px) {
+      #sidebar-nav { flex-wrap: wrap; overflow-x: visible; row-gap: 4px; }
+      #sidebar-nav > li { flex: 1 1 auto; min-width: calc(33.33% - 8px); }
+      #sidebar-nav > li > button { justify-content: center; padding-left: 6px; padding-right: 6px; }
+    }
     
     /* Exclusive metallic border & card hover effects */
     .premium-card {
