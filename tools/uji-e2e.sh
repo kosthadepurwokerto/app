@@ -332,8 +332,8 @@ ck "Adapter UI tidak bisa ditebak tipenya (nosniff)" "$(curl -s -D - -o /dev/nul
 # dari berkas sumber (yang memang ikut di-deploy) — bukan dari respons lokal.
 ck "Halaman disajikan Worker dengan header anti-bingkai" "$(curl -s -D - -o /dev/null "$B/" | grep -ci 'x-frame-options: DENY')" "1"
 ck "Halaman mengirim CSP frame-ancestors none" "$(curl -s -D - -o /dev/null "$B/" | grep -ci "frame-ancestors 'none'")" "1"
-ck "Halaman memuat adapter UI" "$(curl -s "$B/" | grep -qc 'd1-adapter.js' && echo ya || echo tidak)" "ya"
-ck "Halaman memakai Tailwind lokal (bukan CDN)" "$(curl -s "$B/" | grep -qc 'tailwind.css' && echo ya || echo tidak)" "ya"
+ck "Halaman memuat adapter UI" "$(curl -s "$B/" -o /tmp/hal.html -w "%{http_code}") +$(grep -c "src=\"d1-adapter.js\"" /tmp/hal.html)" "200 +1"
+ck "Halaman memakai Tailwind lokal (bukan CDN)" "$(grep -c "tailwind.css" /tmp/hal.html)" "1"
 ck "Tidak ada lagi template CSS dari CDN" "$(curl -s "$B/" | grep -c 'cdn.tailwindcss.com')" "0"
 ck "Manifest PWA tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/manifest.webmanifest")" "200"
 ck "Ikon 192 tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/ikon-192.png")" "200"

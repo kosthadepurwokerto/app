@@ -679,8 +679,11 @@ export default {
 const HALAMAN_BERKAS = '/app.html';
 let _halaman = null;                                  // { isi, rilisAkhir }
 
-async function bacaHalaman(env) {
-  const res = await env.ASSETS.fetch(`http://aset.internal${HALAMAN_BERKAS}`);
+async function bacaHalaman(env, url) {
+  // Fetcher aset di wrangler dev mengabaikan host buatan; pakai host permintaan asli,
+  // ganti jalurnya ke berkas halaman.
+  const asal = url ? url.origin : 'http://aset.internal';
+  const res = await env.ASSETS.fetch(`${asal}${HALAMAN_BERKAS}`);
   if (!res.ok) return null;
   const isi = await res.text();
   if (!isi || !/<html/i.test(isi)) return null;
@@ -729,7 +732,7 @@ async function SajikanHalaman(env, url) {
     });
   }
 
-  const hal = _halaman || (await bacaHalaman(env));
+  const hal = _halaman || (await bacaHalaman(env, url));
   if (!hal) {
     return new Response('Halaman aplikasi belum tersedia.', {
       status: 500,
