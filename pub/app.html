@@ -1914,7 +1914,10 @@
           const token = ambilToken(sess);
           if (token) simpanToken(token);
           // Password awal wajib diganti sebelum masuk aplikasi (dijaga juga oleh API).
-          if (sess.user && sess.user.must_change_password) {
+          // Admin/staff wajib mengganti sandi awal. Master (pemilik sistem) langsung masuk —
+          // sesuai aturan API: akun master tidak dikunci oleh sandi awal, dan tetap bisa
+          // mengganti sandi lewat menu akun.
+          if (sess.user && sess.user.must_change_password && sess.user.role !== 'master') {
             return tuntutGantiPassword(sess.user);
           }
           masukAplikasi(sess);
@@ -4754,9 +4757,12 @@
       tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-slate-400 text-xs italic">Memuat daftar kost…</td></tr>`;
       try {
         const hasil = await callApiJson('/master/kost');
+        // API membalas { daftar: [...] }; terima juga bentuk lain agar tidak kosong diam-diam
+        // (dulu daftar tampil "Belum ada kost" padahal server mengirim data).
         const daftar = Array.isArray(hasil) ? hasil
+          : (Array.isArray(hasil && hasil.daftar) ? hasil.daftar
           : (Array.isArray(hasil && hasil.daftarKost) ? hasil.daftarKost
-          : (Array.isArray(hasil && hasil.data) ? hasil.data : []));
+          : (Array.isArray(hasil && hasil.data) ? hasil.data : [])));
         if (!daftar.length) {
           tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-slate-400 text-xs italic">Belum ada kost terdaftar.</td></tr>`;
           return;

@@ -1106,7 +1106,10 @@ async function tanganiApi(req, env, url, secure, today) {
       }
       // ---------- MULTITENAN: pilih kost, parameter, logo, daftar kost (master) ----------
       if (url.pathname === '/api/pilih-kost' && req.method === 'POST') {
-        if (sesi.must_change_password) return json({ error: 'Ganti password dulu.' }, 403);
+        // Sama seperti pagar wajib-ganti-sandi: master tidak dikunci (lihat catatan di
+        // blok `wajibGanti`). Kalau dikunci di sini, master dengan sandi awal tidak bisa
+        // memilih kost sehingga tidak pernah bisa masuk aplikasi.
+        if (sesi.must_change_password && sesi.role !== 'master') return json({ error: 'Ganti password dulu.' }, 403);
         const { kunci } = await req.json().catch(() => ({}));
         const k = String(kunci || '').trim().toLowerCase();
         if (!k) return json({ error: 'Kode aplikasi wajib dipilih.' }, 400);
