@@ -229,8 +229,8 @@ export async function createTenant(ctx, data) {
       ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, sumber, tglMasuk, 'aktif').run();
       // counter disimpan SEBELUM insert: kalaupun insert gagal/rollback, nomor ini tidak dipakai ulang
       // (bolong nomor lebih aman daripada dua penyewa dengan kode sama)
-      await ctx.db.prepare("insert into counters (nama, value) values ('kode_penyewa', ?) on conflict(nama) do update set value=excluded.value")
-        .bind(Number(kode.slice(4))).run();
+      await ctx.db.prepare("insert into counters (kost, nama, value) values (?, 'kode_penyewa', ?) on conflict(kost, nama) do update set value=excluded.value")
+        .bind(ctx.kost, Number(kode.slice(4))).run();
       await ctx.db.prepare('update tenants set tgl_mulai_tagihan=?, hari_penuh=? where id=?').bind(tglMulai, hariPenuh ? 1 : 0, insRes.meta.last_row_id).run();
       ins = insRes;
       tenantId = insRes.meta.last_row_id;
@@ -251,11 +251,11 @@ export async function createTenant(ctx, data) {
     throw httpError(500, 'Gagal membuat kode penyewa. Coba lagi.');
   }
 
-  await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+  await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status, kost) values (?,?,?,?,?,?)')
     // Jatuh tempo pertama = tanggal mulai tagihan + 1 bulan (25 Feb -> 25 Mar).
     // Bila bulan pertama tidak penuh, nominal dihitung per hari sisa bulan berjalan.
     .bind(tenantId, bulanPeriode(tglMulai), klemJatuhTempo(addMonths(tglMulai, 1)),
-      hariPenuh ? num(room.harga_bulanan) : nominalProrata(num(room.harga_bulanan), tglMulai), 'belum_bayar').run();
+      hariPenuh ? num(room.harga_bulanan) : nominalProrata(num(room.harga_bulanan), tglMulai), 'belum_bayar', ctx.kost).run();
   await ctx.audit('create_tenant', 'tenants', tenantId, null, { kode, nama, kamar: noKamar });
 
   const jtPertama = klemJatuhTempo(addMonths(tglMulai, 1));

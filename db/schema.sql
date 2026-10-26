@@ -4,12 +4,27 @@
 --           wrangler d1 execute hadekost-db --remote --file=db/schema.sql
 -- =====================================================================
 
+-- ---------- DAFTAR KOST (MULTITENAN) ----------
+-- Kunci kost = slug unik dari nama aplikasi dan menjadi pemisah semua data.
+-- Dibuat sebelum `users` karena users.kost merujuk ke tabel ini.
+create table if not exists kosts (
+  kunci       text primary key,
+  nama_app    text not null unique,
+  kota        text,
+  tagline     text,
+  logo_kunci  text,
+  logo_tipe   text,
+  aktif       integer not null default 1,
+  created_at  text not null default (datetime('now'))
+);
+
 -- ---------- AKUN ----------
 create table if not exists users (
   id                  text primary key,
   username            text unique not null,
   fullname            text not null,
-  role                text not null default 'staff' check (role in ('admin','staff')),
+  role                text not null default 'staff' check (role in ('master','admin','staff')),
+  kost                text not null default 'kost-hade' references kosts(kunci),  -- kost induk user ini
   password_hash       text not null,          -- pbkdf2$iter$salt$hash
   aktif               integer not null default 1,
   must_change_password integer not null default 0,
@@ -21,9 +36,31 @@ create table if not exists sessions (
   token_hash  text primary key,
   user_id     text not null references users(id) on delete cascade,
   expires_at  text not null,
+  kost        text,                          -- kost aktif untuk sesi ini
   created_at  text not null default (datetime('now'))
 );
 create index if not exists idx_sessions_user on sessions(user_id);
+
+-- ---------- MULTITENAN: DAFTAR KOST ----------
+-- Kunci = slug dari nama aplikasi; menjadi pemisah data antarkost.
+create table if not exists kosts (
+  kunci       text primary key,
+  nama_app    text not null unique,
+  kota        text,
+  tagline     text,
+  logo_kunci  text,
+  logo_tipe   text,
+  aktif       integer not null default 1,
+  created_at  text not null default (datetime('now'))
+);
+-- Akses user ke kost (satu akun boleh membuka beberapa kost).
+create table if not exists akses_kost (
+  user_id text not null references users(id) on delete cascade,
+  kost    text not null references kosts(kunci) on delete cascade,
+  primary key (user_id, kost)
+);
+insert or ignore into kosts (kunci, nama_app, kota, tagline)
+  values ('kost-hade', 'Kost Hade', 'Purwokerto', 'Guesthouse Management Premium');
 
 -- ---------- KATEGORI LEDGER ----------
 create table if not exists categories (
@@ -33,26 +70,29 @@ create table if not exists categories (
   saldo_normal text not null default 'Debet' check (saldo_normal in ('Debet','Kredit')),
   aktif        integer not null default 1,
   arus_kas     integer not null default 1,   -- 0 = non-cash (penyusutan) tidak menggerakkan kas
-  unique (jenis, nama)
+  kost         text not null default 'kost-hade'
 );
+create unique index if not exists idx_categories_kost_nama on categories(kost, jenis, nama);
 
 -- ---------- KAMAR ----------
 create table if not exists rooms (
   id            integer primary key autoincrement,
-  no_kamar      text unique not null,
+  no_kamar      text not null,
   tipe          text not null,
   harga_bulanan integer not null default 0 check (harga_bulanan >= 0),  -- rupiah, integer
   harga_harian  integer not null default 0 check (harga_harian >= 0),
   status        text not null default 'tersedia' check (status in ('tersedia','terisi','perbaikan')),
   catatan       text,
+  kost          text not null default 'kost-hade',
   created_at    text not null default (datetime('now'))
 );
+create unique index if not exists idx_rooms_kost_no on rooms(kost, no_kamar);
 
 -- ---------- PENYEWA (kolom tambahan untuk DB lama; di DB baru pernyataan ini gagal
 -- dengan "duplicate column" dan aman diabaikan — lihat tools/uji-lokal.sh) ----------
 create table if not exists tenants (
   id          integer primary key autoincrement,
-  kode        text unique not null,
+  kode        text not null,
   nama        text not null,
   hp          text,
   kamar_id    integer references rooms(id) on delete set null,
@@ -66,6 +106,7 @@ create table if not exists tenants (
   hari_penuh  integer not null default 1,    -- 0 = bulan pertama dihitung prorata per hari
   tgl_keluar  text,
   status      text not null default 'aktif' check (status in ('aktif','keluar')),
+  kost        text not null default 'kost-hade',
   created_at  text not null default (datetime('now'))
 );
 -- percobaan login (anti tebak sandi): dihitung per nama pengguna + IP dalam 15 menit
@@ -80,10 +121,13 @@ create index if not exists idx_login_percobaan on login_percobaan(username, ip, 
 
 -- counter nomor berurutan (kode penyewa tidak boleh dipakai ulang setelah dihapus)
 create table if not exists counters (
-  nama  text primary key,
-  value integer not null default 0
+  kost  text not null default 'kost-hade',
+  nama  text not null,
+  value integer not null default 0,
+  primary key (kost, nama)
 );
-insert or ignore into counters (nama, value) values ('kode_penyewa', 0);
+insert or ignore into counters (kost, nama, value) values ('kost-hade', 'kode_penyewa', 0);
+create unique index if not exists idx_tenants_kost_kode on tenants(kost, kode);
 create index if not exists idx_tenants_status on tenants(status);
 create index if not exists idx_tenants_kamar  on tenants(kamar_id);
 
@@ -104,6 +148,7 @@ create table if not exists bills (
   jatuh_tempo text not null,
   jumlah      integer not null check (jumlah > 0),
   status      text not null default 'belum_bayar' check (status in ('belum_bayar','lunas')),
+  kost        text not null default 'kost-hade',
   created_at  text not null default (datetime('now')),
   unique (tenant_id, periode)
 );
@@ -136,6 +181,7 @@ create table if not exists payments (
   bulan        integer not null default 1,   -- jumlah bulan yang dibayar dalam satu struk
   bukti_key    text,                        -- berkas bukti bayar (foto/PDF) di R2 / D1
   periode_lunas text,                       -- "YYYY-MM,YYYY-MM" bulan yang dilunasi struk ini
+  kost         text not null default 'kost-hade',
   created_at   text not null default (datetime('now'))
 );
 create index if not exists idx_payments_tgl on payments(tgl_bayar desc);
@@ -147,6 +193,7 @@ create table if not exists ledger (
   jenis        text not null check (jenis in ('pendapatan','pengeluaran','neraca')),
   kategori_id  integer references categories(id) on delete set null,
   kategori     text not null,
+  kost         text not null default 'kost-hade',
   jumlah       integer not null check (jumlah > 0),
   keterangan   text,
   created_by   text references users(id),

@@ -22,7 +22,7 @@ rm -f "$PIDF"
 rm -rf "$PERSIST"; mkdir -p "$PERSIST"
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=db/schema.sql >/tmp/hk-schema.log 2>&1 || { echo "SKEMA GAGAL"; tail -5 /tmp/hk-schema.log; exit 1; }
 if grep -qi 'error' /tmp/hk-schema.log; then echo "SKEMA ADA ERROR:"; grep -i -A3 'error' /tmp/hk-schema.log | head -20; exit 1; fi
-node tools/buat-akun.mjs admin 'Kostsaya12345' admin 'Administrator Utama' > "$PERSIST/akun.sql"
+UJI_TANPA_GANTI=1 node tools/buat-akun.mjs admin 'Kostsaya12345' admin 'Administrator Utama' > "$PERSIST/akun.sql"
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$PERSIST/akun.sql" >/dev/null 2>&1
 rm -f "$PERSIST/akun.sql"
 

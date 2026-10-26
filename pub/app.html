@@ -84,6 +84,25 @@
     body.role-user li.restricted-user-view { display: none !important; }
     body.role-user section.restricted-user-view { display: none !important; }
     body.role-admin li.restricted-user-view { display: block !important; }
+    /* Multitenan: tiga tingkat akses (user, admin, master).
+       Aturan display HANYA ditulis untuk <li> menu, dan selalu didahului selektor body.role-*
+       supaya menang atas utility Tailwind tanpa merusak kelas lain.
+       Spesifisitas dijaga: aturan "sembunyi" memakai body:not(...) (0,2,1), jadi aturan
+       "tampil" wajib memakai body.role-x li (0,1,1) + .role-x (0,2,1) di selektor yang sama,
+       kalau tidak aturan sembunyi selalu menang. */
+    body:not(.role-master) li.hanya-master { display: none !important; }      /* Reset & Kost */
+    body.role-master li.hanya-master { display: block !important; }
+    body:not(.role-user) li.hanya-admin-master { display: block !important; } /* Parameter */
+    body.role-user li.hanya-admin-master { display: none !important; }
+    body.role-user li.restricted-user-view,                                     /* menu User */
+    body:not(.role-admin):not(.role-master) li.restricted-user-view { display: none !important; }
+    body:not(.role-master) li.hanya-master,
+    body:not(.role-master) section.hanya-master { display: none !important; }
+    /* Baris penyaring khusus master di layar admin (mis. pilih level pada form user) */
+    body:not(.role-master) .khusus-master { display: none !important; }
+    /* Opsi "Master" pada pilihan role hanya untuk akun master.
+       <option> tidak bisa disembunyikan di semua browser, jadi dinonaktifkan dari JS juga. */
+    body:not(.role-master) option.khusus-master-opsi { display: none !important; }
         /* Tabel data di HP: ditampilkan sebagai kartu bertumpuk supaya tombol aksi
          (WA/Edit/Hapus/Checkout) tidak perlu digeser ke samping. */
       @media (max-width: 640px) {
@@ -127,6 +146,10 @@
        berada SETELAH Tailwind sehingga menang atas kelas Tailwind: kartu login jadi
        transparan/bertumpuk dan tombol memanjang penuh — tampak seperti layar kosong. */
     #status-lanjut { display: block; text-align: center; font-size: 12px; color: #475569; padding: 12px; }
+    /* Kelas probe khusus untuk mendeteksi apakah tailwind.css termuat (lihat tailwindSiap()).
+       Sengaja BUKAN kelas Tailwind, supaya aturan display di blok <style> ini tidak
+       menimpa utility (kaskade: <style> dimuat sesudah tailwind.css). */
+    .probe-ui-hade-fleks { display: flex; }
   </style>
 
   <!-- LOADING OVERLAY -->
@@ -167,18 +190,30 @@
     <div class="bg-white/85 backdrop-blur-xl rounded-3xl p-6 md:p-10 shadow-2xl border border-white/60 max-w-md w-full relative premium-card">
       <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-600 rounded-t-3xl"></div>
       
-      <!-- Logo Container -->
+      <!-- Logo Container (logo diambil dari /api/logo bila kost punya logo) -->
       <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-rose-500 rounded-2xl flex items-center justify-center border border-white shadow-md mx-auto mb-6 p-0 overflow-hidden shrink-0">
-        <img src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
+        <img id="login-logo" src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
       </div>
 
       <div class="text-center mb-8">
-        <h2 class="text-2xl font-black text-slate-900 tracking-tight uppercase">Kost Hade</h2>
-        <p class="text-[10px] font-extrabold text-blue-500 uppercase tracking-widest mt-1">Guesthouse Management Premium</p>
+        <h2 id="login-nama-app" class="text-2xl font-black text-slate-900 tracking-tight uppercase">Kost Hade</h2>
+        <p id="login-tagline" class="text-[10px] font-extrabold text-blue-500 uppercase tracking-widest mt-1">Guesthouse Management Premium</p>
+        <p id="login-kota" class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 hidden">Purwokerto</p>
         <p id="status-lanjut">Menyiapkan aplikasi… <span style="opacity:.6">(layar-v2)</span></p>
       </div>
 
       <form id="form-login" class="space-y-4" onsubmit="handleLoginSubmit(event)">
+        <!-- Kode/Nama aplikasi (kost) — opsional; wajib bila satu username ada di beberapa kost -->
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kode / Nama Aplikasi <span class="text-slate-300 normal-case font-semibold">(opsional)</span></label>
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
+              <i class="fas fa-building"></i>
+            </span>
+            <input type="text" id="login-kost" autocomplete="organization" placeholder="Contoh: hadekost atau Hade Kost" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+          </div>
+        </div>
+
         <div>
           <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Pengguna (Username)</label>
           <div class="relative">
@@ -225,11 +260,12 @@
         <div class="p-4 md:p-6 border-b border-slate-100 flex flex-row md:flex-col items-center justify-between md:justify-center text-left md:text-center gap-3 bg-gradient-to-b from-blue-50/20 to-transparent">
           <div class="flex flex-row md:flex-col items-center gap-3 md:gap-2">
             <div class="w-12 h-12 md:w-20 md:h-20 bg-gradient-to-br from-blue-500 to-rose-500 rounded-2xl flex items-center justify-center border border-white shadow-md p-0 overflow-hidden shrink-0">
-              <img src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
+              <img id="header-logo" src="https://drive.google.com/thumbnail?id=1SuTpXgCTiCJdduzG6ByVpQrXER5n2eJr&sz=w200" onerror="this.src='https://placehold.co/200/2563eb/ffffff?text=HADE'" alt="Logo" class="w-full h-full object-contain filter drop-shadow-md">
             </div>
             <div>
-              <h1 class="text-base md:text-lg font-black tracking-tight bg-gradient-to-r from-blue-600 to-rose-600 bg-clip-text text-transparent uppercase">Kost Hade</h1>
-              <span class="block text-[10px] font-extrabold text-blue-500 uppercase tracking-widest md:mt-1">PURWOKERTO</span>
+              <h1 id="header-nama-app" class="text-base md:text-lg font-black tracking-tight bg-gradient-to-r from-blue-600 to-rose-600 bg-clip-text text-transparent uppercase">Kost Hade</h1>
+              <span id="header-kota" class="block text-[10px] font-extrabold text-blue-500 uppercase tracking-widest md:mt-1">PURWOKERTO</span>
+              <span id="header-tagline" class="block text-[9px] text-slate-400 font-semibold tracking-wide md:mt-0.5 truncate max-w-[150px] md:max-w-[190px] hidden">Guesthouse Management Premium</span>
             </div>
           </div>
           
@@ -277,9 +313,22 @@
               <i class="fas fa-user-shield w-5 text-center text-base"></i> User
             </button>
           </li>
-          <li class="shrink-0 md:shrink restricted-user-view">
+          <!-- Parameter: identitas aplikasi (nama, kota, tagline, logo) — admin & master -->
+          <li class="shrink-0 md:shrink hanya-admin-master">
+            <button onclick="showSection('parameter', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-sliders-h w-5 text-center text-base"></i> Parameter
+            </button>
+          </li>
+          <!-- Reset: HANYA master. Admin tidak melihat sama sekali (dulu hanya role user yang dibatasi). -->
+          <li class="shrink-0 md:shrink hanya-master">
             <button onclick="showSection('reset', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
               <i class="fas fa-trash-restore w-5 text-center text-base"></i> Reset
+            </button>
+          </li>
+          <!-- Kost: daftar semua kost (multitenan) — HANYA master -->
+          <li class="shrink-0 md:shrink hanya-master">
+            <button onclick="showSection('kost', this)" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-building w-5 text-center text-base"></i> Kost
             </button>
           </li>
         </ul>
@@ -1127,7 +1176,8 @@
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Level Otoritas (Role)</label>
                     <select id="user-role" required class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold">
                       <option value="staff">User / Staf (tanpa hapus & void)</option>
-                      <option value="admin">Administrator (akses penuh)</option>
+                      <option value="admin">Administrator (akses penuh satu kost)</option>
+                      <option value="master" class="khusus-master-opsi">Master (semua kost)</option>
                     </select>
                   </div>
                   
@@ -1144,8 +1194,8 @@
           </div>
         </section>
 
-        <!-- SECTION: RESET DATABASE -->
-        <section id="sec-reset" class="content-section hidden w-full animate-fade-in restricted-user-view">
+        <!-- SECTION: RESET DATABASE (hanya master, dijaga CSS body:not(.role-master)) -->
+        <section id="sec-reset" class="content-section hidden w-full animate-fade-in hanya-master">
           <div class="bg-white p-6 md:p-8 rounded-3xl border border-slate-200 shadow-sm max-w-2xl mx-auto">
             <div class="flex items-center gap-4 mb-6 pb-4 border-b border-slate-100">
               <div class="w-12 h-12 bg-rose-50 rounded-xl flex items-center justify-center border border-rose-100 text-rose-600 text-lg shadow-inner">
@@ -1176,6 +1226,145 @@
                 <span class="text-[11px] font-bold text-slate-400 poin-mati">Dinonaktifkan — minta admin sistem</span>
               </div>
             </div>
+          </div>
+        </section>
+
+        <!-- SECTION: PARAMETER APLIKASI (identitas kost — admin & master) -->
+        <section id="sec-parameter" class="content-section hidden w-full animate-fade-in restricted-user-view">
+          <div class="flex flex-col lg:flex-row gap-8">
+
+            <!-- KIRI: FORM IDENTITAS -->
+            <div class="flex-1">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg shadow-inner">
+                    <i class="fas fa-sliders-h"></i>
+                  </div>
+                  <h3 class="font-extrabold text-slate-900 text-lg">Parameter Aplikasi</h3>
+                  <p class="text-xs text-slate-400">Nama aplikasi, kota, dan tagline yang tampil di layar login serta header.</p>
+                </div>
+
+                <form id="form-parameter" class="space-y-4" onsubmit="simpanParameter(event)">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Aplikasi</label>
+                    <input type="text" id="param-nama-app" required placeholder="Contoh: Hade Kost" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                    <p id="param-nama-hint" class="text-[10px] text-slate-400 mt-1">Nama aplikasi tidak bisa diubah setelah dibuat.</p>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kota</label>
+                    <input type="text" id="param-kota" placeholder="Contoh: Purwokerto" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tagline</label>
+                    <input type="text" id="param-tagline" placeholder="Contoh: Guesthouse Management Premium" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <button type="submit" id="btn-simpan-parameter" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm flex items-center justify-center gap-2">
+                    <i class="fas fa-check"></i> Simpan Parameter
+                  </button>
+                </form>
+              </div>
+            </div>
+
+            <!-- KANAN: LOGO -->
+            <div class="w-full lg:w-96 shrink-0">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100">
+                <h3 class="font-extrabold text-slate-900 text-lg mb-1">Logo Aplikasi</h3>
+                <p class="text-xs text-slate-400 mb-4">PNG/JPG, maksimal ±2 MB. Dipakai di layar login dan header.</p>
+
+                <div class="w-28 h-28 rounded-2xl bg-gradient-to-br from-blue-500 to-rose-500 border border-white shadow-md p-0 overflow-hidden mx-auto mb-4">
+                  <img id="param-logo-preview" src="" alt="Logo" class="w-full h-full object-contain">
+                </div>
+
+                <input type="file" id="param-logo-file" accept="image/png,image/jpeg,image/webp" class="w-full p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-slate-600 text-xs mb-3">
+                <button type="button" id="btn-unggah-logo" onclick="unggahLogo()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-3 rounded-xl font-bold text-xs transition flex items-center justify-center gap-2">
+                  <i class="fas fa-upload"></i> Unggah Logo
+                </button>
+
+                <p id="param-info-kost" class="text-[10px] text-slate-400 mt-4 leading-relaxed"></p>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        <!-- SECTION: DAFTAR KOST (multitenan — hanya master) -->
+        <section id="sec-kost" class="content-section hidden w-full animate-fade-in hanya-master">
+          <div class="flex flex-col lg:flex-row gap-8">
+
+            <!-- KIRI: DAFTAR KOST -->
+            <div class="flex-1">
+              <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden mb-6">
+                <div class="p-6 border-b border-slate-100 flex items-start justify-between gap-4">
+                  <div>
+                    <h3 class="font-extrabold text-slate-900 text-lg mb-1">Daftar Kost</h3>
+                    <p class="text-xs text-slate-400">Semua kost yang terdaftar di server ini.</p>
+                  </div>
+                  <button onclick="muatDaftarKost()" class="flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-700 px-3 py-2 rounded-xl border border-slate-200 font-bold text-xs transition shadow-sm">
+                    <i class="fas fa-sync text-blue-500"></i> Segarkan
+                  </button>
+                </div>
+                <div class="overflow-x-auto">
+                  <table class="w-full text-left min-w-[520px] tabel-hp border-collapse">
+                    <thead>
+                      <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
+                        <th class="py-3.5 px-6">Nama Aplikasi</th>
+                        <th class="py-3.5 px-4">Kota</th>
+                        <th class="py-3.5 px-4 text-center">User</th>
+                        <th class="py-3.5 px-4 text-center">Kamar</th>
+                        <th class="py-3.5 px-6 text-center">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody id="table-daftar-kost" class="divide-y divide-slate-100">
+                      <!-- Diisi oleh muatDaftarKost() -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- KANAN: TAMBAH KOST BARU -->
+            <div class="w-full lg:w-96 shrink-0">
+              <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-100 sticky top-4">
+                <div class="mb-6">
+                  <div class="w-12 h-12 bg-gradient-to-tr from-blue-100 to-rose-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg shadow-inner">
+                    <i class="fas fa-plus-circle"></i>
+                  </div>
+                  <h3 class="font-extrabold text-slate-900 text-lg">Tambah Kost Baru</h3>
+                  <p class="text-xs text-slate-400">Sekaligus membuat akun admin pertama untuk kost tersebut.</p>
+                </div>
+
+                <form id="form-kost-baru" class="space-y-4" onsubmit="simpanKostBaru(event)">
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Aplikasi</label>
+                    <input type="text" id="kost-nama-app" required placeholder="Contoh: Hade Kost 2" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kota</label>
+                    <input type="text" id="kost-kota" placeholder="Contoh: Purwokerto" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Tagline</label>
+                    <input type="text" id="kost-tagline" placeholder="Contoh: Guesthouse Management Premium" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div class="pt-2 border-t border-slate-100">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 mt-2">Username Admin Pertama</label>
+                    <input type="text" id="kost-admin-username" required autocomplete="off" placeholder="Contoh: admin2" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Password Admin</label>
+                    <input type="password" id="kost-admin-password" required minlength="8" autocomplete="new-password" placeholder="Minimal 8 karakter" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap Admin</label>
+                    <input type="text" id="kost-admin-fullname" placeholder="Contoh: Administrator Kost 2" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                  </div>
+                  <button type="submit" id="btn-tambah-kost" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm flex items-center justify-center gap-2">
+                    <i class="fas fa-plus"></i> Buat Kost
+                  </button>
+                </form>
+              </div>
+            </div>
+
           </div>
         </section>
 
@@ -1418,17 +1607,39 @@
     </div>
   </div>
 
+  <!-- MODAL: PILIH KOST (login ke akun yang terdaftar di lebih dari satu kost) -->
+  <div id="modal-pilih-kost" class="fixed inset-0 bg-slate-900/50 backdrop-blur-md hidden items-center justify-center z-[10002] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-md w-full animate-fade-in relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 to-rose-600"></div>
+      <div class="mt-2 mb-5">
+        <div class="w-12 h-12 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center mb-3 text-blue-600 text-lg">
+          <i class="fas fa-building"></i>
+        </div>
+        <h3 class="text-lg font-black text-slate-900">Pilih Kost</h3>
+        <p class="text-xs text-slate-500">Akun Anda terdaftar di beberapa kost. Pilih salah satu untuk melanjutkan.</p>
+      </div>
+      <div id="daftar-pilih-kost" class="space-y-2 max-h-72 overflow-y-auto hide-scrollbar">
+        <!-- Tombol per kost diisi oleh tampilkanPilihKost() -->
+      </div>
+      <button type="button" onclick="batalkanPilihKost()" class="mt-4 w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl font-bold text-xs transition">
+        Batal
+      </button>
+    </div>
+  </div>
+
   <script>
-    // Cached Data and Navigation States
+    // Data cache & status navigasi
     let cachedData = null;
     let loadingTimeout;
     let selectedRoomFilter = 'semua';
     let selectedOpsFilter = 'Semua';
     let activeReportTab = 'rugi-laba';
     
-    // Active User Role state management
+    // Status sesi: user yang masuk dan kost aktif (multitenan)
     let activeUser = null;
+    let activeKost = null;      // { kunci, namaApp, kota, tagline, logoKunci }
     let usersList = [];
+    let daftarKostPilih = [];   // isi modal pilih kost saat login
     
     // Custom Callback Placeholder for Confirmation Modal Actions
     let modalConfirmCallback = null;
@@ -1499,40 +1710,293 @@
       }
     }
 
+    // =====================================================================
+    // SESI & MULTITENAN
+    // - Token disimpan di localStorage 'hade_token' lalu dikirim lewat header
+    //   'x-sesi-apk' (mekanisme yang sama dengan APK Android). d1-adapter.js tidak diubah:
+    //   sebelum handler adapter dipanggil, window.HADE_TOKEN disetel dan callApiJson()
+    //   membacanya dari sumber yang sama.
+    // - Branding (nama aplikasi, kota, tagline, logo) mengikuti kost aktif.
+    // =====================================================================
+    const KUNCI_TOKEN = 'hade_token';
+
+    function bacaToken() {
+      try { return localStorage.getItem(KUNCI_TOKEN) || null; } catch (e) { return null; }
+    }
+    function simpanToken(token) {
+      try {
+        if (token) localStorage.setItem(KUNCI_TOKEN, token);
+        else localStorage.removeItem(KUNCI_TOKEN);
+      } catch (e) { /* Mode privat / WebView ketat: sesi tetap jalan lewat cookie */ }
+    }
+    /** Setel token sebelum handler adapter dipanggil + bersihkan cache datanya. */
+    function siapkanToken() {
+      window.HADE_TOKEN = bacaToken() || '';
+    }
+    // Dipanggil juga oleh jembatan adapter (lihat akhir berkas) sebelum tiap handler.
+    window.__siapkanToken = siapkanToken;
+    function headerSesi(extra) {
+      const h = Object.assign({}, extra || {});
+      const token = bacaToken();
+      if (token) h['x-sesi-apk'] = token;
+      return h;
+    }
+    /**
+     * Panggil API langsung (bukan lewat adapter). Dipakai untuk rute multitenan yang
+     * belum ada di d1-adapter.js: /login, /pilih-kost, /parameter, /parameter/logo,
+     * /master/kost. Adapter tetap dipakai untuk semua data operasional.
+     */
+    async function callApiJson(path, body) {
+      const res = await fetch('/api' + path, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: body === undefined ? headerSesi({}) : headerSesi({ 'content-type': 'application/json' }),
+        credentials: 'same-origin',
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      let payload = null;
+      try { payload = await res.json(); } catch (e) { /* balasan bukan JSON */ }
+      if (!res.ok) {
+        const err = new Error((payload && payload.error) || `Server membalas ${res.status}.`);
+        err.status = res.status;
+        throw err;
+      }
+      return payload;
+    }
+
+    /** Tangkap token dari balasan login/sesi (bisa di d.token atau d.data.token). */
+    function ambilToken(hasil) {
+      if (!hasil) return null;
+      const t = hasil.token || (hasil.data && hasil.data.token);
+      return t || null;
+    }
+
+    /** "Hade Kost 2" -> "hade-kost-2" (kode aplikasi untuk pilihan login). */
+    function kunciDariNama(nama) {
+      return String(nama || '').toLowerCase().trim()
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function isMaster() { return !!(activeUser && (activeUser.role === 'master' || activeUser.role === 'Master')); }
+    function isAdminAtauMaster() {
+      if (!activeUser) return false;
+      const r = String(activeUser.role || '').toLowerCase();
+      return r === 'admin' || r === 'master' || r === 'administrator';
+    }
+
+    // ---------------- BRANDING ----------------
+    /** Terapkan identitas kost ke layar login dan header aplikasi. */
+    function terapkanBranding(kost) {
+      // kost kosong -> pakai teks bawaan halaman
+      const k = kost && (kost.kunci || kost.namaApp) ? kost : null;
+      const namaApp = (k && k.namaApp) || 'Kost Hade';
+      const kota = k && k.kota ? String(k.kota) : '';
+      const tagline = (k && k.tagline) || 'Guesthouse Management Premium';
+
+      // CATATAN: jangan pernah menulis el.style.display di sini. body.className berganti
+      // setelah branding diterapkan, dan inline style akan mengalahkan aturan role di CSS.
+      const setTeks = (id, teks) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.innerText = teks;
+        el.classList.toggle('hidden', !teks);
+      };
+      setTeks('login-nama-app', namaApp);
+      setTeks('login-kota', kota.toUpperCase());
+      setTeks('login-tagline', tagline);
+      setTeks('header-nama-app', namaApp);
+      setTeks('header-kota', kota.toUpperCase());
+      // Tagline hanya di layar lebar supaya header sidebar HP tetap ringkas
+      const hTag = document.getElementById('header-tagline');
+      if (hTag) {
+        hTag.innerText = tagline;
+        hTag.classList.toggle('hidden', !tagline);
+        hTag.classList.toggle('md:block', !!tagline);
+      }
+      if (!kota) {
+        const hk = document.getElementById('header-kota');
+        if (hk) hk.innerText = '';
+        const lk = document.getElementById('login-kota');
+        if (lk) lk.classList.add('hidden');
+      }
+
+      // Logo: /api/logo butuh kunci logo DAN kunci kost (kunci kost tetap disertakan;
+      // server yang hanya butuh salah satunya tetap bisa melayani karena sisanya diabaikan).
+      // Cadangan memakai ikon lokal — TIDAK memanggil layanan luar, karena kalau layanan itu
+      // diblokir img.onerror berantai terus dan logo akhirnya hanya teks alt.
+      const CADANGAN_LOGO = '/ikon-192.png';
+      const urlLogo = k && k.logoKunci
+        ? '/api/logo?kunci=' + encodeURIComponent(k.logoKunci)
+          + (k.kunci ? '&kost=' + encodeURIComponent(k.kunci) : '')
+        : null;
+      ['login-logo', 'header-logo'].forEach((id) => {
+        const img = document.getElementById(id);
+        if (!img) return;
+        img.onerror = function () { this.onerror = null; this.src = CADANGAN_LOGO; };
+        if (urlLogo) {
+          img.src = urlLogo;
+        } else {
+          // Belum ada logo di server: pakai logo bawaan berkas lokal
+          img.src = 'logo-hade.jpg';
+        }
+      });
+
+      // Judul tab browser
+      document.title = namaApp + ' — ' + tagline;
+
+      // Pratinjau di menu Parameter
+      const prev = document.getElementById('param-logo-preview');
+      if (prev) prev.src = urlLogo || '';
+      const info = document.getElementById('param-info-kost');
+      if (info && k) {
+        info.innerText = 'Kost aktif: ' + namaApp + ' (' + (k.kunci || '-') + ')'
+          + (kota ? ' — ' + kota : '');
+      }
+    }
+
+    // ---------------- LOGIN ----------------
+    /**
+     * POST /api/login. Body menyertakan `kost` (kode/nama aplikasi) bila diisi.
+     * Rute ini dipanggil langsung (bukan lewat HADE.login) supaya field `kost` ikut terkirim
+     * tanpa mengubah d1-adapter.js.
+     */
+    function loginAkun(username, password, kodeKost) {
+      const badan = { username, password };
+      if (kodeKost) badan.kost = kodeKost;
+      return callApiJson('/login', badan);
+    }
+
+    function setTombolLogin(sibuk) {
+      const btn = document.querySelector('#form-login button[type="submit"]');
+      if (!btn) return;
+      btn.disabled = !!sibuk;
+      btn.innerHTML = sibuk
+        ? '<i class="fas fa-circle-notch fa-spin"></i> Memverifikasi...'
+        : '<i class="fas fa-sign-in-alt"></i> Masuk Sistem';
+    }
+
     function handleLoginSubmit(event) {
       event.preventDefault();
       const uName = document.getElementById('login-username').value.trim().toLowerCase();
       const pWord = document.getElementById('login-password').value;
+      const kodeKost = ((document.getElementById('login-kost') || {}).value || '').trim();
 
-      const btn = document.querySelector('#form-login button[type="submit"]');
-      btn.disabled = true;
-      btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Memverifikasi...';
+      setTombolLogin(true);
 
-      HADE.login(uName, pWord)
-        .then(() => HADE.session())
+      // Token lama jangan ikut terkirim saat login akun lain
+      simpanToken(null);
+      window.HADE_TOKEN = '';
+      if (window.HADE) window.HADE.resetCache();
+
+      loginAkun(uName, pWord, kodeKost || null)
+        .then((hasil) => {
+          const token = ambilToken(hasil);
+          if (token) { simpanToken(token); window.HADE_TOKEN = token; }
+          if (hasil && hasil.perluPilihKost) {
+            // Akun ada di beberapa kost: pilih dulu, baru buka sesi
+            daftarKostPilih = hasil.daftarKost || [];
+            tampilkanPilihKost(daftarKostPilih);
+            return false;
+          }
+          return lanjutSetelahLogin();
+        })
+        .catch(err => {
+          window.HADE_TOKEN = '';
+          showCustomAlert("Akses Ditolak", err.message || "Login gagal.", false);
+        })
+        .finally(() => setTombolLogin(false));
+    }
+
+    /** Ambil sesi (user + kost), terapkan branding, masuk aplikasi. */
+    function lanjutSetelahLogin() {
+      return HADE.session()
         .then(sess => {
-          if (!sess.logged_in) throw new Error('Akun belum memiliki profil. Hubungi admin.');
+          if (!sess || !sess.logged_in) throw new Error('Akun belum memiliki profil. Hubungi admin.');
+          const token = ambilToken(sess);
+          if (token) simpanToken(token);
           // Password awal wajib diganti sebelum masuk aplikasi (dijaga juga oleh API).
           if (sess.user && sess.user.must_change_password) {
             return tuntutGantiPassword(sess.user);
           }
-          activeUser = sess.user;
-          usersList = [sess.user];
-          document.getElementById('login-screen').classList.add('hidden');
-          document.getElementById('app-container').classList.remove('hidden');
-          document.getElementById('app-container').classList.add('flex');
-          applyUserRoleUI();
-          refreshCategoryOptions();
-          showSection('dashboard', document.querySelector('#sidebar-nav button'));
-        })
-        .catch(err => {
-          showCustomAlert("Akses Ditolak", err.message || "Login gagal.", false);
-        })
-        .finally(() => {
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Masuk Sistem';
+          masukAplikasi(sess);
+          return true;
         });
     }
+
+    /** Tampilkan aplikasi untuk sesi yang sudah sah. */
+    function masukAplikasi(sess) {
+      activeUser = sess.user;
+      activeKost = sess.kost || null;
+      usersList = [sess.user];
+      terapkanBranding(activeKost);
+      document.getElementById('login-screen').classList.add('hidden');
+      document.getElementById('app-container').classList.remove('hidden');
+      document.getElementById('app-container').classList.add('flex');
+      tutupPilihKost();
+      applyUserRoleUI();
+      refreshCategoryOptions();
+      showSection('dashboard', document.querySelector('#sidebar-nav button'));
+    }
+
+    // ---------------- PILIH KOST ----------------
+    function tampilkanPilihKost(daftar) {
+      const wadah = document.getElementById('daftar-pilih-kost');
+      const modal = document.getElementById('modal-pilih-kost');
+      const isi = daftar || [];
+      wadah.innerHTML = isi.length
+        ? isi.map((k, i) => {
+            const ket = [k.kota, k.tagline].filter(Boolean).join(' • ');
+            return `<button type="button" data-aksi="pilih-kost" data-kunci="${esc(k.kunci || '')}" data-idx="${i}"
+              class="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition flex items-center justify-between gap-3">
+              <span class="min-w-0">
+                <span class="block text-sm font-bold text-slate-800 truncate">${esc(k.namaApp || k.kunci || '-')}</span>
+                <span class="block text-[10px] text-slate-400 truncate">${esc(ket || k.kunci || '')}</span>
+              </span>
+              <i class="fas fa-chevron-right text-xs text-slate-400"></i>
+            </button>`;
+          }).join('')
+        : '<p class="text-xs text-slate-400 text-center py-4">Belum ada kost yang bisa dipilih.</p>';
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      setTombolLogin(false);
+    }
+
+    function tutupPilihKost() {
+      const modal = document.getElementById('modal-pilih-kost');
+      if (!modal) return;
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    function batalkanPilihKost() {
+      tutupPilihKost();
+      daftarKostPilih = [];
+      simpanToken(null);
+      window.HADE_TOKEN = '';
+      if (window.HADE) window.HADE.logout().catch(() => {});
+      setTombolLogin(false);
+    }
+
+    /** Klik salah satu kost di modal -> set kost aktif sesi -> masuk aplikasi. */
+    async function pilihKostLaluMasuk(kunci) {
+      if (!kunci) return;
+      showLoading(true);
+      try {
+        // /api/pilih-kost hanya POST; token sesi ikut lewat header x-sesi-apk
+        const hasil = await callApiJson('/pilih-kost', { kunci });
+        const token = ambilToken(hasil);
+        if (token) { simpanToken(token); window.HADE_TOKEN = token; }
+
+        daftarKostPilih = [];
+        if (window.HADE) window.HADE.resetCache();
+        cachedData = null;
+        await lanjutSetelahLogin();      // bila masih wajib ganti password, error dilempar ke catch
+      } catch (err) {
+        showCustomAlert("Gagal Masuk", (err && err.message) || 'Kost gagal dipilih.', false);
+      } finally {
+        showLoading(false);
+      }
+    }
+    daftarAksi('pilih-kost', (d) => pilihKostLaluMasuk(d.kunci));
 
     /**
      * Password awal (dibuat admin / tools/buat-akun.mjs) wajib diganti saat login pertama.
@@ -1581,6 +2045,9 @@
       cachedData = null;
       activeUser = null;
       usersList = [];
+      // Token multitenan ikut dibuang supaya sesi berikutnya memakai akun/kost baru
+      simpanToken(null);
+      window.HADE_TOKEN = '';
       document.getElementById('form-login').reset();
       document.getElementById('login-password').type = 'password';
       document.getElementById('toggle-password-icon').className = 'fas fa-eye';
@@ -1596,19 +2063,22 @@
      *  Dulu deteksinya memakai variabel global dari CDN Tailwind. Sejak Tailwind dibangun
      *  lokal, CDN sudah tidak dipakai — pemeriksaan lama selalu menganggap Tailwind tidak
      *  ada, sehingga mode aman aktif terus dan #login-screen dipaksa position:static
-     *  (kartu login terdorong ke bawah, layar tampak putih kosong). */
+     *  (kartu login terdorong ke bawah, layar tampak putih kosong).
+     *  Pemeriksaan sengaja memakai kelas KHUSUS di elemen sementara: kelas yang dipakai
+     *  Tailwind tidak boleh ditimpa aturan display di blok <style> halaman ini. */
     function tailwindSiap() {
+      let probe = null;
       try {
-        const probe = document.createElement('div');
-        probe.className = 'hidden';
+        probe = document.createElement('div');
+        probe.className = 'hidden probe-ui-hade';
         document.body.appendChild(probe);
-        const sembunyi = getComputedStyle(probe).display === 'none';
-        probe.className = 'flex';
-        const fleks = getComputedStyle(probe).display === 'flex';
-        probe.remove();
-        return sembunyi && fleks;
+        if (getComputedStyle(probe).display !== 'none') return false;   // .hidden tidak berlaku
+        probe.className = 'probe-ui-hade-fleks';
+        return getComputedStyle(probe).display === 'flex';              // Tailwind.css termuat?
       } catch (e) {
         return false;
+      } finally {
+        if (probe && probe.parentNode) probe.parentNode.removeChild(probe);
       }
     }
     function pasangModeAman() {
@@ -1635,18 +2105,19 @@
       }
       HADE.session().then(sess => {
         statusLanjut(sess && sess.logged_in ? 'Memuat data…' : 'Server siap. Silakan masuk.');
-        if (!sess.logged_in) {
+        // Token dari sesi terbaru disimpan (berguna setelah APK/pindah tab)
+        const tokenBaru = ambilToken(sess);
+        if (tokenBaru) { simpanToken(tokenBaru); window.HADE_TOKEN = tokenBaru; }
+        if (!sess || !sess.logged_in) {
+          // Belum masuk: tampilkan branding kost aktif bila server sudah menentukannya
+          terapkanBranding(sess && sess.kost);
           document.getElementById('login-screen').classList.remove('hidden');
           document.getElementById('app-container').classList.add('hidden');
           document.getElementById('app-container').classList.remove('flex');
           return;
         }
-        activeUser = sess.user;
-        usersList = [sess.user];
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('app-container').classList.remove('hidden');
-        document.getElementById('app-container').classList.add('flex');
-        applyUserRoleUI();
+        siapkanToken();
+        masukAplikasi(sess);
         loadDashboard();
       }).catch(err => {
         console.warn('[hade] sesi', err);
@@ -1658,29 +2129,36 @@
     }
 
     // Apply permissions dynamically on the UI
+    // Tiga tingkat: user (operasional), admin (kost), master (semua kost).
+    // Kelas pada <body> dipakai CSS untuk menyembunyikan menu:
+    //   .role-user   -> menu User/Parameter/Reset/Kost tersembunyi
+    //   .role-admin  -> Parameter & User terlihat, Reset & Kost tersembunyi
+    //   .role-master -> semua menu terlihat
     function applyUserRoleUI() {
       const body = document.body;
-      const isUser = activeUser.role !== 'admin' && activeUser.role !== 'Administrator';
+      const role = String((activeUser && activeUser.role) || '').toLowerCase();
+      const isMasterRole = role === 'master';
+      const isAdminRole = role === 'admin' || role === 'administrator';
+      const isUser = !isMasterRole && !isAdminRole;
+      const kelasDasar = 'bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row';
 
       // Toggle root role class
-      if (isUser) {
-        body.className = 'bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row role-user';
-      } else {
-        body.className = 'bg-slate-50 text-slate-800 overflow-hidden h-screen w-screen m-0 p-0 flex flex-col md:flex-row role-admin';
-      }
+      body.className = kelasDasar + (isMasterRole ? ' role-master' : (isAdminRole ? ' role-admin' : ' role-user'));
 
-      const isAdmin = !isUser;
+      const labelRole = isMasterRole ? 'Master Sistem' : (isAdminRole ? 'Administrator' : 'User Operasional');
       // Update sidebar session details
       document.getElementById('user-display-name').innerText = activeUser.fullname;
-      document.getElementById('user-display-role').innerText = isAdmin ? 'Administrator' : 'User Operasional';
-      document.getElementById('user-display-icon').className = isAdmin ? 'fas fa-user-shield text-xs text-rose-500' : 'fas fa-user-circle text-xs text-blue-500';
+      document.getElementById('user-display-role').innerText = labelRole;
+      document.getElementById('user-display-icon').className = isUser
+        ? 'fas fa-user-circle text-xs text-blue-500'
+        : 'fas fa-user-shield text-xs text-rose-500';
 
       // Pisahkan tombol ganti user (simulasi lama) — sekarang hanya info akun + logout
       const switcherContainer = document.getElementById('quick-user-options');
       switcherContainer.innerHTML = `
         <div class="px-3 py-2 text-xs font-semibold text-slate-600">
           <div class="truncate">${activeUser.fullname}</div>
-          <div class="text-[10px] text-slate-400">@${activeUser.username || '-'} • ${isAdmin ? 'Administrator' : 'User Operasional'}</div>
+          <div class="text-[10px] text-slate-400">@${esc(activeUser.username || '-')} • ${esc(labelRole)}</div>
         </div>
         <button onclick="openGantiPassword()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 flex items-center gap-2 text-xs font-semibold transition">
           <i class="fas fa-key text-[10px]"></i> Ganti Password
@@ -1753,13 +2231,20 @@
     window.onSesiBerakhir = () => {
       cachedData = null;
       activeUser = null;
+      activeKost = null;
+      simpanToken(null);          // token multitenan sudah tidak berlaku
+      window.HADE_TOKEN = '';
       document.getElementById('login-screen').classList.remove('hidden');
       document.getElementById('app-container').classList.add('hidden');
       showCustomAlert("Sesi Berakhir", "Anda sudah keluar atau sesi habis. Silakan login ulang.", false);
     };
 
-    // Initialize user session on scripts boot
-    initUserSession();
+    // Inisialisasi sesi; tunggu DOM siap bila skrip berjalan terlalu awal
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initUserSession);
+    } else {
+      initUserSession();
+    }
 
     // CUSTOM ALERT SYSTEM WITH SUCCESS/ERROR/CONFIRM FLAVORS
     function showCustomAlert(title, message, isSuccess = true, isConfirm = false, onConfirm = null) {
@@ -1879,8 +2364,18 @@
     }
 
     function showSection(sectionId, btn) {
-      // BLOCK USER ACCESS TO RESTRICTED PAGES
-      if (activeUser.role === 'User' && (sectionId === 'reset' || sectionId === 'user')) {
+      // Penjaga akses per role: sesudah login menu memang sudah disembunyikan CSS,
+      // tetapi pemanggilan langsung (mis. dari tombol lain) tetap harus ditolak.
+      if (!activeUser) return;
+      if (sectionId === 'reset' && !isMaster()) {
+        showCustomAlert("Akses Ditolak", "Menu Reset hanya tersedia untuk akun master.", false);
+        return;
+      }
+      if (sectionId === 'kost' && !isMaster()) {
+        showCustomAlert("Akses Ditolak", "Menu Kost hanya tersedia untuk akun master.", false);
+        return;
+      }
+      if ((sectionId === 'user' || sectionId === 'parameter') && !isAdminAtauMaster()) {
         showCustomAlert("Akses Ditolak", "Maaf, User Operasional tidak diberikan izin mengakses modul manajemen sensitif.", false);
         return;
       }
@@ -1920,6 +2415,12 @@
       }
       if(sectionId === 'user') {
         loadUsersData();
+      }
+      if(sectionId === 'parameter') {
+        isiFormParameter();
+      }
+      if(sectionId === 'kost') {
+        muatDaftarKost();
       }
     }
 
@@ -3492,7 +3993,10 @@
       document.getElementById('user-password').value = '';
       document.getElementById('user-password').required = false;
       document.getElementById('user-password').placeholder = 'Kosongkan bila tidak diganti';
-      document.getElementById('user-role').value = (role === 'admin') ? 'admin' : 'staff';
+      // Role master tetap ditampilkan apa adanya (hanya master yang bisa memilihnya)
+      const roleAktif = String(role || '').toLowerCase();
+      document.getElementById('user-role').value =
+        roleAktif === 'admin' ? 'admin' : (roleAktif === 'master' ? 'master' : 'staff');
 
       document.getElementById('user-form-title').innerText = "Ubah Pengguna";
       document.getElementById('user-form-desc').innerText = "Sesuaikan kata sandi, nama, atau wewenang";
@@ -4149,6 +4653,193 @@
       );
     }
 
+    // =====================================================================
+    // MENU PARAMETER (admin & master) — identitas kost + logo
+    // =====================================================================
+    /** Isi form Parameter dari kost aktif. Nama aplikasi dikunci bila sudah ada. */
+    function isiFormParameter() {
+      const k = activeKost || {};
+      const namaEl = document.getElementById('param-nama-app');
+      const kotaEl = document.getElementById('param-kota');
+      const tagEl = document.getElementById('param-tagline');
+      const hint = document.getElementById('param-nama-hint');
+      if (!namaEl) return;
+      namaEl.value = k.namaApp || '';
+      kotaEl.value = k.kota || '';
+      tagEl.value = k.tagline || '';
+      // Nama aplikasi tidak boleh diubah setelah dibuat (dijaga juga oleh API)
+      namaEl.readOnly = true;
+      namaEl.classList.add('text-slate-500', 'cursor-not-allowed');
+      if (hint) hint.innerText = k.namaApp
+        ? 'Nama aplikasi tidak bisa diubah setelah dibuat.'
+        : 'Nama aplikasi wajib diisi sekali dan tidak bisa diubah setelahnya.';
+      terapkanBranding(activeKost);
+    }
+
+    /** Simpan kota/tagline (nama aplikasi ikut dikirim tetapi tidak bisa berubah). */
+    async function simpanParameter(event) {
+      if (event) event.preventDefault();
+      const btn = document.getElementById('btn-simpan-parameter');
+      const namaApp = document.getElementById('param-nama-app').value.trim();
+      const kota = document.getElementById('param-kota').value.trim();
+      const tagline = document.getElementById('param-tagline').value.trim();
+      if (!namaApp) { showCustomAlert('Belum Lengkap', 'Nama aplikasi wajib diisi.', false); return; }
+      if (btn) btn.disabled = true;
+      showLoading(true);
+      try {
+        await callApiJson('/parameter', { namaApp, kota, tagline });
+        // Perbarui branding lokal tanpa perlu login ulang
+        activeKost = Object.assign({}, activeKost || {}, { namaApp, kota, tagline });
+        terapkanBranding(activeKost);
+        showCustomAlert('Tersimpan', 'Parameter aplikasi berhasil disimpan.', true);
+      } catch (err) {
+        showCustomAlert('Gagal Menyimpan', (err && err.message) || 'Parameter gagal disimpan.', false);
+      } finally {
+        showLoading(false);
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    /** Unggah logo ke /api/parameter/logo lalu terapkan sebagai branding. */
+    async function unggahLogo() {
+      const input = document.getElementById('param-logo-file');
+      const file = input && input.files && input.files[0];
+      if (!file) { showCustomAlert('Belum Ada Berkas', 'Pilih berkas gambar logo terlebih dahulu.', false); return; }
+      if (file.size > 2 * 1024 * 1024) {
+        showCustomAlert('Berkas Terlalu Besar', 'Ukuran logo maksimal 2 MB.', false);
+        return;
+      }
+      const btn = document.getElementById('btn-unggah-logo');
+      if (btn) btn.disabled = true;
+      showLoading(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const res = await fetch('/api/parameter/logo', {
+          method: 'POST',
+          headers: headerSesi({}),          // JANGAN set content-type: boundary FormData dibuat browser
+          credentials: 'same-origin',
+          body: fd,
+        });
+        let hasil = null;
+        try { hasil = await res.json(); } catch (e) { /* bukan JSON */ }
+        if (!res.ok) throw new Error((hasil && hasil.error) || `Unggah logo gagal (${res.status}).`);
+        // Respons bisa berisi kunci logo langsung, atau dibaca ulang lewat /api/session
+        let kunciLogo = hasil && (hasil.kunci || hasil.logoKunci || (hasil.kost && hasil.kost.logoKunci));
+        try {
+          const sesi = await callApiJson('/session');
+          if (sesi && sesi.kost) {
+            activeKost = sesi.kost;
+            kunciLogo = kunciLogo || sesi.kost.logoKunci;
+          }
+        } catch (e) { /* sesi opsional */ }
+        if (kunciLogo && activeKost) activeKost.logoKunci = kunciLogo;
+        terapkanBranding(activeKost);
+        if (input) input.value = '';
+        showCustomAlert('Logo Diperbarui', 'Logo aplikasi berhasil diunggah.', true);
+      } catch (err) {
+        showCustomAlert('Gagal Unggah', (err && err.message) || 'Logo gagal diunggah.', false);
+      } finally {
+        showLoading(false);
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    // =====================================================================
+    // MENU KOST (khusus master) — daftar semua kost & tambah kost baru
+    // =====================================================================
+    async function muatDaftarKost() {
+      const tbody = document.getElementById('table-daftar-kost');
+      if (!tbody) return;
+      tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-slate-400 text-xs italic">Memuat daftar kost…</td></tr>`;
+      try {
+        const hasil = await callApiJson('/master/kost');
+        const daftar = Array.isArray(hasil) ? hasil
+          : (Array.isArray(hasil && hasil.daftarKost) ? hasil.daftarKost
+          : (Array.isArray(hasil && hasil.data) ? hasil.data : []));
+        if (!daftar.length) {
+          tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-slate-400 text-xs italic">Belum ada kost terdaftar.</td></tr>`;
+          return;
+        }
+        const kunciAktif = (activeKost && activeKost.kunci) || '';
+        tbody.innerHTML = daftar.map((k) => {
+          const aktif = k.kunci === kunciAktif;
+          return `
+            <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm${aktif ? ' bg-blue-50/40' : ''}">
+              <td class="py-4 px-6">
+                <div class="font-bold text-slate-800">${esc(k.namaApp || k.kunci || '-')}</div>
+                <div class="text-[10px] text-slate-400">${esc(k.kunci || '')}${aktif ? ' • sedang aktif' : ''}</div>
+              </td>
+              <td class="py-4 px-4">${esc(k.kota || '-')}</td>
+              <td class="py-4 px-4 text-center font-semibold">${esc(k.jumlahUser === undefined || k.jumlahUser === null ? '-' : k.jumlahUser)}</td>
+              <td class="py-4 px-4 text-center font-semibold">${esc(k.jumlahKamar === undefined || k.jumlahKamar === null ? '-' : k.jumlahKamar)}</td>
+              <td class="py-4 px-6 text-center">
+                <button data-aksi="masuk-kost" data-kunci="${esc(k.kunci || '')}" data-nama="${esc(k.namaApp || k.kunci || '')}" class="px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 font-bold text-[11px] transition">
+                  <i class="fas fa-sign-in-alt mr-1"></i> Masuk sebagai kost ini
+                </button>
+              </td>
+            </tr>`;
+        }).join('');
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="5" class="py-10 text-center text-rose-500 text-xs italic">${esc((err && err.message) || 'Gagal memuat daftar kost.')}</td></tr>`;
+      }
+    }
+
+    /** Pindah kost aktif lalu muat ulang seluruh aplikasi. */
+    function masukSebagaiKost(kunci, nama) {
+      if (!kunci) return;
+      showCustomAlert(
+        'Masuk Sebagai Kost Ini?',
+        `Data yang tampil akan berganti ke "${nama || kunci}". Halaman akan dimuat ulang.`,
+        false, true,
+        async () => {
+          showLoading(true);
+          try {
+            const hasil = await callApiJson('/pilih-kost', { kunci });
+            const token = ambilToken(hasil);
+            if (token) { simpanToken(token); window.HADE_TOKEN = token; }
+            if (window.HADE) window.HADE.resetCache();
+            location.reload();
+          } catch (err) {
+            showLoading(false);
+            showCustomAlert('Gagal', (err && err.message) || 'Kost gagal dipilih.', false);
+          }
+        }
+      );
+    }
+    daftarAksi('masuk-kost', (d) => masukSebagaiKost(d.kunci, d.nama));
+
+    /** Master membuat kost baru + akun admin pertamanya. */
+    async function simpanKostBaru(event) {
+      if (event) event.preventDefault();
+      const namaApp = document.getElementById('kost-nama-app').value.trim();
+      const kota = document.getElementById('kost-kota').value.trim();
+      const tagline = document.getElementById('kost-tagline').value.trim();
+      const username = document.getElementById('kost-admin-username').value.trim().toLowerCase();
+      const password = document.getElementById('kost-admin-password').value;
+      const fullname = document.getElementById('kost-admin-fullname').value.trim();
+      if (!namaApp) { showCustomAlert('Belum Lengkap', 'Nama aplikasi wajib diisi.', false); return; }
+      if (!username) { showCustomAlert('Belum Lengkap', 'Username admin pertama wajib diisi.', false); return; }
+      if (String(password || '').length < 8) { showCustomAlert('Password Terlalu Pendek', 'Password admin minimal 8 karakter.', false); return; }
+      const btn = document.getElementById('btn-tambah-kost');
+      if (btn) btn.disabled = true;
+      showLoading(true);
+      try {
+        await callApiJson('/master/kost', {
+          namaApp, kota, tagline, username, password,
+          fullname: fullname || ('Administrator ' + namaApp),
+        });
+        document.getElementById('form-kost-baru').reset();
+        showCustomAlert('Kost Dibuat', `Kost "${namaApp}" beserta akun admin "${username}" berhasil dibuat.`, true);
+        muatDaftarKost();
+      } catch (err) {
+        showCustomAlert('Gagal Membuat Kost', (err && err.message) || 'Kost gagal dibuat.', false);
+      } finally {
+        showLoading(false);
+        if (btn) btn.disabled = false;
+      }
+    }
+
     // DATABASE WIPING AND RECONCILIATION LOGICS
     // Reset aplikasi DIHAPUS: sebelumnya tombol ini menulis localStorage (data baru hilang di semua HP).
     // Reset data produksi harus lewat Supabase (SQL / backup), bukan tombol di browser.
@@ -4197,7 +4888,8 @@
       }
     })();
 
-    window.onload = () => { initUserSession(); };
+    // Sesi sudah diinisialisasi lebih awal (initUserSession); window.onload kedua di sini
+    // dihapus supaya /api/session tidak dipanggil dua kali saat halaman dibuka.
   </script>
 </body>
 </html>
