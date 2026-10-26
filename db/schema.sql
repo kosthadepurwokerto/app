@@ -25,11 +25,15 @@ create table if not exists users (
   fullname            text not null,
   role                text not null default 'staff' check (role in ('master','admin','staff')),
   kost                text not null default 'kost-hade' references kosts(kunci),  -- kost induk user ini
+  hp                  text,                   -- No. HP untuk login (ternormalisasi 08xxx, unik)
   password_hash       text not null,          -- pbkdf2$iter$salt$hash
   aktif               integer not null default 1,
   must_change_password integer not null default 0,
   created_at          text not null default (datetime('now'))
 );
+
+-- No. HP dipakai sebagai identitas login: unik bila diisi (boleh kosong untuk akun lama).
+create unique index if not exists idx_users_hp on users(hp) where hp is not null and hp <> '';
 
 -- hanya SHA-256 dari token sesi yang disimpan
 create table if not exists sessions (

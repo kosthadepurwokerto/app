@@ -675,20 +675,31 @@ function validUser(d, isNew) {
   if (isNew && (!password || password.length < 8)) throw logic.httpError(400, 'Password minimal 8 karakter.');
   if (!isNew && password && password.length < 8) throw logic.httpError(400, 'Password minimal 8 karakter.');
   if (password && password.length > 200) throw logic.httpError(400, 'Password maksimal 200 karakter.');
-  return { username, role, fullname, password };
+  // No. HP opsional, tetapi bila diisi harus berupa nomor seluler yang sah (dipakai login).
+  let hp = undefined;
+  if (d.hp !== undefined && d.hp !== null && String(d.hp).trim() !== '') {
+    hp = logic.normalHpLogin(d.hp);
+    if (!hp) throw logic.httpError(400, 'Nomor HP tidak valid. Contoh: 081234567890.');
+  }
+  return { username, role, fullname, password, hp };
 }
 
 async function addUser(ctx, d) {
-  const { username, role, fullname, password } = validUser(d, true);
+  const { username, role, fullname, password, hp } = validUser(d, true);
   const dup = await ctx.env.DB.prepare('select id from users where username=?').bind(username).first();
-  if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai.`);
+  if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai akun lain (username unik seluruh server).`);
+  // Nomor HP adalah identitas login: harus unik.
+  if (hp) {
+    const hpDipakai = await ctx.env.DB.prepare('select username from users where hp=?').bind(hp).first();
+    if (hpDipakai) throw logic.httpError(409, `Nomor HP ini sudah dipakai akun "${hpDipakai.username}".`);
+  }
   const hash = await logic.hashPassword(password);
   // Password yang dibuatkan admin adalah password awal: pemilik akun wajib menggantinya
   // saat login pertama (dijaga juga di API, bukan hanya di UI).
   const idBaru = 'usr_' + crypto.randomUUID().slice(0, 8);
   // user baru selalu milik kost yang sedang aktif (master pun membuat admin untuk kost aktif)
-  await ctx.env.DB.prepare('insert into users (id, username, fullname, role, password_hash, aktif, must_change_password, kost) values (?,?,?,?,?,1,1,?)')
-    .bind(idBaru, username, fullname, role, hash, ctx.kost).run();
+  await ctx.env.DB.prepare('insert into users (id, username, fullname, role, password_hash, aktif, must_change_password, kost, hp) values (?,?,?,?,?,1,1,?,?)')
+    .bind(idBaru, username, fullname, role, hash, ctx.kost, hp || null).run();
   await ctx.env.DB.prepare('insert or ignore into akses_kost (user_id, kost) values (?,?)').bind(idBaru, ctx.kost).run();
   await ctx.audit('user.create', 'users', username, null, { username, role });
   return `Pengguna ${username} (${role}) dibuat. Pemilik akun wajib mengganti password saat login pertama.`;
@@ -699,7 +710,11 @@ async function updateUser(ctx, d) {
   const old = await ctx.env.DB.prepare('select * from users where id=?').bind(id).first();
   if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
   const base = { ...d, username: d.username || old.username, role: d.role || old.role, fullname: d.fullname || old.fullname };
-  const { username, role, fullname, password } = validUser(base, false);
+  const { username, role, fullname, password, hp } = validUser(base, false);
+  if (hp) {
+    const hpDipakai = await ctx.env.DB.prepare('select username from users where hp=? and id<>?').bind(hp, id).first();
+    if (hpDipakai) throw logic.httpError(409, `Nomor HP ini sudah dipakai akun "${hpDipakai.username}".`);
+  }
   const aktif = d.aktif === undefined ? old.aktif : (d.aktif ? 1 : 0);
   // jangan sampai tidak ada admin aktif yang tersisa
   if (old.role === 'admin' && (role !== 'admin' || !aktif)) {
@@ -710,12 +725,12 @@ async function updateUser(ctx, d) {
   const dup = await ctx.env.DB.prepare('select id from users where username=? and id<>?').bind(username, id).first();
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai.`);
   if (password) {
-    await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, password_hash=?, must_change_password=1 where id=?')
-      .bind(username, fullname, role, aktif, await logic.hashPassword(password), id).run();
+    await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp), password_hash=?, must_change_password=1 where id=?')
+      .bind(username, fullname, role, aktif, hp || null, await logic.hashPassword(password), id).run();
     await ctx.env.DB.prepare('delete from sessions where user_id=? and token_hash<>?').bind(id, sesiHashOf(ctx)).run();
   } else {
-    await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=? where id=?')
-      .bind(username, fullname, role, aktif, id).run();
+    await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp) where id=?')
+      .bind(username, fullname, role, aktif, hp || null, id).run();
   }
   if (!aktif) await ctx.env.DB.prepare('delete from sessions where user_id=?').bind(id).run();
   await ctx.audit('user.update', 'users', id, { username: old.username, role: old.role, aktif: old.aktif }, { username, role, aktif });
@@ -959,8 +974,21 @@ function normalNamaPengguna(x) {
  */
 async function cariAkunLogin(env, diketik) {
   const d = normalNamaPengguna(diketik);
+
+  // 1) Nomor HP: bentuk apa pun (0812…, +62…, 62…, 812…) dicari dalam bentuk baku.
+  if (logic.miripNomorHp(d)) {
+    const hp = logic.normalHpLogin(d);
+    if (hp) {
+      const akun = await env.DB.prepare('select * from users where hp=? and aktif=1').bind(hp).first();
+      if (akun) return akun;
+    }
+  }
+
+  // 2) Username (atau email penuh yang didaftarkan sebagai username)
   const akun = await env.DB.prepare('select * from users where username=? and aktif=1').bind(d).first();
   if (akun) return akun;
+
+  // 3) Email: bila tidak ada akun dengan email penuh, coba bagian sebelum '@'
   if (d.includes('@')) {
     const depan = d.split('@')[0];
     return (await env.DB.prepare('select * from users where username=? and aktif=1').bind(depan).first()) || null;
@@ -1118,7 +1146,7 @@ async function tanganiApi(req, env, url, secure, today) {
         const [d, ops, cats, us] = await Promise.all([
           dashboard(env, db, sesi.kost), daftarLedger(env.DB, sesi.kost),
           db.prepare('select * from categories where aktif=1 order by jenis, nama').all(),
-          env.DB.prepare('select id, username, fullname, role, aktif, created_at, kost from users where kost=? order by username').bind(sesi.kost).all(),
+          env.DB.prepare('select id, username, fullname, role, aktif, created_at, kost, hp from users where kost=? order by username').bind(sesi.kost).all(),
         ]);
         const kategori = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
         (cats.results || []).forEach((c) => {
@@ -1126,7 +1154,7 @@ async function tanganiApi(req, env, url, secure, today) {
           (kategori[k] = kategori[k] || []).push({ id: c.id, nama: c.nama, saldoNormal: c.saldo_normal, jenis: k, arusKas: c.arus_kas !== 0 });
         });
         const users = ['admin', 'master'].includes(sesi.role)
-          ? (us.results || []).map((u) => ({ id: u.id, username: u.username, nama: u.fullname, fullname: u.fullname, role: u.role, aktif: u.aktif }))
+          ? (us.results || []).map((u) => ({ id: u.id, username: u.username, nama: u.fullname, fullname: u.fullname, role: u.role, aktif: u.aktif, hp: u.hp || '' }))
           : [];
         return json({ ...d, ops, kategori, users, kost: await ambilKost(env, sesi.kost) });
       }

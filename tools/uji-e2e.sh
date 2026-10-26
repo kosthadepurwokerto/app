@@ -380,6 +380,13 @@ curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H
 TOKEN_AWAL2=$(node -e "console.log(require('/tmp/hade_login_awal2.json').token||'')")
 ck "Setelah ganti password, data terbuka kembali (200)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TOKEN_AWAL2" "$B/api/bootstrap")" "200"
 
+echo "== LOGIN PAKAI NO. HP =="
+ck "Buat petugas dengan No. HP (format 0812-...)" "$(actj $J '{"action":"users.create","data":{"username":"petugas-hp","password":"Petugas12345","role":"staff","fullname":"Petugas HP","hp":"0812-3456-7890"}}')" "200"
+ck "Nomor HP dobel (+62 / spasi) ditolak 409" "$(actj $J '{"action":"users.create","data":{"username":"petugas-hp2","password":"Petugas12345","role":"staff","hp":"+62812 3456 7890"}}')" "409"
+ck "Nomor HP tidak sah ditolak 400" "$(actj $J '{"action":"users.create","data":{"username":"petugas-hp3","password":"Petugas12345","role":"staff","hp":"12345"}}')" "400"
+ck "Login pakai No. HP tanpa nama kost" "$(loginj 081234567890 Petugas12345)" "200"
+ck "Login pakai format +62 ke akun yang sama" "$(loginj +6281234567890 Petugas12345)" "200"
+ck "Nomor HP akun baru disimpan ternormalisasi" "$(code -b $J "$B/api/bootstrap" >/dev/null; jq_ "('x')" >/dev/null; curl -s -b $J "$B/api/bootstrap" -o /tmp/hp.json; node -e "const d=JSON.parse(require('fs').readFileSync('/tmp/hp.json'));const u=d.users.find(x=>x.username==='petugas-hp');console.log(u&&u.hp)")" "081234567890"
 echo "== LOGOUT =="
 ck "Logout lewat GET ditolak 405" "$(code -b $J "$B/api/logout")" "405"
 ck "Logout POST" "$(code -b $J -X POST "$B/api/logout")" "200"

@@ -1174,6 +1174,12 @@
                   <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Username</label>
                     <input type="text" id="user-username" required placeholder="Contoh: andi_hade" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                    <p class="text-[10px] text-slate-400 mt-1">Username unik di seluruh server (tidak boleh sama dengan kost lain).</p>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No. HP untuk Login <span class="text-slate-300 normal-case font-semibold">(opsional)</span></label>
+                    <input type="tel" id="user-hp" inputmode="tel" placeholder="Contoh: 081234567890" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                    <p class="text-[10px] text-slate-400 mt-1">Bisa dipakai masuk tanpa mengetik nama kost. Harus unik.</p>
                   </div>
                   <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap</label>
@@ -4035,6 +4041,7 @@
     function startEditUser(id, username, fullname, role) {
       document.getElementById('user-edit-id').value = id;
       document.getElementById('user-username').value = username;
+      const elHp = document.getElementById('user-hp'); if (elHp) elHp.value = '';
       document.getElementById('user-fullname').value = fullname;
       document.getElementById('user-password').value = '';
       document.getElementById('user-password').required = false;
@@ -4244,7 +4251,7 @@
               activeUser = { ...activeUser, username, fullname, role: role === 'admin' ? 'admin' : 'staff' };
               applyUserRoleUI();
             }
-          }).editUser({ id: editId, username, fullname, password: password || undefined, role });
+          }).editUser({ id: editId, username, fullname, password: password || undefined, role, hp: (document.getElementById('user-hp') || {}).value || '' });
       } else {
         google.script.run
           .withFailureHandler(handleError)
@@ -4253,7 +4260,7 @@
             showCustomAlert("Sukses", msg, true);
             this.reset();
             loadUsersData();
-          }).addUser({ username, fullname, password, role });
+          }).addUser({ username, fullname, password, role, hp: (document.getElementById('user-hp') || {}).value || '' });
       }
     };
 

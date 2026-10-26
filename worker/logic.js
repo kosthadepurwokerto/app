@@ -88,6 +88,27 @@ export function normPhone(v) {
   return s.startsWith('8') ? '0' + s : s;
 }
 
+/**
+ * Nomor HP Indonesia ke bentuk baku `08xxxxxxxxxx` — satu bentuk untuk login.
+ * Menerima: 0812-3456-7890, +62 812 3456 7890, 62812…, 812…  (spasi/strip/titik dibuang).
+ * Mengembalikan '' bila tidak masuk akal (dipakai sebagai penanda "bukan nomor HP").
+ */
+export function normalHpLogin(v) {
+  let s = String(v || '').replace(/[^0-9+]/g, '');
+  if (s.startsWith('+')) s = s.slice(1);
+  if (s.startsWith('62')) s = '0' + s.slice(2);       // +62 / 62 -> 0
+  else if (s.startsWith('8')) s = '0' + s;            // 812… -> 0812…
+  // Nomor seluler Indonesia: 08 + 8–12 angka, total 10–14 digit.
+  if (!/^08[0-9]{8,12}$/.test(s)) return '';
+  return s;
+}
+
+/** Apakah teks yang diketik terlihat seperti nomor HP (untuk memilih cara pencarian akun). */
+export function miripNomorHp(v) {
+  const s = String(v || '').replace(/[^0-9+]/g, '');
+  return s.length >= 8 && /^[0-9+]+$/.test(s);
+}
+
 // ---------- password (PBKDF2-SHA256, batas Workers: 100.000 iterasi) ----------
 const ITER = 100000;
 const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
