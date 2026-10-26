@@ -204,7 +204,10 @@
 
       <form id="form-login" class="space-y-4" onsubmit="handleLoginSubmit(event)">
         <!-- Kode/Nama aplikasi (kost) — opsional; wajib bila satu username ada di beberapa kost -->
-        <div>
+        <!-- Kolom kode aplikasi DIMATIKAN secara bawaan: username unik, jadi server tahu
+             sendiri kost pemiliknya. Kolom ini hanya muncul bila dibuka manual (mis. satu
+             username terdaftar di lebih dari satu kost, atau akses lewat link khusus kost). -->
+        <div id="grup-login-kost" class="hidden">
           <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kode / Nama Aplikasi <span class="text-slate-300 normal-case font-semibold">(opsional)</span></label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
@@ -213,14 +216,17 @@
             <input type="text" id="login-kost" autocomplete="organization" placeholder="Contoh: hadekost atau Hade Kost" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
           </div>
         </div>
+        <div class="text-center -mt-2">
+          <button type="button" onclick="tampilkanKolomKost()" class="text-[10px] font-bold text-slate-400 hover:text-blue-600 uppercase tracking-widest transition">+ Masuk ke kost tertentu</button>
+        </div>
 
         <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Pengguna (Username)</label>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Email / Nama Pengguna</label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
               <i class="fas fa-user-circle"></i>
             </span>
-            <input type="text" id="login-username" required autocomplete="username" placeholder="Masukkan username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            <input type="text" id="login-username" required autocomplete="username" placeholder="Email atau username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
           </div>
         </div>
 
@@ -236,6 +242,11 @@
             </button>
           </div>
         </div>
+
+        <label class="flex items-center gap-2 text-[11px] font-semibold text-slate-500 select-none cursor-pointer">
+          <input type="checkbox" id="login-ingat" checked class="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+          Ingat saya di perangkat ini (90 hari)
+        </label>
 
         <button type="submit" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-lg shadow-blue-500/10 text-sm mt-4 flex items-center justify-center gap-2">
           <i class="fas fa-sign-in-alt"></i> Masuk Sistem
@@ -1698,6 +1709,26 @@
 
     // Kategori dimuat setelah login (lihat handleLoginSubmit) — sebelum login endpoint ini 401.
 
+    /** Tampilkan kolom kode aplikasi (dipakai tombol "+ Masuk ke kost tertentu"). */
+    function tampilkanKolomKost() {
+      const g = document.getElementById('grup-login-kost');
+      if (!g) return;
+      g.classList.remove('hidden');
+      const i = document.getElementById('login-kost');
+      if (i) i.focus();
+    }
+
+    /** Link khusus kost: /?kost=kost-melati langsung memilih kost itu. */
+    function bacaKostDariUrl() {
+      try {
+        const p = new URLSearchParams(location.search);
+        const k = (p.get('kost') || p.get('app') || '').trim();
+        if (!k) return '';
+        sessionStorage.setItem('hade_kost_url', k);
+        return k;
+      } catch (e) { return ''; }
+    }
+
     function togglePasswordVisibility() {
       const passwordInput = document.getElementById('login-password');
       const icon = document.getElementById('toggle-password-icon');
@@ -1859,8 +1890,8 @@
      * Rute ini dipanggil langsung (bukan lewat HADE.login) supaya field `kost` ikut terkirim
      * tanpa mengubah d1-adapter.js.
      */
-    function loginAkun(username, password, kodeKost) {
-      const badan = { username, password };
+    function loginAkun(username, password, kodeKost, ingat) {
+      const badan = { username, password, ingat: !!ingat };
       if (kodeKost) badan.kost = kodeKost;
       return callApiJson('/login', badan);
     }
@@ -1878,7 +1909,10 @@
       event.preventDefault();
       const uName = document.getElementById('login-username').value.trim().toLowerCase();
       const pWord = document.getElementById('login-password').value;
-      const kodeKost = ((document.getElementById('login-kost') || {}).value || '').trim();
+      // Kost TIDAK lagi wajib diketik: utamakan kolom (bila dibuka), lalu ?kost= dari tautan.
+      // Kalau kosong, server memakai kost milik akun (username unik).
+      const kodeKost = ((document.getElementById('login-kost') || {}).value || '').trim()
+        || sessionStorage.getItem('hade_kost_url') || '';
 
       setTombolLogin(true);
 
@@ -1887,7 +1921,8 @@
       window.HADE_TOKEN = '';
       if (window.HADE) window.HADE.resetCache();
 
-      loginAkun(uName, pWord, kodeKost || null)
+      const ingat = !!(document.getElementById('login-ingat') || {}).checked;
+      loginAkun(uName, pWord, kodeKost || null, ingat)
         .then((hasil) => {
           const token = ambilToken(hasil);
           if (token) { simpanToken(token); window.HADE_TOKEN = token; }
@@ -2097,6 +2132,14 @@
 
     function initUserSession() {
       statusLanjut('Menghubungkan ke server…');
+      // Tautan khusus kost: /?kost=kost-melati -> kolom kode langsung terisi & terlihat
+      const kostUrl = bacaKostDariUrl();
+      if (kostUrl) {
+        const g = document.getElementById('grup-login-kost');
+        const i = document.getElementById('login-kost');
+        if (g) g.classList.remove('hidden');
+        if (i) i.value = kostUrl;
+      }
       if (!tailwindSiap()) { pasangModeAman(); statusLanjut('Tampilan sederhana (berkas tampilan tidak termuat). Menghubungkan…'); }
       if (!window.HADE) {
         statusLanjut('Komponen aplikasi tidak termuat (d1-adapter.js). Muat ulang halaman.');

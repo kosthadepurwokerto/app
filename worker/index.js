@@ -7,6 +7,8 @@ import { dbKost, TABEL_BERKOST } from './db-kost.js';
 import { ringkasKost, daftarLedger } from './ringkasan.js';
 
 const SESI_HARI = 7;
+// "Ingat saya": sesi 90 hari supaya petugas tidak mengetik sandi tiap hari.
+const SESI_INGAT_HARI = 90;
 const json = (data, status = 200, headers = {}) =>
   new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...headers } });
 
@@ -944,13 +946,36 @@ async function SajikanHalaman(env, url) {
   return new Response(hal.isi, { status: 200, headers: h });
 }
 
+
+/** Normalisasi nama pengguna saat login: buang spasi, kecilkan huruf. */
+function normalNamaPengguna(x) {
+  return String(x || '').trim().toLowerCase();
+}
+
+/**
+ * Cari akun dari yang diketik pengguna. Bila yang diketik berbentuk email tetapi tidak ada
+ * akun dengan email itu, coba bagian sebelum '@' (username klasik). Dengan begitu pengguna
+ * bisa memakai email sebagai identitas login tanpa kehilangan akun lama.
+ */
+async function cariAkunLogin(env, diketik) {
+  const d = normalNamaPengguna(diketik);
+  const akun = await env.DB.prepare('select * from users where username=? and aktif=1').bind(d).first();
+  if (akun) return akun;
+  if (d.includes('@')) {
+    const depan = d.split('@')[0];
+    return (await env.DB.prepare('select * from users where username=? and aktif=1').bind(depan).first()) || null;
+  }
+  return null;
+}
+
 async function tanganiApi(req, env, url, secure, today) {
 
     try {
       // ---------- auth ----------
       if (url.pathname === '/api/login') {
         if (req.method !== 'POST') return json({ error: 'Gunakan POST untuk login.' }, 405);
-        const { username, password, kost } = await req.json().catch(() => ({}));
+        const { username, password, kost, ingat } = await req.json().catch(() => ({}));
+        const hariSesi = ingat ? SESI_INGAT_HARI : SESI_HARI;
         const uname = String(username || '').trim().toLowerCase();
         // ---- batas percobaan login (anti tebak sandi) ----
         // Dihitung per nama pengguna + alamat IP, jendela 15 menit. Setelah 10 kali gagal,
@@ -966,7 +991,7 @@ async function tanganiApi(req, env, url, secure, today) {
           }
         } catch (_) { /* tabel belum ada (migrasi belum jalan): jangan blokir login */ }
 
-        const u = await env.DB.prepare('select * from users where username=? and aktif=1').bind(uname).first();
+        const u = await cariAkunLogin(env, uname);
         const cocok = u ? await logic.verifyPassword(String(password || ''), u.password_hash) : false;
         await env.DB.prepare('insert into login_percobaan (username, ip, berhasil) values (?,?,?)')
           .bind(uname, ip, cocok ? 1 : 0).run().catch(() => {});
@@ -975,7 +1000,7 @@ async function tanganiApi(req, env, url, secure, today) {
           return json({ error: 'Kombinasi nama pengguna atau kata sandi tidak sesuai.' }, 401);
         }
         const token = logic.randomToken();
-        const exp = new Date(Date.now() + SESI_HARI * 86400000).toISOString();
+        const exp = new Date(Date.now() + hariSesi * 86400000).toISOString();
 
         // ---- pilih kost untuk sesi ini ----
         // master: boleh semua kost. admin/staff: hanya kost yang diizinkan (akses_kost).
@@ -1013,7 +1038,7 @@ async function tanganiApi(req, env, url, secure, today) {
             ok: true, perluPilihKost: true, token: tokenPilih,
             user: { username: u.username, fullname: u.fullname, role: u.role },
             daftarKost: daftarKost.map((k) => ({ kunci: k.kunci, namaApp: k.nama_app, kota: k.kota, tagline: k.tagline })),
-          }, 200, { 'set-cookie': setSesiCookie(tokenPilih, secure) });
+          }, 200, { 'set-cookie': setSesiCookie(tokenPilih, secure, hariSesi * 86400) });
         }
 
         await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
@@ -1023,8 +1048,8 @@ async function tanganiApi(req, env, url, secure, today) {
         // `token` hanya dipakai APK (halaman dari file://) yang tidak bisa memakai cookie
         // lintas-asal. Browser biasa tetap memakai cookie HttpOnly dan mengabaikan nilai ini.
         const infoKost = await ambilKost(env, kostAktif ? kostAktif.kunci : (u.kost || 'kost-hade'));
-        return json({ ok: true, token, user: { username: u.username, fullname: u.fullname, role: u.role }, kost: infoKost },
-          200, { 'set-cookie': setSesiCookie(token, secure) });
+        return json({ ok: true, token, user: { username: u.username, fullname: u.fullname, role: u.role }, kost: infoKost, sesiHari: hariSesi },
+          200, { 'set-cookie': setSesiCookie(token, secure, hariSesi * 86400) });
       }
 
       const sesi = await sesiAktif(env, req);
@@ -1046,6 +1071,7 @@ async function tanganiApi(req, env, url, secure, today) {
             must_change_password: !!sesi.must_change_password, kost: sesi.kost,
           },
           kost: infoKost,
+          sesiBerakhir: sesi.expires_at || null,
         });
       }
       // Logo aplikasi bersifat PUBLIK: ditampilkan di layar login sebelum pengguna
