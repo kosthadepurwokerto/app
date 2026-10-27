@@ -1,91 +1,102 @@
 #!/usr/bin/env python3
 """
-Perbaiki rujukan tabel `users` yang tertinggal sebagai "users_lama".
+Perbaiki rujukan FK yang menggantung ke tabel sementara (`users_lama_pindah`, `users_lama`, `__lama`).
 
-Latar: mengganti definisi tabel users (untuk menambah role 'master') dilakukan dengan
-`alter table users rename to users_lama` lalu membuat tabel users baru. SQLite di D1
-menulis ulang definisi tabel/view LAIN yang merujuk ke users sehingga menunjuk ke
-"users_lama", dan insert ke users pun gagal ("no such table: main.users_lama",
-"error in view v_dashboard: no such table: main.payments__lama").
+Latar: mengganti definisi tabel `users` dilakukan dengan `alter table users rename to ...`
+lalu membuat tabel users baru. D1/SQLite menulis ulang definisi tabel LAIN yang punya foreign
+key ke `users` supaya menunjuk nama sementara itu; setelah tabel sementara dibuang, rujukan
+tersebut menggantung dan INSERT ke users gagal:
+  "no such table: main.users_lama_pindah"
 
-Urutan kerja skrip ini (penting, karena view bisa menahan rename tabel):
-  1. Simpan definisi semua view yang terdampak, lalu DROP view tersebut.
-  2. Untuk setiap tabel terdampak: rename -> buat ulang (tanpa "users_lama") -> salin data -> buang tabel lama.
-  3. Buat ulang view dari definisi yang disimpan, dengan nama tabel yang sudah benar.
-  4. Pastikan tidak ada lagi rujukan "users_lama"/"__lama".
+Perbaikan di sini TIDAK memakai `alter table ... rename` (itulah penyebabnya):
+  1. simpan + drop view/trigger yang menyentuh tabel terdampak,
+  2. untuk tiap tabel terdampak: salin data ke `<tabel>__baru`, drop tabel lama,
+     buat ulang dari definisi yang sudah dibersihkan (FK -> users), salin balik, drop perantara,
+  3. buat ulang view/trigger,
+  4. buang sisa tabel sementara.
 
-  ./perbaiki-rujukan-users.sh            # lokal
-  ./perbaiki-rujukan-users.sh --remote   # produksi (BACKUP DULU: bash tools/backup-produksi.sh)
+Aman diulang: kalau tidak ada rujukan menggantung, skrip tidak mengubah apa pun.
+
+  /usr/bin/python3 tools/perbaiki-rujukan-users.py --remote
 """
 import json, os, re, subprocess, sys
 
 REMOTE = '--remote' if '--remote' in sys.argv else ''
 DB = os.environ.get('DB_NAME', 'hadekost-db')
+POLA = re.compile(r'(users_lama\w*|__lama\w*|_pindah\b)', re.I)
 
 
-def sql_mentah(sql):
-    cmd = ['npx', 'wrangler', 'd1', 'execute', DB] + ([REMOTE] if REMOTE else []) + ['--json', '--command', sql]
+def sql(q):
+    cmd = ['npx', 'wrangler', 'd1', 'execute', DB] + ([REMOTE] if REMOTE else []) + ['--json', '--command', q]
     r = subprocess.run(cmd, capture_output=True, text=True)
     keluaran = (r.stdout or '') + (r.stderr or '')
     if '"success": true' not in keluaran:
-        raise RuntimeError(keluaran.strip()[:500])
+        raise RuntimeError(f'{q[:90]} -> {keluaran.strip()[:400]}')
     try:
         return json.loads(r.stdout)[0].get('results', [])
     except Exception:
         return []
 
 
-def jalankan(sql):
-    return sql_mentah(sql)
-
-
-def nama_bersih(sql):
-    return sql.replace('"users_lama"', 'users').replace('users_lama', 'users').replace('__lama', '')
+def bersihkan_ddl(ddl):
+    """Hanya bagian REFERENCES yang dibersihkan: nama tabel sementara -> users."""
+    def ganti(m):
+        return f'{m.group(1)}"users"{m.group(3)}'
+    return re.sub(r'(references\s*)"?(\w*(?:users_lama\w*|__lama\w*|\w*_pindah))"?(\s*\()', ganti, ddl, flags=re.I)
 
 
 def main():
-    # ---- 1. kumpulkan objek terdampak ----
-    semua = jalankan(
-        "select type, name, sql from sqlite_master where type in ('table','view') and sql is not null") or []
-    tabel = [o for o in semua if o['type'] == 'table' and ('users_lama' in (o['sql'] or '') or '__lama' in (o['sql'] or ''))]
-    view = [o for o in semua if o['type'] == 'view' and ('users_lama' in (o['sql'] or '') or '__lama' in (o['sql'] or ''))]
+    objek = sql("select type, name, sql from sqlite_master where sql is not null") or []
+    terdampak = [o for o in objek if o['type'] == 'table' and POLA.search(o['sql'] or '')]
+    sampah = [o['name'] for o in objek
+              if o['type'] == 'table' and re.fullmatch(r'\w*(users_lama\w*|__lama\w*|\w*_pindah)', o['name'] or '', re.I)]
 
-    if not tabel and not view:
-        print('Tidak ada rujukan users_lama. Tidak ada yang perlu diperbaiki.')
+    if not terdampak and not sampah:
+        print('Tidak ada rujukan tabel sementara. Bersih.')
         return 0
 
-    print(f'Tabel terdampak ({len(tabel)}):', ', '.join(o['name'] for o in tabel) or '-')
-    print(f'View terdampak ({len(view)}):', ', '.join(o['name'] for o in view) or '-')
+    print('Tabel terdampak :', ', '.join(o['name'] for o in terdampak) or '-')
+    print('Sisa sementara  :', ', '.join(sampah) or '-')
 
-    # ---- 2. buang view dulu (menahan rename tabel) ----
-    for v in view:
-        print(f'  drop view {v["name"]}')
-        jalankan(f'drop view if exists {v["name"]}')
+    # view & trigger yang menyentuh tabel terdampak harus dibuang lalu dibuat ulang
+    nama_penting = {o['name'] for o in terdampak} | {'users'}
+    simpan = [o for o in objek if o['type'] in ('view', 'trigger')
+              and any(re.search(r'\b' + re.escape(n) + r'\b', o['sql'] or '') for n in nama_penting)]
+    for o in simpan:
+        print(f'  simpan & drop {o["type"]} {o["name"]}')
+        sql(f'drop {o["type"]} if exists {o["name"]}')
 
-    # ---- 3. bangun ulang tabel terdampak ----
-    for o in tabel:
-        nama, sql = o['name'], nama_bersih(o['sql'])
-        kolom = [k['name'] for k in (jalankan(f"select name from pragma_table_info('{nama}')") or [])]
+    for o in terdampak:
+        nama = o['name']
+        ddl = bersihkan_ddl(o['sql'])
+        kolom = [k['name'] for k in (sql(f"select name from pragma_table_info('{nama}')") or [])]
         daftar = ', '.join(kolom)
-        sementara = f'{nama}__lama'
+        perantara = f'{nama}__baru'
         print(f'  rebuild {nama} ({len(kolom)} kolom)')
-        jalankan(f'drop table if exists {sementara}')
-        jalankan(f'alter table {nama} rename to {sementara}')
-        jalankan(sql)
-        jalankan(f'insert into {nama} ({daftar}) select {daftar} from {sementara}')
-        jalankan(f'drop table {sementara}')
+        sql(f'drop table if exists {perantara}')
+        sql(f'create table {perantara} as select * from {nama} where 0')
+        sql(f'insert into {perantara} ({daftar}) select {daftar} from {nama}')
+        sql(f'drop table {nama}')
+        sql(ddl)
+        sql(f'insert into {nama} ({daftar}) select {daftar} from {perantara}')
+        sql(f'drop table {perantara}')
 
-    # ---- 4. buat ulang view ----
-    for v in view:
-        sql_view = nama_bersih(v['sql'])
-        print(f'  buat view {v["name"]}')
-        jalankan(sql_view)
+    for o in simpan:
+        print(f'  buat ulang {o["type"]} {o["name"]}')
+        sql(o['sql'])
 
-    # ---- 5. verifikasi ----
-    sisa = jalankan("select count(*) as n from sqlite_master where sql like '%users_lama%' or sql like '%__lama%'")
-    n = sisa[0]['n'] if sisa else 0
-    print(f'Selesai. Rujukan lama tersisa: {n}')
-    return 0 if n == 0 else 1
+    for nama in sampah:
+        ada = sql(f"select count(*) as n from sqlite_master where type='table' and name='{nama}'")
+        if ada and ada[0]['n']:
+            print(f'  drop sisa tabel sementara {nama}')
+            sql(f'drop table if exists {nama}')
+
+    sisa = [x for x in (sql("select type, name, sql from sqlite_master where sql is not null") or [])
+            if POLA.search(x['sql'] or '') and not re.search(r'\bsessions?\b.*_lama\b', x['name'] or '')]
+    print(f'Selesai. Objek yang masih menyebut nama sementara: {len(sisa)}')
+    for x in sisa:
+        print('   ', x['type'], x['name'])
+    return 0 if not sisa else 1
 
 
 if __name__ == '__main__':

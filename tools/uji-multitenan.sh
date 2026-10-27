@@ -7,8 +7,11 @@ PERSIST=/tmp/hkmulti-uji
 PORT=8798
 B=http://localhost:$PORT
 fail=0
-ck() { if [ "$2" = "$3" ]; then echo "PASS $1"; else echo "FAIL $1 (harap $3, dapat $2)"; fail=$((fail+1)); fi; }
+ck() { if [ "$2" = "$3" ]; then echo "PASS $1"; else echo "FAIL $1 (harap $3, dapat $2)${4:+ | balasan: $4}"; fail=$((fail+1)); fi; }
+# cek dengan isi balasan (dipakai saat mendiagnosa kegagalan API)
+ckb() { local isi; isi=$(cat /tmp/act.out 2>/dev/null | head -c 160); ck "$1" "$2" "$3" "$isi"; }
 json() { node -e "const d=JSON.parse(require('fs').readFileSync('$1','utf8'));console.log($2)"; }
+# Bedakan "tidak bisa masuk" (cookie hilang -> 200/undefined) dari "jawaban dari kost yang salah".
 
 pkill -f "port $PORT" 2>/dev/null
 rm -rf "$PERSIST"; mkdir -p "$PERSIST"
@@ -25,13 +28,13 @@ DEVPID=$!
 for i in $(seq 1 60); do curl -s -o /dev/null "$B/api/session" && break; sleep 1; done
 
 TODAY=$(TZ=Asia/Makassar date +%F)
-M=/tmp/m-master.jar; A=/tmp/m-admin.jar
+JAR_M=/tmp/m-master.jar; A=/tmp/m-admin.jar
 login() { curl -s -c "$1" -o "$2" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"username\":\"$3\",\"password\":\"$4\"}" $B/api/login; }
 tokof() { sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' "$1"; }
 act() { curl -s -o /tmp/act.out -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $1" -d "$2" $B/api/action; }
 
 echo "== 1. LOGIN & PERAN =="
-ck "Master login" "$(login $M /tmp/r1 master Masterpass123)" "200"
+ck "Master login" "$(login $JAR_M /tmp/r1 master Masterpass123)" "200"
 ck "Login balas role master" "$(json /tmp/r1 "d.user.role")" "master"
 ck "Admin login" "$(login $A /tmp/r2 admin Kostsaya12345)" "200"
 ck "Login memuat branding" "$(json /tmp/r2 "d.kost.namaApp+'/'+d.kost.kota")" "Kost Hade/Purwokerto"
@@ -40,10 +43,10 @@ TM_MASTER=$(tokof /tmp/r1); TA=$(tokof /tmp/r2)
 echo "== 2. HANYA MASTER KELOLA DAFTAR KOST =="
 ck "Admin lihat daftar kost 403" "$(curl -s -o /dev/null -w '%{http_code}' -b $A $B/api/master/kost)" "403"
 ck "Admin buat kost 403" "$(curl -s -o /dev/null -w '%{http_code}' -b $A -X POST -H 'content-type: application/json' -d '{"namaApp":"Nakal","username":"nakal","password":"Nakal12345"}' $B/api/master/kost)" "403"
-ck "Master buat Kost Melati" "$(curl -s -b $M -o /tmp/r3 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","kota":"Semarang","tagline":"Kost Putri","username":"adminmelati","password":"Melati12345"}' $B/api/master/kost)" "200"
+ck "Master buat Kost Melati" "$(curl -s -b $JAR_M -o /tmp/r3 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","kota":"Semarang","tagline":"Kost Putri","username":"adminmelati","password":"Melati12345"}' $B/api/master/kost)" "200"
 ck "Kunci = slug nama" "$(json /tmp/r3 'd.kost.kunci')" "kost-melati"
-ck "Nama dobel ditolak 409" "$(curl -s -o /dev/null -w '%{http_code}' -b $M -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","username":"lain","password":"Lain123456"}' $B/api/master/kost)" "409"
-ck "Master lihat 2 kost" "$(curl -s -b $M $B/api/master/kost | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).daftar.length))")" "2"
+ck "Nama dobel ditolak 409" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","username":"lain","password":"Lain123456"}' $B/api/master/kost)" "409"
+ck "Master lihat 2 kost" "$(curl -s -b $JAR_M $B/api/master/kost | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).daftar.length))")" "2"
 
 echo "== 3. ADMIN KOST BARU =="
 curl -s -o /tmp/r4 -X POST -H 'content-type: application/json' -d '{"username":"adminmelati","password":"Melati12345"}' $B/api/login
@@ -90,9 +93,20 @@ ck "Kas Melati tidak terpengaruh" "$(curl -s -H "x-sesi-apk: $TM" $B/api/bootstr
 ck "Kamar & penyewa Hade utuh" "$(curl -s -H "x-sesi-apk: $TA" $B/api/bootstrap -o /tmp/r16; json /tmp/r16 "d.stats.totalKamar+'/'+d.stats.totalPenyewa")" "1/1"
 
 echo "== 8. MASTER BERPINDAH KOST =="
-ck "Master pilih kost-melati" "$(curl -s -o /dev/null -w '%{http_code}' -b $M -X POST -H 'content-type: application/json' -d '{"kunci":"kost-melati"}' $B/api/pilih-kost)" "200"
-ck "Master lihat data Melati" "$(curl -s -b $M $B/api/bootstrap -o /tmp/r17; json /tmp/r17 "d.kost.namaApp+'/'+d.stats.sisaKas")" "Kost Melati/900000"
+ck "Master pilih kost-melati" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"kunci":"kost-melati"}' $B/api/pilih-kost)" "200"
+ck "Master lihat data Melati" "$(curl -s -b $JAR_M $B/api/bootstrap -o /tmp/r17; json /tmp/r17 "d.kost.namaApp+'/'+d.stats.sisaKas")" "Kost Melati/900000"
 ck "Admin tidak boleh pindah kost" "$(curl -s -o /dev/null -w '%{http_code}' -b $A -X POST -H 'content-type: application/json' -d '{"kunci":"kost-melati"}' $B/api/pilih-kost)" "403"
+
+echo "== 9. USERNAME SAMA DI DUA KOST =="
+ck "Master buat kost ketiga" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Tiga","kota":"Solo","tagline":"Kost Tiga","username":"admin","password":"TigaAdmin123","fullname":"Admin Tiga","hp":"0857-9999-0000"}' $B/api/master/kost)" "200"
+# "tigaadmin" milik Kost Tiga. Master kini di kost-melati, jadi di sana nama itu BUKAN duplikat -> boleh.
+ck "Nama milik kost lain boleh dibuat di sini" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Melati","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "200"
+# ...dan sekarang di kost-melati sudah ada: membuat lagi -> 409.
+ck "Username sama TIDAK boleh dua kali dalam satu kost (409)" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Duplikat","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "409"
+# Nama yang sama di kost lain tetap sah: pindah ke kost-hade lalu buat "tigaadmin".
+ck "Pindah ke Kost Hade" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"kunci":"kost-hade"}' $B/api/pilih-kost)" "200"
+ck "Username sama di kost lain tetap boleh" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Hade","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "200"
+ck "Kost Hade tetap punya admin-nya sendiri" "$(curl -s -b $JAR_M $B/api/bootstrap -o /tmp/t13.json; node -e "const d=require('/tmp/t13.json');console.log(d.kost.namaApp+'/'+d.users.filter(u=>u.username==='admin').length)")" "Kost Hade/1"
 
 kill $DEVPID 2>/dev/null
 echo

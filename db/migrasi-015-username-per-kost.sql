@@ -1,0 +1,14 @@
+-- =====================================================================
+-- Migrasi 015 — USERNAME UNIK PER KOST
+--
+-- Setelah login memakai No. HP (migrasi 014), username hanyalah label. Dua kost kini
+-- boleh sama-sama memiliki akun bernama "admin"; yang membedakan adalah No. HP
+-- (unik global) atau nama kost saat login.
+--
+-- SQLite menyimpan aturan UNIQUE(username) di dalam definisi tabel, sehingga harus
+-- dibuat ulang. Skrip ini dijalankan oleh tools/migrasi-username-per-kost.py yang:
+--   1. membuang view/trigger yang menahan rename,
+--   2. membuat ulang tabel users tanpa UNIQUE(username),
+--   3. menyalin data, 4. membuat indeks unik (kost, username), 5. memulihkan view/trigger.
+-- =====================================================================
+create unique index if not exists idx_users_kost_username on users(kost, username);

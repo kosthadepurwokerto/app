@@ -21,7 +21,7 @@ create table if not exists kosts (
 -- ---------- AKUN ----------
 create table if not exists users (
   id                  text primary key,
-  username            text unique not null,
+  username            text not null,          -- label akun; unik PER KOST (lihat indeks di bawah)
   fullname            text not null,
   role                text not null default 'staff' check (role in ('master','admin','staff')),
   kost                text not null default 'kost-hade' references kosts(kunci),  -- kost induk user ini
@@ -31,6 +31,10 @@ create table if not exists users (
   must_change_password integer not null default 0,
   created_at          text not null default (datetime('now'))
 );
+
+-- Username unik per kost: dua kost boleh sama-sama punya "admin". Yang membedakan
+-- identitas login adalah No. HP (unik global) — atau nama kost pada kolom login.
+create unique index if not exists idx_users_kost_username on users(kost, username);
 
 -- No. HP dipakai sebagai identitas login: unik bila diisi (boleh kosong untuk akun lama).
 create unique index if not exists idx_users_hp on users(hp) where hp is not null and hp <> '';
