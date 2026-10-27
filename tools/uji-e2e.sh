@@ -247,7 +247,7 @@ TOKEN_APK=$(curl -s -H 'Origin: null' -X POST -H 'content-type: application/json
 echo "== BATAS PERCOBAAN LOGIN ==="
 for i in $(seq 1 10); do curl -s -o /dev/null -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah$i"}' "$B/api/login"; done
 ck "Setelah 10x salah, login benar pun ditolak 429" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "429"
-ck "Akun lain tidak ikut terkunci" "$(actj $J '{"action":"users.create","data":{"username":"cek-login","password":"Cekpass12345","role":"staff"}}' >/dev/null; loginj cek-login Cekpass12345)" "200"
+ck "Akun lain tidak ikut terkunci" "$(actj $J '{"action":"users.create","data":{"username":"cek-login","password":"Cekpass12345","role":"staff","hp":"081200000101"}}' >/dev/null; loginj cek-login Cekpass12345)" "200"
 
 echo "== AKSES DARI APK (origin null) ==="
 ck "Preflight OPTIONS dari APK dijawab 204" "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: null' -H 'Access-Control-Request-Method: POST' "$B/api/login")" "204"
@@ -263,10 +263,11 @@ ck "Kategori dobel ditolak 409" "$(actj $J '{"action":"categories.create","data"
 code -b $J "$B/api/bootstrap" >/dev/null
 KID=$(jq_ "d.kategori.Pengeluaran.find(c=>c.nama==='Uji Kategori').id")
 ck "Hapus kategori tak terpakai" "$(actj $J "{\"action\":\"categories.delete\",\"data\":{\"id\":$KID}}")" "200"
-ck "Buat user staff" "$(actj $J '{"action":"users.create","data":{"username":"staf","password":"Staffpass123","role":"staff","fullname":"Petugas"}}')" "200"
+ck "Akun baru tanpa No. HP ditolak 400" "$(actj $J '{"action":"users.create","data":{"username":"tanpa-hp","password":"Tanpahp123","role":"staff"}}')" "400"
+ck "Buat user staff" "$(actj $J '{"action":"users.create","data":{"username":"staf","password":"Staffpass123","role":"staff","fullname":"Petugas","hp":"081200000102"}}')" "200"
 ck "Username tidak valid ditolak 400" "$(actj $J '{"action":"users.create","data":{"username":"a b c","password":"12345678"}}')" "400"
 ck "Admin tidak bisa hapus dirinya sendiri (selalu 404 diuji lewat id acak)" "$(actj $J '{"action":"users.delete","data":{"id":"usr_tidakada"}}')" "404"
-ck "Buat user staff kedua" "$(actj $J '{"action":"users.create","data":{"username":"staf2","password":"Staffpass123","role":"staff","fullname":"Petugas 2"}}')" "200"
+ck "Buat user staff kedua" "$(actj $J '{"action":"users.create","data":{"username":"staf2","password":"Staffpass123","role":"staff","fullname":"Petugas 2","hp":"081200000103"}}')" "200"
 code -b $J "$B/api/bootstrap" >/dev/null
 SUID=$(jq_ "d.users.find(u=>u.username==='staf2').id")
 ck "Hapus user staff (tanpa jejak transaksi) berhasil" "$(actj $J "{\"action\":\"users.delete\",\"data\":{\"id\":\"$SUID\"}}")" "200"
@@ -363,7 +364,7 @@ ck "Banjir login dari satu IP akhirnya dibatasi 429" "$([ $N429 -ge 1 ] && echo 
 ck "IP lain tidak ikut terblokir" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-real-ip: 10.99.1.$RANDOM" -H "cf-connecting-ip: 10.99.1.$RANDOM" "$B/api/session")" "200"
 
 # 3) Password awal wajib diganti: akun baru dari admin harus ganti dulu
-actj $J '{"action":"users.create","data":{"username":"awal","password":"Awalan12345","role":"staff","fullname":"Akun Awal"}}' >/dev/null
+actj $J '{"action":"users.create","data":{"username":"awal","password":"Awalan12345","role":"staff","fullname":"Akun Awal","hp":"081200000104"}}' >/dev/null
 CLEAN_IP="10.99.2.$RANDOM"
 CLEAN_IP="10.44.7.$((RANDOM%200))"
 curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"awal","password":"Awalan12345"}' "$B/api/login" -o /tmp/hade_login_awal.json

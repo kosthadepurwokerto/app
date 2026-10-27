@@ -809,13 +809,15 @@ function validUser(d, isNew) {
   if (isNew && (!password || password.length < 8)) throw logic.httpError(400, 'Password minimal 8 karakter.');
   if (!isNew && password && password.length < 8) throw logic.httpError(400, 'Password minimal 8 karakter.');
   if (password && password.length > 200) throw logic.httpError(400, 'Password maksimal 200 karakter.');
-  // No. HP opsional, tetapi bila diisi harus berupa nomor seluler yang sah (dipakai login).
-  // hpHapus: pada mode ubah, field hp yang sengaja dikosongkan berarti "hapus nomor HP".
+  // No. HP WAJIB: ia identitas tunggal login lintas kost. Akun baru tanpa HP ditolak;
+  // akun lama tanpa HP masih boleh login sementara (supaya tidak terkunci massal),
+  // tetapi setiap penyimpanan lewat menu User wajib menyertakan HP.
   let hp = undefined;
   if (d.hp !== undefined && d.hp !== null && String(d.hp).trim() !== '') {
     hp = logic.normalHpLogin(d.hp);
     if (!hp) throw logic.httpError(400, 'Nomor HP tidak valid. Contoh: 081234567890.');
   }
+  if (isNew && !hp) throw logic.httpError(400, 'Nomor HP wajib diisi (dipakai untuk login).');
   const hpHapus = !isNew && d.hp !== undefined && hp === undefined;
   return { username, role, fullname, password, hp, hpHapus };
 }
@@ -858,6 +860,9 @@ async function updateUser(ctx, d) {
   if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
   const base = { ...d, username: d.username || old.username, role: d.role || old.role, fullname: d.fullname || old.fullname };
   const { username, role, fullname, password, hp, hpHapus } = validUser(base, false);
+  // HP adalah identitas login, jadi akun lama yang belum punya HP wajib melengkapinya
+  // saat disimpan (pilihan A) — tidak boleh dibiarkan kosong maupun dihapus.
+  if (!hp) throw logic.httpError(400, 'Nomor HP wajib diisi (dipakai untuk login).');
   if (hp) {
     const hpDipakai = await ctx.env.DB.prepare('select username from users where hp=? and id<>?').bind(hp, id).first();
     if (hpDipakai) throw logic.httpError(409, `Nomor HP ini sudah dipakai akun "${hpDipakai.username}".`);
@@ -871,8 +876,8 @@ async function updateUser(ctx, d) {
   if (old.id === ctx.user.id && !aktif) throw logic.httpError(409, 'Tidak bisa menonaktifkan akun yang sedang dipakai.');
   const dup = await ctx.env.DB.prepare('select id from users where username=? and kost=? and id<>?').bind(username, old.kost, id).first();
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai di kost ini.`);
-  // hpBaru: nilai final kolom hp. undefined = pertahankan, '' = hapus, selain itu = ganti.
-  const hpBaru = hp || (hpHapus ? '' : undefined);
+  // hpBaru: nilai final kolom hp. HP wajib, jadi tidak ada lagi keadaan "hapus nomor".
+  const hpBaru = hp;
   // Sandi hanya di-hash bila benar-benar diisi: string kosong berarti "jangan ubah sandi",
   // bukan "ubah sandi menjadi hash kosong" (dulu ini membuat akun tak bisa login).
   if (password) {

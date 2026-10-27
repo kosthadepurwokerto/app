@@ -100,12 +100,12 @@ ck "Admin tidak boleh pindah kost" "$(curl -s -o /dev/null -w '%{http_code}' -b 
 echo "== 9. USERNAME SAMA DI DUA KOST =="
 ck "Master buat kost ketiga" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Tiga","kota":"Solo","tagline":"Kost Tiga","username":"admin","password":"TigaAdmin123","fullname":"Admin Tiga","hp":"0857-9999-0000"}' $B/api/master/kost)" "200"
 # "tigaadmin" milik Kost Tiga. Master kini di kost-melati, jadi di sana nama itu BUKAN duplikat -> boleh.
-ck "Nama milik kost lain boleh dibuat di sini" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Melati","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "200"
+ck "Nama milik kost lain boleh dibuat di sini" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Melati","password":"Lagi1234567","role":"staff","hp":"081300000011"}}' $B/api/action)" "200"
 # ...dan sekarang di kost-melati sudah ada: membuat lagi -> 409.
-ck "Username sama TIDAK boleh dua kali dalam satu kost (409)" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Duplikat","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "409"
+ck "Username sama TIDAK boleh dua kali dalam satu kost (409)" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Duplikat","password":"Lagi1234567","role":"staff","hp":"081300000012"}}' $B/api/action)" "409"
 # Nama yang sama di kost lain tetap sah: pindah ke kost-hade lalu buat "tigaadmin".
 ck "Pindah ke Kost Hade" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"kunci":"kost-hade"}' $B/api/pilih-kost)" "200"
-ck "Username sama di kost lain tetap boleh" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Hade","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "200"
+ck "Username sama di kost lain tetap boleh" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Hade","password":"Lagi1234567","role":"staff","hp":"081300000013"}}' $B/api/action)" "200"
 ck "Kost Hade tetap punya admin-nya sendiri" "$(curl -s -b $JAR_M $B/api/bootstrap -o /tmp/t13.json; node -e "const d=require('/tmp/t13.json');console.log(d.kost.namaApp+'/'+d.users.filter(u=>u.username==='admin').length)")" "Kost Hade/1"
 
 echo "== 10. SATU NO. HP, BANYAK KOST (alur master mendaftarkan admin) =="
