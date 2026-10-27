@@ -27,7 +27,9 @@
   }
 
   const n = (v) => (v === null || v === undefined || v === '' ? 0 : Number(String(v).replace(/[^0-9.-]/g, '')) || 0);
-  const aksi = (action, payload) => call('/action', { action, data: payload }).then((r) => r.message);
+  // Payload aksi dikirim di level atas (bukan di dalam `data`) supaya sama dengan
+  // bentuk yang dipakai handler Worker; dulu `data` membuat field terbuang.
+  const aksi = (action, payload) => call('/action', { action, ...(payload && typeof payload === 'object' ? payload : {}) }).then((r) => r.message);
 
   async function muatSemua() {
     const b = await call('/bootstrap');

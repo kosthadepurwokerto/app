@@ -810,12 +810,14 @@ function validUser(d, isNew) {
   if (!isNew && password && password.length < 8) throw logic.httpError(400, 'Password minimal 8 karakter.');
   if (password && password.length > 200) throw logic.httpError(400, 'Password maksimal 200 karakter.');
   // No. HP opsional, tetapi bila diisi harus berupa nomor seluler yang sah (dipakai login).
+  // hpHapus: pada mode ubah, field hp yang sengaja dikosongkan berarti "hapus nomor HP".
   let hp = undefined;
   if (d.hp !== undefined && d.hp !== null && String(d.hp).trim() !== '') {
     hp = logic.normalHpLogin(d.hp);
     if (!hp) throw logic.httpError(400, 'Nomor HP tidak valid. Contoh: 081234567890.');
   }
-  return { username, role, fullname, password, hp };
+  const hpHapus = !isNew && d.hp !== undefined && hp === undefined;
+  return { username, role, fullname, password, hp, hpHapus };
 }
 
 async function addUser(ctx, d) {
@@ -855,7 +857,7 @@ async function updateUser(ctx, d) {
   const old = await ctx.env.DB.prepare('select * from users where id=?').bind(id).first();
   if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
   const base = { ...d, username: d.username || old.username, role: d.role || old.role, fullname: d.fullname || old.fullname };
-  const { username, role, fullname, password, hp } = validUser(base, false);
+  const { username, role, fullname, password, hp, hpHapus } = validUser(base, false);
   if (hp) {
     const hpDipakai = await ctx.env.DB.prepare('select username from users where hp=? and id<>?').bind(hp, id).first();
     if (hpDipakai) throw logic.httpError(409, `Nomor HP ini sudah dipakai akun "${hpDipakai.username}".`);
@@ -869,16 +871,20 @@ async function updateUser(ctx, d) {
   if (old.id === ctx.user.id && !aktif) throw logic.httpError(409, 'Tidak bisa menonaktifkan akun yang sedang dipakai.');
   const dup = await ctx.env.DB.prepare('select id from users where username=? and kost=? and id<>?').bind(username, old.kost, id).first();
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai di kost ini.`);
+  // hpBaru: nilai final kolom hp. undefined = pertahankan, '' = hapus, selain itu = ganti.
+  const hpBaru = hp || (hpHapus ? '' : undefined);
+  // Sandi hanya di-hash bila benar-benar diisi: string kosong berarti "jangan ubah sandi",
+  // bukan "ubah sandi menjadi hash kosong" (dulu ini membuat akun tak bisa login).
   if (password) {
     await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp), password_hash=?, must_change_password=1 where id=?')
-      .bind(username, fullname, role, aktif, hp || null, await logic.hashPassword(password), id).run();
+      .bind(username, fullname, role, aktif, hpBaru === undefined ? null : hpBaru, await logic.hashPassword(password), id).run();
     await ctx.env.DB.prepare('delete from sessions where user_id=? and token_hash<>?').bind(id, sesiHashOf(ctx)).run();
   } else {
     await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp) where id=?')
-      .bind(username, fullname, role, aktif, hp || null, id).run();
+      .bind(username, fullname, role, aktif, hpBaru === undefined ? null : hpBaru, id).run();
   }
   if (!aktif) await ctx.env.DB.prepare('delete from sessions where user_id=?').bind(id).run();
-  await ctx.audit('user.update', 'users', id, { username: old.username, role: old.role, aktif: old.aktif }, { username, role, aktif });
+  await ctx.audit('user.update', 'users', id, { username: old.username, role: old.role, aktif: old.aktif, hp: old.hp }, { username, role, aktif, hp: hpBaru === undefined ? old.hp : hpBaru });
   return `Pengguna ${username} diperbarui.`;
 }
 
@@ -1502,8 +1508,17 @@ async function tanganiApi(req, env, url, secure, today) {
       // ---------- tulis ----------
       if (url.pathname === '/api/action') {
         if (req.method !== 'POST') return json({ error: 'Gunakan POST untuk aksi.' }, 405);
-        const { action, data } = await req.json().catch(() => ({}));
+        const isiAksi = await req.json().catch(() => ({}));
+        const action = isiAksi.action;
+        const hpAtas = isiAksi.hp;
+        let data = isiAksi.data;
         const fn = AKSI[action];
+        // Pola lama klien (adapter) mengirim seluruh payload di level atas, bukan di `data`.
+        // Dulu hasilnya `data` kosong sehingga aksi "berhasil" tanpa mengubah apa pun.
+        if (!data && action && typeof isiAksi === 'object') {
+          const { action: _a, data: _d, hp: _h, ...sisa } = isiAksi;
+          data = sisa;
+        }
         if (!fn) return json({ error: `Aksi "${action}" tidak dikenal.` }, 400);
         if (sesi.must_change_password) {
           return json({ error: 'Anda wajib mengganti password terlebih dahulu.' }, 403);
@@ -1523,6 +1538,8 @@ async function tanganiApi(req, env, url, secure, today) {
           now: () => new Date().toISOString(),
           audit: (aksi, tabel, rowId, lama, baru) => logic.audit(env, sesi, aksi, tabel, rowId, lama, baru),
         };
+        // `hp` boleh dikirim di level atas atau di dalam `data` (d1-adapter mengirim dua-duanya).
+        if (hpAtas !== undefined) data = { ...(data || {}), hp: hpAtas };
         const msg = await fn(ctx, data || {});
         return json({ ok: true, message: msg });
       }

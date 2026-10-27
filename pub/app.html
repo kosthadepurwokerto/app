@@ -1175,6 +1175,7 @@
                       <tr class="bg-slate-50 border-b border-slate-100 text-slate-400 text-[10px] uppercase font-bold tracking-wider">
                         <th class="py-3.5 px-6">Nama Pengguna (Username)</th>
                         <th class="py-3.5 px-4">Nama Lengkap</th>
+                        <th class="py-3.5 px-4">No. HP (Login)</th>
                         <th class="py-3.5 px-4">Role / Hak Akses</th>
                         <th class="py-3.5 px-6 text-center">Aksi</th>
                       </tr>
@@ -2287,7 +2288,7 @@
     daftarAksi('bayar-cepat', (d) => quickPayPort(d.nama, d.kamar));
     daftarAksi('void-ledger', (d) => promptDeleteOpsTransaction(d.id, d.ket));
     daftarAksi('wa-pengingat', (d) => kirimPengingatWa(d.bill));
-    daftarAksi('edit-user', (d) => startEditUser(d.id, d.username, d.fullname, d.role));
+    daftarAksi('edit-user', (d) => startEditUser(d.id, d.username, d.fullname, d.role, d.hp));
     daftarAksi('hapus-user', (d) => promptDeleteUser(d.id, d.fullname, d.username));
     daftarAksi('edit-kategori', (d) => startEditCategory(d.id, d.jenis, d.nama, d.saldo));
     daftarAksi('hapus-kategori', (d) => promptDeleteCategory(d.id, d.nama));
@@ -4034,7 +4035,7 @@
     function renderUsersTable(items) {
       const tbody = document.getElementById('table-user-list');
       if (items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="py-12 text-center text-slate-400 text-sm italic">Belum ada pengguna terdaftar.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" class="py-12 text-center text-slate-400 text-sm italic">Belum ada pengguna terdaftar.</td></tr>`;
         return;
       }
 
@@ -4044,6 +4045,7 @@
           <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
             <td class="py-4 px-6 font-bold text-slate-800">${esc(u.username)}</td>
             <td class="py-4 px-4 font-semibold">${esc(u.fullname)}</td>
+            <td class="py-4 px-4">${u.hp ? esc(u.hp) : '<span class="text-slate-300">—</span>'}</td>
             <td class="py-4 px-4">
               <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isAdmin ? 'bg-rose-50 text-rose-600 border border-rose-100' : 'bg-blue-50 text-blue-600 border border-blue-100'}">
                 ${u.role}
@@ -4052,7 +4054,7 @@
             <td class="py-4 px-6 text-center">
               <div class="flex items-center justify-center gap-1.5">
                 ${u.aktif === 0 ? '<span class="text-[9px] font-black text-slate-400 uppercase">Nonaktif</span>' : ''}
-                <button data-aksi="edit-user" data-id="${esc(u.id)}" data-username="${esc(u.username)}" data-fullname="${esc(u.fullname)}" data-role="${esc(u.role)}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Edit Kategori">
+                <button data-aksi="edit-user" data-id="${esc(u.id)}" data-username="${esc(u.username)}" data-fullname="${esc(u.fullname)}" data-role="${esc(u.role)}" data-hp="${esc(u.hp || '')}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 flex items-center justify-center transition" title="Ubah Pengguna">
                   <i class="fas fa-edit text-[10px]"></i>
                 </button>
                 <button data-aksi="hapus-user" data-id="${esc(u.id)}" data-fullname="${esc(u.fullname)}" data-username="${esc(u.username)}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 flex items-center justify-center transition btn-delete-action" title="Hapus Pengguna">
@@ -4073,10 +4075,10 @@
       renderUsersTable(filtered);
     }
 
-    function startEditUser(id, username, fullname, role) {
+    function startEditUser(id, username, fullname, role, hp) {
       document.getElementById('user-edit-id').value = id;
       document.getElementById('user-username').value = username;
-      const elHp = document.getElementById('user-hp'); if (elHp) elHp.value = '';
+      const elHp = document.getElementById('user-hp'); if (elHp) elHp.value = hp || '';
       document.getElementById('user-fullname').value = fullname;
       document.getElementById('user-password').value = '';
       document.getElementById('user-password').required = false;
