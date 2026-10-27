@@ -250,12 +250,12 @@
         </div>
 
         <div>
-          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Email / Nama Pengguna</label>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">No. HP / Nama Pengguna</label>
           <div class="relative">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-slate-400">
               <i class="fas fa-user-circle"></i>
             </span>
-            <input type="text" id="login-username" required autocomplete="username" placeholder="Email atau username" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+            <input type="tel" id="login-username" required autocomplete="username" placeholder="No. HP, mis. 081234567890" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
           </div>
         </div>
 
@@ -1949,7 +1949,7 @@
 
     function handleLoginSubmit(event) {
       event.preventDefault();
-      const uName = document.getElementById('login-username').value.trim().toLowerCase();
+      const uName = document.getElementById('login-username').value.trim();
       const pWord = document.getElementById('login-password').value;
       // Kost TIDAK lagi wajib diketik: utamakan kolom (bila dibuka), lalu ?kost= dari tautan.
       // Kalau kosong, server memakai kost milik akun (username unik).
