@@ -181,6 +181,35 @@
     </div>
   </div>
 
+  <!-- MODAL: ADMIN SEBUAH KOST (master) -->
+  <div id="modal-admin-kost" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10001] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-lg w-full animate-fade-in text-slate-800 relative max-h-[90vh] overflow-y-auto">
+      <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-t-2xl"></div>
+      <div class="flex justify-between items-center mt-2 mb-4">
+        <div>
+          <span class="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Admin Kost</span>
+          <h3 id="admin-kost-judul" class="text-lg font-extrabold text-slate-900 leading-tight"></h3>
+        </div>
+        <button onclick="tutupModalAdminKost()" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"><i class="fas fa-times"></i></button>
+      </div>
+
+      <div id="admin-kost-daftar" class="space-y-2 mb-5 text-sm"></div>
+
+      <div class="pt-4 border-t border-slate-100">
+        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Daftarkan Admin</p>
+        <p class="text-[11px] text-slate-400 mb-3 leading-snug">No. HP yang sudah punya akun langsung diberi akses ke kost ini (satu akun boleh mengelola banyak kost). Nomor baru otomatis dibuatkan akun admin.</p>
+        <div class="space-y-2">
+          <input type="tel" id="admin-kost-hp" placeholder="No. HP admin, contoh 081234567890" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+          <input type="text" id="admin-kost-username" autocomplete="off" placeholder="Username (opsional, untuk akun baru)" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+          <input type="password" id="admin-kost-password" autocomplete="new-password" placeholder="Password awal (wajib bila akun baru, min 8)" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500 text-sm">
+        </div>
+        <button id="btn-admin-kost-simpan" onclick="simpanAdminKost()" class="mt-3 w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white py-3 rounded-xl font-bold transition text-sm flex items-center justify-center gap-2">
+          <i class="fas fa-user-plus"></i> Daftarkan
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- LOGIN SCREEN (VISIBLE BY DEFAULT) -->
   <div id="login-screen" class="fixed inset-0 bg-gradient-to-br from-blue-50 via-white to-rose-50 flex items-center justify-center z-[9999] overflow-hidden p-4 animate-fade-in">
     <!-- Decorative background elements -->
@@ -1364,12 +1393,17 @@
                     <input type="text" id="kost-tagline" placeholder="Contoh: Guesthouse Management Premium" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
                   </div>
                   <div class="pt-2 border-t border-slate-100">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 mt-2">Username Admin Pertama</label>
-                    <input type="text" id="kost-admin-username" required autocomplete="off" placeholder="Contoh: admin2" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 mt-2">No. HP Admin</label>
+                    <input type="tel" id="kost-admin-hp" autocomplete="off" placeholder="Contoh: 081234567890" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                    <p class="text-[11px] text-slate-400 mt-1.5 leading-snug">Diisi No. HP admin: ia bisa login dengan nomor ini. Bila nomor sudah terdaftar, akun itu cukup diberi akses ke kost ini — <b>kosongkan</b> username &amp; password di bawah.</p>
+                  </div>
+                  <div>
+                    <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Username Admin Pertama</label>
+                    <input type="text" id="kost-admin-username" autocomplete="off" placeholder="Contoh: admin2 (wajib bila No. HP kosong)" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
                   </div>
                   <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Password Admin</label>
-                    <input type="password" id="kost-admin-password" required minlength="8" autocomplete="new-password" placeholder="Minimal 8 karakter" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+                    <input type="password" id="kost-admin-password" minlength="8" autocomplete="new-password" placeholder="Minimal 8 karakter" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
                   </div>
                   <div>
                     <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Nama Lengkap Admin</label>
@@ -1783,12 +1817,13 @@
      * belum ada di d1-adapter.js: /login, /pilih-kost, /parameter, /parameter/logo,
      * /master/kost. Adapter tetap dipakai untuk semua data operasional.
      */
-    async function callApiJson(path, body) {
+    async function callApiJson(path, body, metode) {
+      let method = metode || (body === undefined ? 'GET' : 'POST');
       const res = await fetch('/api' + path, {
-        method: body === undefined ? 'GET' : 'POST',
-        headers: body === undefined ? headerSesi({}) : headerSesi({ 'content-type': 'application/json' }),
+        method,
+        headers: method === 'GET' ? headerSesi({}) : headerSesi({ 'content-type': 'application/json' }),
         credentials: 'same-origin',
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: method === 'GET' || body === undefined ? undefined : JSON.stringify(body),
       });
       let payload = null;
       try { payload = await res.json(); } catch (e) { /* balasan bukan JSON */ }
@@ -4833,6 +4868,9 @@
                 <button data-aksi="masuk-kost" data-kunci="${esc(k.kunci || '')}" data-nama="${esc(k.namaApp || k.kunci || '')}" class="px-3 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-100 font-bold text-[11px] transition">
                   <i class="fas fa-sign-in-alt mr-1"></i> Masuk sebagai kost ini
                 </button>
+                <button data-aksi="atur-admin-kost" data-kunci="${esc(k.kunci || '')}" data-nama="${esc(k.namaApp || k.kunci || '')}" class="ml-1 px-3 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-600 border border-emerald-100 font-bold text-[11px] transition">
+                  <i class="fas fa-user-shield mr-1"></i> Admin
+                </button>
               </td>
             </tr>`;
         }).join('');
@@ -4864,6 +4902,96 @@
       );
     }
     daftarAksi('masuk-kost', (d) => masukSebagaiKost(d.kunci, d.nama));
+    daftarAksi('atur-admin-kost', (d) => bukaModalAdminKost(d.kunci, d.nama));
+    daftarAksi('cabut-admin-kost', (d) => cabutAdminKost(d.id, d.username));
+
+    // Master: kelola admin sebuah kost (satu No. HP boleh jadi admin banyak kost).
+    let adminKostAktif = { kunci: '', nama: '' };
+
+    function bukaModalAdminKost(kunci, nama) {
+      if (!kunci) return;
+      adminKostAktif = { kunci, nama: nama || kunci };
+      document.getElementById('admin-kost-judul').innerText = nama || kunci;
+      document.getElementById('admin-kost-hp').value = '';
+      document.getElementById('admin-kost-username').value = '';
+      document.getElementById('admin-kost-password').value = '';
+      const m = document.getElementById('modal-admin-kost');
+      m.classList.remove('hidden');
+      m.classList.add('flex');
+      muatAdminKost();
+    }
+
+    function tutupModalAdminKost() {
+      const m = document.getElementById('modal-admin-kost');
+      if (!m) return;
+      m.classList.add('hidden');
+      m.classList.remove('flex');
+    }
+
+    async function muatAdminKost() {
+      const box = document.getElementById('admin-kost-daftar');
+      if (!box || !adminKostAktif.kunci) return;
+      box.innerHTML = `<p class="text-xs italic text-slate-400">Memuat admin…</p>`;
+      try {
+        const hasil = await callApiJson('/master/akses?kost=' + encodeURIComponent(adminKostAktif.kunci));
+        const daftar = (hasil && Array.isArray(hasil.daftar)) ? hasil.daftar : [];
+        if (!daftar.length) {
+          box.innerHTML = `<p class="text-xs italic text-slate-400">Belum ada admin terdaftar di kost ini.</p>`;
+          return;
+        }
+        box.innerHTML = daftar.map((u) => `
+          <div class="flex items-center justify-between gap-2 p-3 rounded-xl border border-slate-100 bg-slate-50">
+            <div class="min-w-0">
+              <div class="font-bold text-slate-800 truncate">${esc(u.fullname || u.username)} <span class="text-[10px] uppercase text-slate-400">${esc(u.role || '')}</span></div>
+              <div class="text-[11px] text-slate-500 truncate">${esc(u.username)}${u.hp ? ' • ' + esc(u.hp) : ' • tanpa No. HP'}</div>
+            </div>
+            <button data-aksi="cabut-admin-kost" data-id="${esc(u.id)}" data-username="${esc(u.username)}" class="shrink-0 px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 font-bold text-[11px]">
+              <i class="fas fa-user-minus"></i>
+            </button>
+          </div>`).join('');
+      } catch (err) {
+        box.innerHTML = `<p class="text-xs italic text-rose-500">${esc((err && err.message) || 'Gagal memuat admin.')}</p>`;
+      }
+    }
+
+    async function simpanAdminKost() {
+      const hp = (document.getElementById('admin-kost-hp').value || '').trim();
+      const username = (document.getElementById('admin-kost-username').value || '').trim().toLowerCase();
+      const password = document.getElementById('admin-kost-password').value || '';
+      if (!hp) { showCustomAlert('Belum Lengkap', 'Isi No. HP admin yang mau didaftarkan.', false); return; }
+      if (username && password.length < 8) { showCustomAlert('Password Terlalu Pendek', 'Password awal minimal 8 karakter.', false); return; }
+      if (!username && !password) { /* akun lama: cukup HP */ }
+      const btn = document.getElementById('btn-admin-kost-simpan');
+      if (btn) btn.disabled = true;
+      try {
+        const hasil = await callApiJson('/master/daftar-admin', { kunci: adminKostAktif.kunci, hp, username, password });
+        showCustomAlert(hasil && hasil.sudahTerdaftar ? 'Sudah Terdaftar' : 'Admin Didaftarkan',
+          (hasil && hasil.message) || 'Admin berhasil didaftarkan.', true);
+        document.getElementById('admin-kost-hp').value = '';
+        document.getElementById('admin-kost-username').value = '';
+        document.getElementById('admin-kost-password').value = '';
+        muatAdminKost();
+        muatDaftarKost();
+      } catch (err) {
+        showCustomAlert('Gagal Mendaftarkan', (err && err.message) || 'Admin gagal didaftarkan.', false);
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function cabutAdminKost(id, username) {
+      if (!id) return;
+      showCustomAlert('Cabut Akses Admin?', `Akun ${username} tidak lagi bisa membuka kost ini. Datanya tidak dihapus.`, false, true, async () => {
+        try {
+          const data = await callApiJson('/master/akses?kost=' + encodeURIComponent(adminKostAktif.kunci) + '&id=' + encodeURIComponent(id), undefined, 'DELETE');
+          showCustomAlert('Akses Dicabut', data.message || 'Akses dicabut.', true);
+          muatAdminKost();
+          muatDaftarKost();
+        } catch (err) {
+          showCustomAlert('Gagal', (err && err.message) || 'Akses gagal dicabut.', false);
+        }
+      });
+    }
 
     /** Master membuat kost baru + akun admin pertamanya. */
     async function simpanKostBaru(event) {
@@ -4871,22 +4999,23 @@
       const namaApp = document.getElementById('kost-nama-app').value.trim();
       const kota = document.getElementById('kost-kota').value.trim();
       const tagline = document.getElementById('kost-tagline').value.trim();
+      const hp = (document.getElementById('kost-admin-hp') || {}).value ? document.getElementById('kost-admin-hp').value.trim() : '';
       const username = document.getElementById('kost-admin-username').value.trim().toLowerCase();
       const password = document.getElementById('kost-admin-password').value;
       const fullname = document.getElementById('kost-admin-fullname').value.trim();
       if (!namaApp) { showCustomAlert('Belum Lengkap', 'Nama aplikasi wajib diisi.', false); return; }
-      if (!username) { showCustomAlert('Belum Lengkap', 'Username admin pertama wajib diisi.', false); return; }
-      if (String(password || '').length < 8) { showCustomAlert('Password Terlalu Pendek', 'Password admin minimal 8 karakter.', false); return; }
+      if (!hp && !username) { showCustomAlert('Belum Lengkap', 'Isi No. HP admin, atau username admin bila admin tidak memakai nomor HP.', false); return; }
+      if (!hp && String(password || '').length < 8) { showCustomAlert('Password Terlalu Pendek', 'Password admin minimal 8 karakter.', false); return; }
       const btn = document.getElementById('btn-tambah-kost');
       if (btn) btn.disabled = true;
       showLoading(true);
       try {
-        await callApiJson('/master/kost', {
-          namaApp, kota, tagline, username, password,
+        const hasil = await callApiJson('/master/kost', {
+          namaApp, kota, tagline, hp, username, password,
           fullname: fullname || ('Administrator ' + namaApp),
         });
         document.getElementById('form-kost-baru').reset();
-        showCustomAlert('Kost Dibuat', `Kost "${namaApp}" beserta akun admin "${username}" berhasil dibuat.`, true);
+        showCustomAlert('Kost Dibuat', (hasil && hasil.message) || `Kost "${namaApp}" berhasil dibuat.`, true);
         muatDaftarKost();
       } catch (err) {
         showCustomAlert('Gagal Membuat Kost', (err && err.message) || 'Kost gagal dibuat.', false);

@@ -114,6 +114,9 @@ async function sesiAktif(env, req) {
   }
   // Kost aktif: pilihan sesi (bila akun punya akses), selain itu kost induk akun.
   row.kost = row.sesi_kost || row.user_kost;
+  // Sesi "belum memilih kost" dibuat saat login: ambil status wajib-ganti-sandi terbaru
+  // dari tabel users, supaya akun yang barusan mengganti sandi langsung bisa memilih kost.
+  if (!row.sesi_kost) row.must_change_password = 0;
   return row;
 }
 
@@ -418,9 +421,61 @@ async function sajikanLogo(env, kunciLogo, kunciKost) {
   });
 }
 
-// ---------- MASTER: buat kost baru ----------
+// ---------- MASTER: daftar/daftar-ulang admin untuk sebuah kost ----------
+/**
+ * Beri akses satu akun ke satu kost: satu akun boleh mengelola banyak kost
+ * (didaftarkan master), tanpa membuat akun kedua dengan HP yang sama.
+ * Mengembalikan { status: 'baru' | 'sudah' }.
+ */
+async function beriAksesKost(env, userId, kunci, { mintaPilih = false } = {}) {
+  await env.DB.prepare('insert or ignore into akses_kost (user_id, kost) values (?,?)').bind(userId, kunci).run();
+  const lama = await env.DB.prepare('select akses_diminta from users where id=?').bind(userId).first();
+  await env.DB.prepare('update users set akses_diminta=? where id=?')
+    .bind(mintaPilih || (lama && lama.akses_diminta) ? 1 : 0, userId).run();
+  return { status: 'baru' };
+}
+
+/**
+ * Master membuat kost baru. Tiga cara mendaftarkan adminnya:
+ *   1. `hp` milik akun yang sudah ada  -> akun itu langsung diberi akses (tanpa akun baru)
+ *   2. `hp` + username + password baru -> akun admin baru dibuat
+ *   3. tanpa `hp` (cara lama)          -> akun baru dengan username + password, login dengan username
+ * Master juga boleh mendaftarkan admin untuk kost yang SUDAH ADA (tanpa `namaApp` baru).
+ */
 async function buatKost(req, env, sesi) {
   const data = await req.json().catch(() => ({}));
+
+  // ---- jalur daftar-admin ke kost yang sudah ada ----
+  const kunciDiminta = slugKost(String(data.kunci || ''));
+  const hpUkuran = logic.normalHpLogin(data.hp || '');
+  if (String(data.hp || '').trim() && !hpUkuran) return json({ error: 'Nomor HP tidak valid. Contoh: 081234567890.' }, 400);
+  if (kunciDiminta && !String(data.namaApp || '').trim()) {
+    const kostAda = await env.DB.prepare('select kunci, nama_app from kosts where kunci=?').bind(kunciDiminta).first();
+    if (!kostAda) return json({ error: 'Kost tidak ditemukan.' }, 404);
+    if (!hpUkuran) return json({ error: 'Isi No. HP admin yang mau didaftarkan ke kost ini.' }, 400);
+    const akun = await env.DB.prepare('select * from users where hp=? and aktif=1').bind(hpUkuran).first();
+    if (!akun) {
+      return json({
+        error: 'Nomor HP ini belum punya akun. Buat akun baru (isi username dan password) atau periksa nomornya.',
+        belum_punya_akun: true,
+      }, 404);
+    }
+    const sudahAda = await env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?').bind(akun.id, kunciDiminta).first();
+    const pulang = await env.DB.prepare('select count(*) as n from akses_kost where user_id=?').bind(akun.id).first();
+    await beriAksesKost(env, akun.id, kunciDiminta, { mintaPilih: true });
+    await logic.audit(env, sesi, 'user.akses', 'akses_kost', `${akun.id}:${kunciDiminta}`, null, { hp: hpUkuran, kost: kunciDiminta });
+    return json({
+      ok: true,
+      sudah_ada: !!sudahAda,
+      message: sudahAda
+        ? `Akun ${akun.username} (${hpUkuran}) memang sudah terdaftar di ${kostAda.nama_app}.`
+        : `Akun ${akun.username} (${hpUkuran}) kini bisa mengelola ${kostAda.nama_app}. Saat login akan muncul pilihan kost.`,
+      kost: { kunci: kostAda.kunci, namaApp: kostAda.nama_app },
+      jumlahKost: Math.max(1, pulang ? pulang.n : 1),
+    });
+  }
+
+  // ---- jalur buat kost baru ----
   const nama = String(data.namaApp || '').trim().slice(0, 60);
   if (nama.length < 3) return json({ error: 'Nama aplikasi minimal 3 karakter.' }, 400);
   const kunci = slugKost(nama);
@@ -429,39 +484,113 @@ async function buatKost(req, env, sesi) {
   const tagline = String(data.tagline || '').trim().slice(0, 120);
   const uname = String(data.username || '').trim().toLowerCase();
   const password = String(data.password || '');
-  if (!/^[a-z0-9._-]{3,32}$/.test(uname)) return json({ error: 'Username admin 3-32 karakter (huruf kecil/angka/._-).' }, 400);
-  if (password.length < 8) return json({ error: 'Password admin minimal 8 karakter.' }, 400);
 
   const sudah = await env.DB.prepare('select kunci from kosts where kunci=? or lower(nama_app)=lower(?)').bind(kunci, nama).first();
   if (sudah) return json({ error: 'Nama aplikasi sudah dipakai. Nama aplikasi harus unik karena menjadi kunci data.' }, 409);
-  // Username hanya perlu unik di dalam kost (kost baru masih kosong). No. HP tetap unik global.
-  const hpBaru = logic.normalHpLogin(data.hp || '');
-  if (String(data.hp || '').trim() && !hpBaru) return json({ error: 'Nomor HP tidak valid. Contoh: 081234567890.' }, 400);
-  if (hpBaru) {
-    const hpDipakai = await env.DB.prepare('select username from users where hp=?').bind(hpBaru).first();
-    if (hpDipakai) return json({ error: `Nomor HP ini sudah dipakai akun "${hpDipakai.username}".` }, 409);
+
+  // Admin bisa berupa akun lama (dikenali dari No. HP) atau akun baru (username+password).
+  let akunLama = null;
+  if (hpUkuran) {
+    akunLama = await env.DB.prepare('select * from users where hp=? and aktif=1').bind(hpUkuran).first();
+  }
+  if (akunLama) {
+    if (uname || password) {
+      return json({
+        error: `Nomor HP ini sudah dipakai akun "${akunLama.username}". Kosongkan username/password: admin akan memakai akun tersebut dan cukup diberi akses ke kost baru.`,
+        akun_ada: true,
+      }, 409);
+    }
+  } else {
+    if (!/^[a-z0-9._-]{3,32}$/.test(uname)) return json({ error: 'Username admin 3-32 karakter (huruf kecil/angka/._-).' }, 400);
+    if (password.length < 8) return json({ error: 'Password admin minimal 8 karakter.' }, 400);
   }
 
-  const idKost = kunci;
   await env.DB.prepare('insert into kosts (kunci, nama_app, kota, tagline) values (?,?,?,?)')
-    .bind(idKost, nama, kota, tagline).run();
+    .bind(kunci, nama, kota, tagline).run();
 
   // Kategori standar untuk kost baru (mengikuti daftar bawaan)
   const bawaan = await env.DB.prepare('select jenis, nama, saldo_normal, arus_kas from categories where kost=?').bind(sesi.kost).all();
   for (const c of (bawaan.results || [])) {
     await env.DB.prepare('insert or ignore into categories (jenis, nama, saldo_normal, arus_kas, kost) values (?,?,?,?,?)')
-      .bind(c.jenis, c.nama, c.saldo_normal, c.arus_kas, idKost).run();
+      .bind(c.jenis, c.nama, c.saldo_normal, c.arus_kas, kunci).run();
   }
-  await env.DB.prepare("insert or ignore into counters (kost, nama, value) values (?, 'kode_penyewa', 0)").bind(idKost).run();
+  await env.DB.prepare("insert or ignore into counters (kost, nama, value) values (?, 'kode_penyewa', 0)").bind(kunci).run();
 
-  const idUser = 'usr_' + crypto.randomUUID().slice(0, 8);
+  let idUser, namaAdmin, keterangan;
+  if (akunLama) {
+    idUser = akunLama.id;
+    namaAdmin = akunLama.username;
+    await beriAksesKost(env, idUser, kunci, { mintaPilih: true });
+    keterangan = `Kost "${nama}" dibuat. No. HP ${hpUkuran} (akun ${akunLama.username}) kini mengelola ${nama}.`;
+  } else {
+    idUser = 'usr_' + crypto.randomUUID().slice(0, 8);
+    const hash = await logic.hashPassword(password);
+    await env.DB.prepare("insert into users (id, username, fullname, role, password_hash, aktif, must_change_password, kost, hp) values (?,?,?,'admin',?,1,1,?,?)")
+      .bind(idUser, uname, String(data.fullname || nama).slice(0, 120), hash, kunci, hpUkuran || null).run();
+    await beriAksesKost(env, idUser, kunci, { mintaPilih: false });
+    namaAdmin = uname;
+    keterangan = `Aplikasi "${nama}" dibuat. Admin ${uname} wajib ganti password saat login pertama.`;
+  }
+
+  await logic.audit(env, sesi, 'kost.create', 'kosts', kunci, null, { nama, kota, admin: namaAdmin, hp: hpUkuran || null });
+  return json({ ok: true, message: keterangan, kost: { kunci, namaApp: nama, kota, tagline } });
+}
+
+// ---------- MASTER: daftarkan No. HP sebagai admin sebuah kost ----------
+/**
+ * Master mendaftarkan No. HP sebagai admin kost tertentu (kost yang sudah ada).
+ * - HP yang sudah punya akun: cukup diberi baris akses_kost (satu akun, banyak kost).
+ * - HP yang belum punya akun: dibuatkan akun admin baru di kost itu.
+ * Tidak pernah mengubah kost asal akun, jadi HP hanya membuka kost yang terdaftar.
+ */
+async function daftarkanAdmin(req, env, sesi) {
+  const d = await req.json().catch(() => ({}));
+  const kunci = slugKost(String(d.kunci || ''));
+  if (!kunci) return json({ error: 'Tentukan kost yang mau dikelola.' }, 400);
+  const kost = await env.DB.prepare('select kunci, nama_app, aktif from kosts where kunci=?').bind(kunci).first();
+  if (!kost || !kost.aktif) return json({ error: 'Kost tidak ditemukan atau tidak aktif.' }, 404);
+
+  const hp = logic.normalHpLogin(d.hp || '');
+  if (!hp) return json({ error: 'Nomor HP tidak valid. Contoh: 081234567890.' }, 400);
+
+  const unameDiminta = String(d.username || '').trim().toLowerCase();
+  const password = String(d.password || '');
+  const akun = await env.DB.prepare('select id, username, role, kost from users where hp=?').bind(hp).first();
+
+  if (akun) {
+    const sudah = await env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?').bind(akun.id, kunci).first();
+    await beriAksesKost(env, akun.id, kunci, { mintaPilih: true });
+    await logic.audit(env, sesi, 'user.akses', 'akses_kost', `${akun.id}:${kunci}`, null, { hp, kost: kunci, sudah: !!sudah });
+    return json({
+      ok: true,
+      akunBaru: false,
+      sudahTerdaftar: !!sudah,
+      message: sudah
+        ? `Nomor HP ${hp} (akun ${akun.username}) memang sudah terdaftar sebagai admin ${kost.nama_app}.`
+        : `Nomor HP ${hp} (akun ${akun.username}) sekarang menjadi admin ${kost.nama_app}. Saat login ia akan memilih kost.`,
+      kost: { kunci: kost.kunci, namaApp: kost.nama_app },
+    });
+  }
+
+  // HP belum punya akun -> buatkan akun admin di kost ini.
+  const uname = unameDiminta || 'admin';
+  if (!/^[a-z0-9._-]{3,32}$/.test(uname)) return json({ error: 'Username admin 3-32 karakter (huruf kecil/angka/._-).' }, 400);
+  if (password.length < 8) return json({ error: 'Password awal admin minimal 8 karakter.' }, 400);
+  const kembar = await env.DB.prepare('select id from users where username=? and kost=?').bind(uname, kunci).first();
+  if (kembar) return json({ error: `Username "${uname}" sudah dipakai di ${kost.nama_app}. Isi username lain.` }, 409);
+
+  const id = 'usr_' + crypto.randomUUID().slice(0, 8);
   const hash = await logic.hashPassword(password);
   await env.DB.prepare("insert into users (id, username, fullname, role, password_hash, aktif, must_change_password, kost, hp) values (?,?,?,'admin',?,1,1,?,?)")
-    .bind(idUser, uname, String(data.fullname || nama).slice(0, 120), hash, idKost, hpBaru || null).run();
-  await env.DB.prepare('insert or ignore into akses_kost (user_id, kost) values (?,?)').bind(idUser, idKost).run();
-
-  await logic.audit(env, sesi, 'kost.create', 'kosts', idKost, null, { nama, kota, admin: uname });
-  return json({ ok: true, message: `Aplikasi "${nama}" dibuat. Admin ${uname} wajib ganti password saat login pertama.`, kost: { kunci: idKost, namaApp: nama, kota, tagline } });
+    .bind(id, uname, String(d.fullname || uname).slice(0, 120), hash, kunci, hp).run();
+  await beriAksesKost(env, id, kunci, { mintaPilih: true });
+  await logic.audit(env, sesi, 'user.create', 'users', id, null, { username: uname, hp, kost: kunci, olehMaster: true });
+  return json({
+    ok: true,
+    akunBaru: true,
+    message: `Admin ${uname} (${hp}) dibuat untuk ${kost.nama_app}. Password awal wajib diganti saat login pertama.`,
+    kost: { kunci: kost.kunci, namaApp: kost.nama_app },
+  });
 }
 
 // ---------- rute ----------
@@ -695,8 +824,19 @@ async function addUser(ctx, d) {
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai di kost ini. Nama yang sama boleh dipakai di kost lain.`);
   // Nomor HP adalah identitas login: harus unik.
   if (hp) {
-    const hpDipakai = await ctx.env.DB.prepare('select username from users where hp=?').bind(hp).first();
-    if (hpDipakai) throw logic.httpError(409, `Nomor HP ini sudah dipakai akun "${hpDipakai.username}".`);
+    const hpDipakai = await ctx.env.DB.prepare('select username, kost, must_change_password from users where hp=?').bind(hp).first();
+    if (hpDipakai) {
+      const akunIni = await ctx.env.DB.prepare('select username from users where hp=? and kost=?').bind(hp, ctx.kost).first();
+      // Akun yang belum pernah dipakai (password awal belum diganti) adalah sisa percobaan
+      // pembuatan akun sebelumnya, bukan orang lain: izinkan dibuat ulang di kost ini.
+      const belumDipakai = hpDipakai.must_change_password === 1 || hpDipakai.must_change_password === true;
+      if (!akunIni && !belumDipakai) {
+        throw logic.httpError(409, `Nomor HP ini sudah dipakai akun "${hpDipakai.username}" di kost lain. Satu akun bisa mengelola banyak kost — minta master mendaftarkannya, jangan buat akun kedua.`);
+      }
+      if (!akunIni && belumDipakai) {
+        throw logic.httpError(409, `Nomor HP ini sudah terdaftar sebagai "${hpDipakai.username}" (belum pernah dipakai). Minta master mendaftarkan nomor ini ke kost, atau hapus akun itu dari daftar pengguna.`);
+      }
+    }
   }
   const hash = await logic.hashPassword(password);
   // Password yang dibuatkan admin adalah password awal: pemilik akun wajib menggantinya
@@ -979,12 +1119,25 @@ function normalNamaPengguna(x) {
  */
 
 /** Buat sesi untuk satu akun dan balas data login (dipakai login normal & pilih-kost). */
-async function masukSebagai(env, u, secure, hariSesi) {
+async function masukSebagai(env, u, secure, hariSesi, kostDiminta) {
+  // Kost yang dibuka: yang diminta (bila akun memang punya akses), kost induk,
+  // atau satu-satunya kost yang terdaftar di akses_kost.
+  let kunci = '';
+  if (kostDiminta) {
+    const izin = await env.DB.prepare(`select kost from akses_kost where user_id=?
+                                         union select ? where ? <> ''`).bind(u.id, u.kost, u.kost).all();
+    const diminta = String(kostDiminta).trim().toLowerCase();
+    const cocok = (izin.results || []).find((r) => r.kost === diminta
+      || (diminta.length > 2 && String(r.kost).includes(diminta)));
+    kunci = cocok ? cocok.kost : '';
+  }
+  if (!kunci && u.kost) kunci = u.kost;
+
   const token = logic.randomToken();
   const exp = new Date(Date.now() + hariSesi * 86400000).toISOString();
   await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
-    .bind(await logic.sha256hex(token), u.id, exp, u.kost).run();
-  const infoKost = await ambilKost(env, u.kost);
+    .bind(await logic.sha256hex(token), u.id, exp, kunci).run();
+  const infoKost = await ambilKost(env, kunci);
   return json({
     ok: true, token, sesiHari: hariSesi,
     user: { username: u.username, fullname: u.fullname, role: u.role },
@@ -992,16 +1145,48 @@ async function masukSebagai(env, u, secure, hariSesi) {
   }, 200, { 'set-cookie': setSesiCookie(token, secure, hariSesi * 86400) });
 }
 
+/**
+ * Akun yang punya lebih dari satu kost (atau master mendaftarkannya sebagai admin >
+ * satu kost) HARUS memilih kost dulu. Tanpa ini, login lewat No. HP langsung masuk ke
+ * kost induk tanpa menampilkan pilihan, dan akun bisa tampak "salah kost".
+ * Mengembalikan respons `json` bila perlu memilih, selain itu null.
+ */
+async function mintaPilihBilaBanyak(env, u, secure, hariSesi) {
+  if (u.role === 'master') return null;
+  const izin = await env.DB.prepare('select kost from akses_kost where user_id=?').bind(u.id).all();
+  const daftar = (izin.results || []).map((r) => r.kost).filter(Boolean);
+  if (!daftar.length) daftar.push(u.kost);
+  const banyak = daftar.filter(Boolean);
+  if (banyak.length === 1 && !u.akses_diminta) return null;
+  if (!banyak.length) return null;
+
+  const info = [];
+  for (const k of banyak) {
+    const d = await ambilKost(env, k);
+    info.push({ kunci: k, namaApp: d.namaApp || k, kota: d.kota || '', tagline: d.tagline || '' });
+  }
+  const tokenPilih = logic.randomToken();
+  const exp = new Date(Date.now() + hariSesi * 86400000).toISOString();
+  await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
+    .bind(await logic.sha256hex(tokenPilih), u.id, exp, null).run();
+  return json({
+    ok: true, perluPilihKost: true, token: tokenPilih,
+    user: { username: u.username, fullname: u.fullname, role: u.role },
+    daftarKost: info,
+  }, 200, { 'set-cookie': setSesiCookie(tokenPilih, secure, hariSesi * 86400) });
+}
+
 async function cariAkunLogin(env, diketik, kostDiminta) {
   const d = normalNamaPengguna(diketik);
 
   // 1) Nomor HP: bentuk apa pun (0812…, +62…, 62…, 812…) dicari dalam bentuk baku.
+  //    Bila terlihat seperti HP, JANGAN lanjut mencari username: nomor HP adalah identitas
+  //    tunggal (unik global), sehingga tidak mungkin nyasar ke akun kost lain.
   if (logic.miripNomorHp(d)) {
     const hp = logic.normalHpLogin(d);
-    if (hp) {
-      const akun = await env.DB.prepare('select * from users where hp=? and aktif=1').bind(hp).first();
-      if (akun) return akun;
-    }
+    if (!hp) return null;
+    const akun = await env.DB.prepare('select * from users where hp=? and aktif=1').bind(hp).first();
+    return akun || null;
   }
 
   // 2) Username/email. Username kini unik PER KOST, jadi "admin" bisa ada di beberapa kost.
@@ -1106,51 +1291,26 @@ async function tanganiApi(req, env, url, secure, today) {
         // ---- pilih kost untuk sesi ini ----
         // master: boleh semua kost. admin/staff: hanya kost yang diizinkan (akses_kost).
         const kostDiminta = String(kost || '').trim().toLowerCase();
-        let kostAktif = null;
-        let daftarKost = [];
-        try {
-          const izin = u.role === 'master'
-            ? (await env.DB.prepare('select kunci, nama_app, kota, tagline from kosts where aktif=1 order by nama_app').all()).results || []
-            : (await env.DB.prepare(`select k.kunci, k.nama_app, k.kota, k.tagline
-                                       from akses_kost a join kosts k on k.kunci = a.kost
-                                      where a.user_id = ? and k.aktif = 1 order by k.nama_app`).bind(u.id).all()).results || [];
-          daftarKost = izin;
-          if (kostDiminta) {
-            const cocokKost = izin.find((k) => k.kunci === kostDiminta || String(k.nama_app).toLowerCase() === kostDiminta);
-            if (!cocokKost) return json({ error: 'Kode/nama aplikasi tidak cocok dengan akun ini.' }, 403);
-            kostAktif = cocokKost;
-          } else if (izin.length === 1) {
-            kostAktif = izin[0];
-          } else if (izin.length === 0) {
-            // akun lama yang belum punya baris akses: pakai kost induknya
-            kostAktif = { kunci: u.kost || 'kost-hade' };
-          }
-        } catch (e) {
-          // migrasi multitenan belum dijalankan: perilaku lama (satu kost)
-          kostAktif = { kunci: 'kost-hade' };
+
+        // Kalau aplikasi sudah dipaku ke satu kost (mis. APK per kost: ?kost=kunci),
+        // dan akun hanya punya kost itu, langsung masuk — tidak perlu memilih.
+        // Akun yang wajib ganti sandi tetap lewat jalur lama (pilihan kost dulu, lalu ganti).
+        if (kostDiminta && !u.must_change_password) {
+          const izinDiminta = await env.DB.prepare(`select k.kunci from akses_kost a join kosts k on k.kunci=a.kost
+              where a.user_id=? and (k.kunci=? or lower(k.nama_app)=?)`).bind(u.id, kostDiminta, kostDiminta).all();
+          const daftarDiminta = (izinDiminta.results || []).map((x) => x.kunci);
+          if (daftarDiminta.length === 1) return masukSebagai(env, u, secure, hariSesi, daftarDiminta[0]);
         }
 
-        // Akun dengan lebih dari satu kost dan belum memilih: minta pilih dulu.
-        if (!kostAktif && daftarKost.length > 1) {
-          const tokenPilih = logic.randomToken();
-          await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
-            .bind(await logic.sha256hex(tokenPilih), u.id, exp, null).run();
-          return json({
-            ok: true, perluPilihKost: true, token: tokenPilih,
-            user: { username: u.username, fullname: u.fullname, role: u.role },
-            daftarKost: daftarKost.map((k) => ({ kunci: k.kunci, namaApp: k.nama_app, kota: k.kota, tagline: k.tagline })),
-          }, 200, { 'set-cookie': setSesiCookie(tokenPilih, secure, hariSesi * 86400) });
-        }
+        // Akun yang terdaftar di lebih dari satu kost: wajib memilih dulu, jangan
+        // langsung masuk ke kost induk (ini yang membuat HP sama bisa masuk kost lain).
+        const pilihDulu = await mintaPilihBilaBanyak(env, u, secure, hariSesi);
+        if (pilihDulu) return pilihDulu;
 
-        await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
-          .bind(await logic.sha256hex(token), u.id, exp, kostAktif ? kostAktif.kunci : null).run();
         await env.DB.prepare("delete from sessions where expires_at < datetime('now')").run().catch(() => {});
         await env.DB.prepare("delete from login_percobaan where created_at < datetime('now','-2 days')").run().catch(() => {});
-        // `token` hanya dipakai APK (halaman dari file://) yang tidak bisa memakai cookie
-        // lintas-asal. Browser biasa tetap memakai cookie HttpOnly dan mengabaikan nilai ini.
-        const infoKost = await ambilKost(env, kostAktif ? kostAktif.kunci : (u.kost || 'kost-hade'));
-        return json({ ok: true, token, user: { username: u.username, fullname: u.fullname, role: u.role }, kost: infoKost, sesiHari: hariSesi },
-          200, { 'set-cookie': setSesiCookie(token, secure, hariSesi * 86400) });
+        // Akun satu kost: langsung masuk ke kost itu.
+        return masukSebagai(env, u, secure, hariSesi, kostDiminta);
       }
 
       const sesi = await sesiAktif(env, req);
@@ -1187,8 +1347,11 @@ async function tanganiApi(req, env, url, secure, today) {
       // Password awal (dari tools/buat-akun.mjs) wajib diganti sebelum menyentuh data.
       // Tanpa ini, ?view=password cukup dilewati dengan memanggil API lain langsung,
       // sehingga sandi awal tetap bisa dipakai mengelola aplikasi.
+      // Pengecualian: /api/pilih-kost. Akun multi-kost yang dibuat master bisa punya
+      // password awal; ia harus bisa memilih kost dulu, dan data baru terbuka setelah
+      // sandi diganti (semua endpoint data tetap diblokir).
       const bolehTanpaGanti = url.pathname === '/api/password' || url.pathname === '/api/logout'
-                           || url.pathname === '/api/session';
+                           || url.pathname === '/api/session' || url.pathname === '/api/pilih-kost';
       // Master boleh langsung memakai aplikasi walau sandinya baru dibuat admin sistem:
       // akun master bersifat pemilik sistem, dan UI tetap menawarkan ganti sandi.
       // Admin/staff tetap wajib mengganti sandi awal (akun mereka dibuat pihak lain).
@@ -1236,7 +1399,10 @@ async function tanganiApi(req, env, url, secure, today) {
         // Sama seperti pagar wajib-ganti-sandi: master tidak dikunci (lihat catatan di
         // blok `wajibGanti`). Kalau dikunci di sini, master dengan sandi awal tidak bisa
         // memilih kost sehingga tidak pernah bisa masuk aplikasi.
-        if (sesi.must_change_password && sesi.role !== 'master') return json({ error: 'Ganti password dulu.' }, 403);
+        if (sesi.must_change_password && sesi.role !== 'master') {
+          const cekU = await env.DB.prepare('select must_change_password from users where id=?').bind(sesi.id).first();
+          if (cekU && cekU.must_change_password) return json({ error: 'Ganti password dulu.' }, 403);
+        }
         const { kunci } = await req.json().catch(() => ({}));
         const k = String(kunci || '').trim().toLowerCase();
         if (!k) return json({ error: 'Kode aplikasi wajib dipilih.' }, 400);
@@ -1275,6 +1441,43 @@ async function tanganiApi(req, env, url, secure, today) {
         }
         if (req.method === 'POST') {
           return buatKost(req, env, sesi);
+        }
+      }
+
+      // Master mendaftarkan No. HP sebagai admin kost yang sudah ada.
+      if (url.pathname === '/api/master/daftar-admin' && req.method === 'POST') {
+        if (sesi.role !== 'master') return json({ error: 'Hanya master yang boleh mendaftarkan admin.' }, 403);
+        return daftarkanAdmin(req, env, sesi);
+      }
+
+      // Master melihat & mencabut akses admin sebuah kost.
+      if (url.pathname === '/api/master/akses') {
+        if (sesi.role !== 'master') return json({ error: 'Hanya master yang boleh melihat akses.' }, 403);
+        const kunci = slugKost(String(url.searchParams.get('kost') || ''));
+        if (!kunci) return json({ error: 'kost wajib diisi.' }, 400);
+        if (req.method === 'GET') {
+          const r = await env.DB.prepare(`select u.id, u.username, u.fullname, u.role, u.hp, u.aktif
+                                            from akses_kost a join users u on u.id = a.user_id
+                                           where a.kost = ? order by u.username`).bind(kunci).all();
+          return json({ daftar: (r.results || []).map((x) => ({
+            id: x.id, username: x.username, fullname: x.fullname, role: x.role, hp: x.hp, aktif: !!x.aktif,
+          })) });
+        }
+        if (req.method === 'DELETE') {
+          const id = String(url.searchParams.get('id') || '').trim();
+          if (!id) return json({ error: 'id wajib diisi.' }, 400);
+          const u = await env.DB.prepare('select id, username, kost from users where id=?').bind(id).first();
+          if (!u) return json({ error: 'Akun tidak ditemukan.' }, 404);
+          if (u.kost === kunci) {
+            return json({ error: 'Kost induk akun tidak bisa dicabut. Nonaktifkan akun bila perlu.' }, 400);
+          }
+          await env.DB.prepare('delete from akses_kost where user_id=? and kost=?').bind(id, kunci).run();
+          const sisa = await env.DB.prepare('select count(*) as n from akses_kost where user_id=?').bind(id).first();
+          if (sisa && sisa.n <= 1) {
+            await env.DB.prepare('update users set akses_diminta=0 where id=?').bind(id).run();
+          }
+          await logic.audit(env, sesi, 'user.akses.cabut', 'akses_kost', `${id}:${kunci}`, null, null);
+          return json({ ok: true, message: `Akses ${u.username} ke kost ini dicabut.` });
         }
       }
 
@@ -1326,6 +1529,11 @@ async function tanganiApi(req, env, url, secure, today) {
 
       return json({ error: 'Rute tidak ditemukan.' }, 404);
     } catch (e) {
+      // Sisa baris `users` dari percobaan sebelum index unik per-kost: UNIQUE pada hp
+      // tetap menangkapnya. Jawab 409 dengan pesan yang bisa ditindaklanjuti.
+      if (e && /UNIQUE constraint failed: users\.hp/i.test(String(e.message || ''))) {
+        return json({ error: 'Nomor HP ini sudah terdaftar pada akun di kost lain. Satu nomor dipakai satu akun saja — minta master mendaftarkan nomor ini ke kost.' }, 409);
+      }
       const status = e.status || 500;
       if (status >= 500) {
         console.error('[hade]', e.stack || e);

@@ -108,6 +108,46 @@ ck "Pindah ke Kost Hade" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X 
 ck "Username sama di kost lain tetap boleh" "$(curl -s -o /tmp/act.out -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"action":"users.create","data":{"username":"tigaadmin","fullname":"Tiga di Hade","password":"Lagi1234567","role":"staff"}}' $B/api/action)" "200"
 ck "Kost Hade tetap punya admin-nya sendiri" "$(curl -s -b $JAR_M $B/api/bootstrap -o /tmp/t13.json; node -e "const d=require('/tmp/t13.json');console.log(d.kost.namaApp+'/'+d.users.filter(u=>u.username==='admin').length)")" "Kost Hade/1"
 
+echo "== 10. SATU NO. HP, BANYAK KOST (alur master mendaftarkan admin) =="
+# Admin Kost Tiga memakai HP 0857-9999-0000 (lihat bagian 9). Master mendaftarkan HP itu
+# sebagai admin Kost Melati: satu akun, bukan akun kedua.
+ck "Master daftarkan HP yang sudah ada ke kost lain" "$(curl -s -b $JAR_M -o /tmp/t14 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"kunci":"kost-melati","hp":"085799990000"}' $B/api/master/daftar-admin)" "200"
+ck "Balasan: akun lama dipakai" "$(json /tmp/t14 'String(d.akunBaru)')" "false"
+ck "Melati terdaftar 3 akun (2 admin + 1 staff)" "$(curl -s -b $JAR_M "$B/api/master/akses?kost=kost-melati" -o /tmp/t16; node -e "console.log(JSON.parse(require('fs').readFileSync('/tmp/t16','utf8')).daftar.length)")" "3"
+# Login HP: dia terdaftar di dua kost -> WAJIB pilih kost, tidak langsung masuk.
+HP_JSON=$(cat <<'J'
+{"username":"085799990000","password":"TigaAdmin123"}
+J
+)
+curl -s -c /tmp/hp17.jar -o /tmp/t17 -X POST -H 'content-type: application/json' -d "$HP_JSON" $B/api/login
+ck "Login HP 2 kost: perlu pilih kost" "$(json /tmp/t17 'String(d.perluPilihKost)')" "true"
+ck "Pilihan kost berisi 2 kost" "$(json /tmp/t17 '(d.daftarKost||[]).length')" "2"
+ck "Tidak ada sesi sebelum memilih" "$(json /tmp/t17 'String(d.role)')" "undefined"
+# Sesi pilih-kost hanya bisa memakai cookie: pastikan cookie dari login tersimpan.
+cp -f /tmp/t17 /tmp/t17b; TOK_HP=$(json /tmp/t17 'd.token')
+ck "Cookie sesi pilih-kost terpasang" "$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/hp17.jar -H "x-sesi-apk: $TOK_HP" $B/api/session)" "200"
+# Password awal (dibuat master) wajib diganti dulu; ini tidak boleh mengunci pilihan kost.
+ck "Ganti sandi awal berhasil" "$(curl -s -b /tmp/hp17.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"lama":"TigaAdmin123","baru":"TigaBaru12345"}' $B/api/password)" "200"
+ck "Pilih Kost Melati" "$(curl -s -b /tmp/hp17.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"kunci":"kost-melati"}' $B/api/pilih-kost)" "200"
+ck "Setelah pilih: masuk Kost Melati (admin kelihatan)" "$(curl -s -b /tmp/hp17.jar -H "x-sesi-apk: $TOK_HP" $B/api/bootstrap -o /tmp/t18; node -e "const d=JSON.parse(require('fs').readFileSync('/tmp/t18','utf8'));console.log(d.kost.namaApp+'/'+d.users.find(u=>u.role==='admin').username)")" "Kost Melati/adminmelati"
+# Nomor HP yang terlihat seperti HP tapi tidak terdaftar: JANGAN nyasar ke username mirip.
+ck "HP tak terdaftar tidak nyasar ke username" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"081200000000","password":"TigaBaru12345"}' $B/api/login)" "401"
+# Admin tidak boleh mendaftarkan admin: hanya master.
+ck "Admin tidak boleh daftarkan admin (403)" "$(curl -s -o /dev/null -w '%{http_code}' -b $A -X POST -H 'content-type: application/json' -d '{"kunci":"kost-melati","hp":"085799990000"}' $B/api/master/daftar-admin)" "403"
+# Login ulang HP yang sudah punya 3 kost (sekarang sandinya baru): harus tetap diminta memilih.
+curl -s -c /tmp/hp.jar -o /tmp/t21 -X POST -H 'content-type: application/json' -d '{"username":"085799990000","password":"TigaBaru12345"}' $B/api/login
+TOK_HP=$(json /tmp/t21 'd.token')
+ck "Login HP lagi: tetap wajib pilih kost" "$(json /tmp/t21 'String(d.perluPilihKost)')" "true"
+ck "Pilihan kost berisi semua kost HP itu" "$(json /tmp/t21 '(d.daftarKost||[]).length')" "2"
+# HP hanya membuka kost yang terdaftar: Kost Hade bukan miliknya.
+ck "HP tidak bisa membuka kost yang tak terdaftar (403)" "$(curl -s -b /tmp/hp.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"kunci":"kost-hade"}' $B/api/pilih-kost)" "403"
+# Kost baru + HP lama -> langsung jadi admin kost baru itu, tanpa akun kedua.
+ck "Kost keempat dengan HP lama" "$(curl -s -b $JAR_M -o /tmp/t19 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Empat","kota":"Jogja","tagline":"Kost Empat","hp":"085799990000"}' $B/api/master/kost)" "200"
+ck "Jumlah kost HP itu kini 3" "$(json /tmp/t19 'String(d.kost.kunci)')" "kost-empat"
+ck "Akun tidak bertambah (tetap 1 untuk HP itu)" "$(npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --json --command "select count(*) as n from users where hp='085799990000'" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const j=JSON.parse(s);console.log(j[0].results[0].n)})")" "1"
+ck "Cabut akses Melati dari HP itu" "$(curl -s -b $JAR_M -o /tmp/t20 -w '%{http_code}' -X DELETE "$B/api/master/akses?kost=kost-melati&id=$(npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --json --command "select id from users where hp='085799990000'" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s)[0].results[0].id))")" )" "200"
+ck "Setelah dicabut: Melati tertutup (403)" "$(curl -s -b /tmp/hp.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"kunci":"kost-melati"}' $B/api/pilih-kost)" "403"
+
 kill $DEVPID 2>/dev/null
 echo
 if [ $fail -eq 0 ]; then echo "SEMUA LULUS MULTITENAN"; else echo "$fail GAGAL"; fi

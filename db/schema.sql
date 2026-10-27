@@ -29,6 +29,7 @@ create table if not exists users (
   password_hash       text not null,          -- pbkdf2$iter$salt$hash
   aktif               integer not null default 1,
   must_change_password integer not null default 0,
+  akses_diminta       integer not null default 0, -- 1 = wajib pilih kost saat login (lihat migrasi 016)
   created_at          text not null default (datetime('now'))
 );
 
@@ -38,6 +39,7 @@ create unique index if not exists idx_users_kost_username on users(kost, usernam
 
 -- No. HP dipakai sebagai identitas login: unik bila diisi (boleh kosong untuk akun lama).
 create unique index if not exists idx_users_hp on users(hp) where hp is not null and hp <> '';
+create index if not exists idx_users_hp_kost on users(hp, kost);
 
 -- hanya SHA-256 dari token sesi yang disimpan
 create table if not exists sessions (
