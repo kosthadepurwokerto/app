@@ -940,6 +940,13 @@ async function ambilKost(env, kunci) {
   }
 }
 
+/** Ambil baris kost; kembalikan kosong bila kost tidak ada (bukan nama bawaan). */
+async function cariBarisKost(env, kunci) {
+  try {
+    return await env.DB.prepare('select kunci, nama_app from kosts where kunci=?').bind(String(kunci || '')).first();
+  } catch (e) { return null; }
+}
+
 /** Nama aplikasi -> kunci unik. "Kost Hade" -> "kost-hade"; dipakai sebagai kunci data. */
 function slugKost(nama) {
   const s = String(nama || '').toLowerCase().normalize('NFKD')
@@ -1130,7 +1137,7 @@ function normalNamaPengguna(x) {
  */
 
 /** Buat sesi untuk satu akun dan balas data login (dipakai login normal & pilih-kost). */
-async function masukSebagai(env, u, secure, hariSesi, kostDiminta) {
+async function masukSebagai(env, u, secure, hariSesi, kostDiminta, opsi = {}) {
   // Kost yang dibuka: yang diminta (bila akun memang punya akses), kost induk,
   // atau satu-satunya kost yang terdaftar di akses_kost.
   let kunci = '';
@@ -1139,7 +1146,8 @@ async function masukSebagai(env, u, secure, hariSesi, kostDiminta) {
                                          union select ? where ? <> ''`).bind(u.id, u.kost, u.kost).all();
     const diminta = String(kostDiminta).trim().toLowerCase();
     const cocok = (izin.results || []).find((r) => r.kost === diminta
-      || (diminta.length > 2 && String(r.kost).includes(diminta)));
+      || (diminta.length > 2 && String(r.kost).includes(diminta)
+        && (izin.results || []).filter((x) => String(x.kost).includes(diminta)).length === 1));
     kunci = cocok ? cocok.kost : '';
   }
   if (!kunci && u.kost) kunci = u.kost;
@@ -1149,11 +1157,21 @@ async function masukSebagai(env, u, secure, hariSesi, kostDiminta) {
   await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
     .bind(await logic.sha256hex(token), u.id, exp, kunci).run();
   const infoKost = await ambilKost(env, kunci);
-  return json({
+  // APK bersama meminta kost yang tidak cocok: kirim juga daftar kost akun supaya
+  // aplikasi langsung menampilkan pilihan (tanpa login ulang).
+  const balasan = {
     ok: true, token, sesiHari: hariSesi,
     user: { username: u.username, fullname: u.fullname, role: u.role },
     kost: infoKost,
-  }, 200, { 'set-cookie': setSesiCookie(token, secure, hariSesi * 86400) });
+  };
+  if (opsi.perluPilih) {
+    const pilih = await daftarKostAkun(env, u);
+    if (pilih.length > 1) {
+      balasan.perluPilihKost = true;
+      balasan.daftarKost = pilih;
+    }
+  }
+  return json(balasan, 200, { 'set-cookie': setSesiCookie(token, secure, hariSesi * 86400) });
 }
 
 /**
@@ -1162,12 +1180,26 @@ async function masukSebagai(env, u, secure, hariSesi, kostDiminta) {
  * kost induk tanpa menampilkan pilihan, dan akun bisa tampak "salah kost".
  * Mengembalikan respons `json` bila perlu memilih, selain itu null.
  */
+// Daftar kost yang boleh dibuka akun (induk + akses_kost), tanpa duplikat.
+async function daftarKostAkun(env, u) {
+  const izin = await env.DB.prepare('select kost from akses_kost where user_id=?').bind(u.id).all().catch(() => ({ results: [] }));
+  const kunci = [...new Set([...(izin.results || []).map((r) => r.kost).filter(Boolean), u.kost].filter(Boolean))];
+  const hasil = [];
+  for (const k of kunci) {
+    const d = await ambilKost(env, k);
+    hasil.push({ kunci: k, namaApp: d.namaApp || k, kota: d.kota || '', tagline: d.tagline || '' });
+  }
+  return hasil;
+}
+
 async function mintaPilihBilaBanyak(env, u, secure, hariSesi) {
   if (u.role === 'master') return null;
   const izin = await env.DB.prepare('select kost from akses_kost where user_id=?').bind(u.id).all();
   const daftar = (izin.results || []).map((r) => r.kost).filter(Boolean);
   if (!daftar.length) daftar.push(u.kost);
-  const banyak = daftar.filter(Boolean);
+  // Akun yang sama bisa terdaftar di users.kost sebagai induk dan di akses_kost:
+  // hitung kost unik, supaya akun satu kost tidak dibuatkan pilihan palsu.
+  const banyak = [...new Set([...daftar, u.kost].filter(Boolean))];
   if (banyak.length === 1 && !u.akses_diminta) return null;
   if (!banyak.length) return null;
 
@@ -1223,6 +1255,33 @@ async function cariAkunLogin(env, diketik, kostDiminta) {
   return null;
 }
 
+// ---- Kata kunci kost dari APK bersama (mis. /?kost=kost-melati) ----
+// Mengembalikan kunci kost yang cocok bila akun memang punya akses; '' bila tidak
+// atau bila kata kuncinya ambigu (beberapa kost cocok).
+async function pilihKostSesuaiPetunjuk(env, akun, petunjuk) {
+  const p = String(petunjuk || '').trim().toLowerCase();
+  if (!p || !akun) return '';
+  // Perbandingan kata kunci memakai daftar kost yang ADA di DB: tanpa ini kata ngawur
+  // bisa cocok dengan kunci kost miliknya sendiri (mis. "ngawur" ⊂ "kost-kost-ngawur").
+  const baris = await cariBarisKost(env, p);
+  if (!baris) return '';
+  const izin = await daftarKostAkun(env, akun);
+  const semua = izin.map((r) => ({ kost: r.kunci, nama_app: r.namaApp }));
+  const sama = semua.find((r) => r.kost === baris.kunci);
+  if (sama && baris.kunci === p) return sama.kost;   // cocok persis
+  if (sama && String(baris.kunci).includes(p)) {
+    // kata kunci hanya sebagian dari kunci kost: cari kost yang kuncinya cocok penuh
+    const miripKunci = semua.filter((r) => String(r.kost).includes(p));
+    if (miripKunci.length === 1) return miripKunci[0].kost;
+    return '';                                        // tidak unik: jangan menebak
+  }
+  if (p.length < 3) return '';
+  const mirip = semua.filter((r) => (String(r.kost).includes(p)
+    || String(r.nama_app || '').toLowerCase().includes(p)));
+  // hanya dipakai bila tidak ambigu (satu kost yang cocok)
+  return mirip.length === 1 ? mirip[0].kost : '';
+}
+
 async function tanganiApi(req, env, url, secure, today) {
 
     try {
@@ -1247,6 +1306,14 @@ async function tanganiApi(req, env, url, secure, today) {
         } catch (_) { /* tabel belum ada (migrasi belum jalan): jangan blokir login */ }
 
         const hasilCari = await cariAkunLogin(env, uname, kost);
+        // Kata kunci kost dari APK bersama (?kost=...): user langsung diarahkan ke kost itu
+        // kalau memang punya akses. Tanpa kata kunci, tetap memakai kost milik akun.
+        const petunjukKost = String(kost || '').trim().toLowerCase();
+        let acuanKost = '';   // petunjuk mentah TIDAK dipakai langsung: harus cocok ke akses akun
+        if (hasilCari && !hasilCari.__banyak) {
+          const pilih = await pilihKostSesuaiPetunjuk(env, hasilCari, petunjukKost);
+          if (pilih) acuanKost = pilih;
+        }
         // Username yang sama ada di lebih dari satu kost: minta pengguna memilih kost
         // (atau memakai No. HP, yang unik dan langsung menunjuk satu akun).
         if (hasilCari && hasilCari.__banyak) {
@@ -1262,7 +1329,7 @@ async function tanganiApi(req, env, url, secure, today) {
           }
           const unik = ['admin', 'master'].includes(cocokSandi[0].role) ? cocokSandi : cocokSandi.slice(0, 1);
           if (unik.length === 1) {
-            return masukSebagai(env, unik[0], secure, hariSesi);
+            return masukSebagai(env, unik[0], secure, hariSesi, acuanKost);
           }
           // beberapa kost dengan sandi yang sama -> tampilkan pilihan kost
           const daftar = [];
@@ -1297,17 +1364,16 @@ async function tanganiApi(req, env, url, secure, today) {
         const exp = new Date(Date.now() + hariSesi * 86400000).toISOString();
 
         // ---- pilih kost untuk sesi ini ----
-        // master: boleh semua kost. admin/staff: hanya kost yang diizinkan (akses_kost).
-        const kostDiminta = String(kost || '').trim().toLowerCase();
-
-        // Kalau aplikasi sudah dipaku ke satu kost (mis. APK per kost: ?kost=kunci),
-        // dan akun hanya punya kost itu, langsung masuk — tidak perlu memilih.
-        // Akun yang wajib ganti sandi tetap lewat jalur lama (pilihan kost dulu, lalu ganti).
-        if (kostDiminta && !u.must_change_password) {
-          const izinDiminta = await env.DB.prepare(`select k.kunci from akses_kost a join kosts k on k.kunci=a.kost
-              where a.user_id=? and (k.kunci=? or lower(k.nama_app)=?)`).bind(u.id, kostDiminta, kostDiminta).all();
-          const daftarDiminta = (izinDiminta.results || []).map((x) => x.kunci);
-          if (daftarDiminta.length === 1) return masukSebagai(env, u, secure, hariSesi, daftarDiminta[0]);
+        // APK bersama: kata kunci kost (?kost=...) sudah dicocokkan ke akses akun di atas
+        // (acuanKost). Bila akun hanya punya satu kost, langsung masuk ke kost itu.
+        if (acuanKost && !u.must_change_password) {
+          return masukSebagai(env, u, secure, hariSesi, acuanKost);
+        }
+        // Kata kunci kost dari APK diminta tapi tidak cocok dengan akses akun (atau akun
+        // wajib ganti sandi): sementara sesi memakai kost induk akun, lalu aplikasi
+        // menampilkan pilihan kost yang sudah tersaring. Pengguna tidak perlu login ulang.
+        if (petunjukKost && (!acuanKost || u.must_change_password)) {
+          return masukSebagai(env, u, secure, hariSesi, '', { perluPilih: true });
         }
 
         // Akun yang terdaftar di lebih dari satu kost: wajib memilih dulu, jangan
@@ -1318,7 +1384,7 @@ async function tanganiApi(req, env, url, secure, today) {
         await env.DB.prepare("delete from sessions where expires_at < datetime('now')").run().catch(() => {});
         await env.DB.prepare("delete from login_percobaan where created_at < datetime('now','-2 days')").run().catch(() => {});
         // Akun satu kost: langsung masuk ke kost itu.
-        return masukSebagai(env, u, secure, hariSesi, kostDiminta);
+        return masukSebagai(env, u, secure, hariSesi, acuanKost);
       }
 
       const sesi = await sesiAktif(env, req);

@@ -140,6 +140,18 @@ TOK_HP=$(json /tmp/t21 'd.token')
 ck "Login HP lagi: tetap wajib pilih kost" "$(json /tmp/t21 'String(d.perluPilihKost)')" "true"
 ck "Pilihan kost berisi semua kost HP itu" "$(json /tmp/t21 '(d.daftarKost||[]).length')" "2"
 # HP hanya membuka kost yang terdaftar: Kost Hade bukan miliknya.
+echo "== 11. APK BERSAMA: ?kost= -> user langsung diarahkan ke kostnya =="
+# Satu APK dipakai semua kost; pembedanya kata kunci kost yang dikirim APK saat login.
+LOGIN_KOST() { curl -s -o "$2" -w '%{http_code}' -X POST -H 'content-type: application/json' -d "{\"username\":\"085799990000\",\"password\":\"TigaBaru12345\",\"kost\":\"$1\"}" $B/api/login; }
+ck "APK Kost Melati: login 200" "$(LOGIN_KOST kost-melati /tmp/k1)" "200"
+ck "APK Kost Melati: langsung masuk (tanpa pilih kost)" "$(json /tmp/k1 'String(d.perluPilihKost)')" "undefined"
+ck "APK Kost Melati: membuka Kost Melati" "$(json /tmp/k1 'd.kost.kunci')" "kost-melati"
+ck "APK Kost Melati: sesi langsung siap (bootstrap 200)" "$(curl -s -o /tmp/k1b -w '%{http_code}' -H "x-sesi-apk: $(json /tmp/k1 'd.token')" $B/api/bootstrap)" "200"
+ck "APK Kost Tiga: membuka Kost Tiga" "$(LOGIN_KOST kost-tiga /tmp/k2 >/dev/null; json /tmp/k2 'd.kost.kunci')" "kost-tiga"
+ck "APK kata kunci tidak dikenal: kembali ke pilih kost" "$(LOGIN_KOST kost-ngawur /tmp/k3 >/dev/null; json /tmp/k3 'String(d.perluPilihKost)')" "true"
+ck "APK tanpa kata kunci: tetap pilih kost" "$(curl -s -o /tmp/k4 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"085799990000","password":"TigaBaru12345"}' $B/api/login)" "200"
+ck "APK tanpa kata kunci: perluPilihKost true" "$(json /tmp/k4 'String(d.perluPilihKost)')" "true"
+ck "APK Kost Hade (tanpa akses): tidak nyasar, tetap pilih kost" "$(LOGIN_KOST kost-hade /tmp/k5 >/dev/null; json /tmp/k5 'String(d.perluPilihKost)')" "true"
 ck "HP tidak bisa membuka kost yang tak terdaftar (403)" "$(curl -s -b /tmp/hp.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"kunci":"kost-hade"}' $B/api/pilih-kost)" "403"
 # Kost baru + HP lama -> langsung jadi admin kost baru itu, tanpa akun kedua.
 ck "Kost keempat dengan HP lama" "$(curl -s -b $JAR_M -o /tmp/t19 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Empat","kota":"Jogja","tagline":"Kost Empat","hp":"085799990000"}' $B/api/master/kost)" "200"
