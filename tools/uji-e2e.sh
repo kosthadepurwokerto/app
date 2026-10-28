@@ -21,7 +21,7 @@ for i in $(seq 1 40); do curl -s -o /dev/null "$B/api/session" && break; sleep 1
 echo "== AUTH & SESI =="
 ck "API tanpa login ditolak 401" "$(code "$B/api/dashboard")" "401"
 ck "Halaman utama tersaji 200" "$(code "$B/")" "200"
-ck "index.html memuat adapter" "$(grep -c 'src="d1-adapter.js"' /tmp/hade_body)" "1"
+ck "index.html memuat adapter" "$(grep -c 'src="/d1-adapter.js"' /tmp/hade_body)" "1"
 ck "Login GET ditolak 405" "$(code "$B/api/login")" "405"
 ck "Login password salah ditolak 401" "$(code -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"salah"}' "$B/api/login")" "401"
 ck "Login pakai nama pengguna ditolak 400 (hanya No. HP)" "$(code -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "400"
@@ -288,6 +288,37 @@ ck "Admin non-master TIDAK boleh menghapus admin lain (403)" "$(actj $J "{\"acti
 ck "Sandi admin tidak berubah setelah percobaan takeover" "$(code -o /dev/null -X POST -H 'content-type: application/json' -H 'x-real-ip: 10.88.0.9' -H 'cf-connecting-ip: 10.88.0.9' -d '{"username":"081200000100","password":"Ambilalih123"}' "$B/api/login")" "401"
 ck "Sesi admin asli tetap berlaku" "$(code -b $J "$B/api/bootstrap")" "200"
 
+# --- REGRESI: penguncian per akun lintas IP ---
+# Penyerang yang berganti IP tiap percobaan harus tetap tertahan: setelah 30 gagal
+# untuk satu nama pengguna dalam 15 menit, login ditolak 429 walau sandinya benar.
+# Pakai akun khusus uji (bukan akun yang dipakai bagian lain): kalau tidak, cek
+# berikutnya ikut tertahan 15 menit.
+actj $J '{"action":"users.create","data":{"username":"kunci","password":"Kunciuji12345","role":"staff","fullname":"Uji Kunci","hp":"081200000107"}}' >/dev/null
+for i in $(seq 1 30); do
+  code -o /dev/null -X POST -H 'content-type: application/json' -H "cf-connecting-ip: 10.77.$i.1" -d '{"username":"081200000107","password":"tebak'"$i"'"}' "$B/api/login" >/dev/null
+done
+ck "30 gagal dari 30 IP berbeda lalu sandi benar tetap 429" "$(curl -s -o /tmp/hade_body -w '%{http_code}' -X POST -H 'content-type: application/json' -H 'cf-connecting-ip: 10.66.0.1' -d '{"username":"081200000107","password":"Kunciuji12345"}' "$B/api/login")" "429"
+ck "Pesan 429 menyebut penguncian akun" "$(grep -c 'untuk akun ini' /tmp/hade_body)" "1"
+
+# --- REGRESI: CSP tanpa 'unsafe-inline' + aksi HTML lewat data-h ---
+ck "Halaman utama memuat /app.js" "$(curl -s -o /tmp/hal_appjs.html -w '%{http_code}' "$B/") +$(grep -c 'src="/app.js"' /tmp/hal_appjs.html)" "200 +1"
+ck "app.js tersaji 200" "$(code "$B/app.js")" "200"
+ck "app.css tersaji 200" "$(code "$B/app.css")" "200"
+ck "fontawesome.css tersaji 200" "$(code "$B/fontawesome.css")" "200"
+ck "fonts.css tersaji 200" "$(code "$B/fonts.css")" "200"
+ck "webfont ikon tersaji 200" "$(code "$B/webfonts/fa-solid-900.woff2")" "200"
+ck "font Plus Jakarta tersaji 200" "$(code "$B/webfonts/plus-jakarta-sans-latin.woff2")" "200"
+code -o /dev/null -D /tmp/hade_head "$B/"
+ck "CSP tanpa unsafe-inline" "$(grep -ci "script-src 'self'" /tmp/hade_head)" "1"
+# 'unsafe-inline' hanya boleh muncul pada style-src (atribut style= dari Tailwind/JS),
+# tidak boleh pada script-src mana pun.
+ck "CSP melarang skrip sebaris" "$(grep -oi "script-src[^;]*unsafe-inline" /tmp/hade_head | wc -l | tr -d ' ')" "0"
+ck "CSP mengizinkan style sebaris (Tailwind dinamis)" "$(grep -ci "style-src 'self' 'unsafe-inline'" /tmp/hade_head)" "1"
+ck "CSP melarang atribut skrip (script-src-attr)" "$(grep -c "script-src-attr 'none'" /tmp/hade_head)" "1"
+ck "app.js terpisah (tanpa skrip sebaris di HTML)" "$(grep -c '<script>' /tmp/hade_body)" "0"
+code "$B/app.js" >/dev/null; cp /tmp/hade_body /tmp/hade_appjs
+ck "app.js memasang pendengar aksi data-h" "$(grep -c "addEventListener('click', function (e)" /tmp/hade_appjs)" "1"
+
 echo "== OTORISASI ROLE =="
 ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -H "x-real-ip: 10.77.0.1" -d '{"username":"081200000103","password":"Staffpass123"}' "$B/api/login")" "200"
 # akun baru dari UI admin wajib ganti password lebih dulu; uji role dimulai setelah itu
@@ -349,7 +380,7 @@ ck "Adapter UI tidak bisa ditebak tipenya (nosniff)" "$(curl -s -D - -o /dev/nul
 # dari berkas sumber (yang memang ikut di-deploy) — bukan dari respons lokal.
 ck "Halaman disajikan Worker dengan header anti-bingkai" "$(curl -s -D - -o /dev/null "$B/" | grep -ci 'x-frame-options: DENY')" "1"
 ck "Halaman mengirim CSP frame-ancestors none" "$(curl -s -D - -o /dev/null "$B/" | grep -ci "frame-ancestors 'none'")" "1"
-ck "Halaman memuat adapter UI" "$(curl -s "$B/" -o /tmp/hal.html -w "%{http_code}") +$(grep -c "src=\"d1-adapter.js\"" /tmp/hal.html)" "200 +1"
+ck "Halaman memuat adapter UI" "$(curl -s "$B/" -o /tmp/hal.html -w "%{http_code}") +$(grep -c 'src="/d1-adapter.js"' /tmp/hal.html)" "200 +1"
 ck "Halaman memakai Tailwind lokal (bukan CDN)" "$(grep -c 'href="/tailwind.css' /tmp/hal.html)" "1"
 ck "Tidak ada lagi template CSS dari CDN" "$(curl -s "$B/" | grep -c 'cdn.tailwindcss.com')" "0"
 ck "Manifest PWA tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/manifest.webmanifest")" "200"
@@ -357,7 +388,7 @@ ck "Ikon 192 tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/ikon-192.png
 ck "Tailwind lokal tersaji" "$(curl -s -o /dev/null -w '%{http_code}' "$B/tailwind.css")" "200"
 ck "Halaman tidak memakai deteksi CDN lama (mode aman palsu)" "$(curl -s "$B/" | grep -c "typeof tailwind === \"undefined\"")" "0"
 curl -s "$B/" -o /tmp/hal2.html
-ck "Overlay loading bisa disembunyikan (.loading-overlay.hidden + .hidden)" "$(grep -c 'loading-overlay' /tmp/hal2.html | head -1) $(grep -c 'loading-overlay.hidden { display: none !important' /tmp/hal2.html)" "3 1"
+ck "Overlay loading bisa disembunyikan (.loading-overlay.hidden + .hidden)" "$(curl -s "$B/app.css" -o /tmp/hal2.css; grep -c 'loading-overlay' /tmp/hal2.css | head -1) $(grep -c 'loading-overlay.hidden *{ *display: *none !important' /tmp/hal2.css)" "2 1"
 ck "Tidak ada aturan #login-screen lebar yang menimpa Tailwind" "$(curl -s "$B/" | grep -c '^    #login-screen {')" "0"
 ck "Opsi CORS untuk origin lain TIDAK dikirim" "$(curl -s -D - -o /dev/null -H 'Origin: https://jahat.example' "$B/api/session" | grep -ci 'access-control-allow-origin')" "0"
 

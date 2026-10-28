@@ -2,8 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Font dimuat dari CDN Google; bila gagal, keluarga cadangan tetap dipakai. */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&display=swap');
+/* Font Plus Jakarta Sans kini disajikan sendiri (pub/fonts.css + pub/webfonts/),
+   bukan @import dari CDN — lihat catatan di halaman/index.js soal CSP. */
 
 @layer base {
   body {

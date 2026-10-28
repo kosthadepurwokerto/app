@@ -6,6 +6,25 @@
   X-Content-Type-Options: nosniff
   Cache-Control: public, max-age=0, must-revalidate
 
+/app.js
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=0, must-revalidate
+
+/app.css
+  X-Content-Type-Options: nosniff
+  Cache-Control: public, max-age=0, must-revalidate
+
+/fonts.css
+  Cache-Control: public, max-age=86400
+
+/fontawesome.css
+  Cache-Control: public, max-age=86400
+
+/webfonts/*
+  X-Content-Type-Options: nosniff
+  Content-Type: font/woff2
+  Cache-Control: public, max-age=31536000, immutable
+
 /ikon-192.png
   Cache-Control: public, max-age=86400
 

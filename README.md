@@ -124,4 +124,13 @@ Berkas kunci `kosthade-release.jks` harus disimpan — pembaruan APK wajib memak
 - Tailwind dibangun lokal (`npm run ui` → `pub/tailwind.css`), tanpa CDN, supaya tampilan
   tetap benar saat sinyal lambat atau CDN diblokir. `npm run deploy` menjalankan build UI
   lebih dulu.
+- HTML hanya kerangka: skrip di `pub/app.js`, gaya halaman di `pub/app.css`, ikon di
+  `pub/fontawesome.css` + `pub/webfonts/`, font Plus Jakarta di `pub/fonts.css`.
+  Jangan menaruh `<script>`/`<style>` sebaris lagi di `app.html` — CSP halaman tidak
+  mengizinkan `'unsafe-inline'` untuk skrip, jadi kode sebaris akan diam-diam tidak jalan.
+- Aksi tombol/form di HTML memakai atribut `data-h="<ekspresi JS>"` (mis.
+  `data-h="closeModal()"`). Pelaksanaannya satu pendengar global di akhir `app.js`;
+  fungsi yang dipanggil dari HTML harus tersedia di `window`, dan `this` di dalam
+  ekspresi menunjuk elemen yang diklik.
+
 - Manifest PWA + ikon: `/manifest.webmanifest`, `/ikon-192.png`, `/ikon-512.png`.

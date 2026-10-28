@@ -1107,12 +1107,16 @@ async function bacaHalaman(env, url) {
   return _halaman;
 }
 
-// CSP halaman: skrip/gaya sebaris dipakai oleh index.html, jadi 'unsafe-inline' diperlukan.
-// Yang tetap ditutup: frame (anti clickjacking), plugin, dan pengiriman data keluar.
+// CSP halaman: semua skrip & gaya sudah jadi berkas tersendiri (/app.js, /app.css,
+// /tailwind.css, /fonts.css, /fontawesome.css) dan aksi di HTML memakai data-h, jadi
+// 'unsafe-inline' TIDAK diperlukan lagi — XSS lewat HTML yang tersimpan (mis. catatan
+// penyewa / nama kamar yang di-render ke innerHTML) tidak bisa menjalankan skrip.
+// Yang tetap ditutup: bingkai (anti clickjacking), plugin, dan pengiriman data keluar.
 const CSP_HALAMAN = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self'",
+  "script-src-attr 'none'",
+  "style-src 'self' 'unsafe-inline'",   // atribut style= dinamis oleh Tailwind/JS (tidak membuka jalan XSS skrip)
   "img-src 'self' data: blob: https:",
   "font-src 'self' data: https:",
   "connect-src 'self'",
@@ -1155,9 +1159,12 @@ async function SajikanHalaman(env, url) {
       headers: kepalaKeamanan(new Headers({ 'content-type': 'text/plain; charset=utf-8' }), false),
     });
   }
+  // Halaman = kerangka saja (/app.js + /app.css terpisah). Ini supaya peramban tidak
+  // menyimpan HTML lama yang menunjuk ke skrip gaya lama saat aplikasi diperbarui:
+  // berkas pendamping dibaca ulang tiap kali halaman dibuka.
   const h = kepalaKeamanan(new Headers({
     'content-type': 'text/html; charset=utf-8',
-    'cache-control': 'no-cache',                       // selalu revalidasi supaya pembaruan UI cepat sampai
+    'cache-control': 'no-store',
   }), false);
   h.set('content-security-policy', CSP_HALAMAN);
   if (hal.rilisAkhir) h.set('last-modified', hal.rilisAkhir);
@@ -1332,16 +1339,27 @@ async function tanganiApi(req, env, url, secure, today) {
         const hariSesi = ingat ? SESI_INGAT_HARI : SESI_HARI;
         const uname = String(username || '').trim().toLowerCase();
         // ---- batas percobaan login (anti tebak sandi) ----
-        // Dihitung per nama pengguna + alamat IP, jendela 15 menit. Setelah 10 kali gagal,
-        // akun dikunci sementara walau sandi akhirnya benar.
-        const ip = req.headers.get('cf-connecting-ip') || 'lokal';
-        const jendela = "datetime('now','-15 minutes')";
+        // Dua batas jendela 15 menit, keduanya dihitung dari tabel login_percobaan:
+        //  1) per (nama pengguna + IP): 10 gagal -> tahan sesi ini saja.
+        //  2) per nama pengguna: 30 gagal -> tahan dari IP mana pun. Tanpa ini penyerang
+        //     bisa berganti IP tiap percobaan dan terus menebak sandi satu akun.
+        // Hitungan 2) hanya dijalankan kalau 1) belum memblokir, supaya korban yang
+        // masih di bawah ambang dengan IP berbeda tidak terganggu.
+        const ip = ipKlien(req);
+        const BATAS_IP = 10;      // per (nama pengguna, IP)
+        const BATAS_AKUN = 30;    // per nama pengguna, semua IP
         try {
           const gagal = await env.DB.prepare(
             'select count(*) as n from login_percobaan where username=? and ip=? and berhasil=0 and created_at > datetime(\'now\',\'-15 minutes\')'
           ).bind(uname, ip).first();
-          if (gagal && gagal.n >= 10) {
+          if (gagal && gagal.n >= BATAS_IP) {
             return json({ error: 'Terlalu banyak percobaan gagal. Coba lagi dalam 15 menit.' }, 429);
+          }
+          const gagalAkun = await env.DB.prepare(
+            'select count(*) as n from login_percobaan where username=? and berhasil=0 and created_at > datetime(\'now\',\'-15 minutes\')'
+          ).bind(uname).first();
+          if (gagalAkun && gagalAkun.n >= BATAS_AKUN) {
+            return json({ error: 'Terlalu banyak percobaan gagal untuk akun ini. Tunggu 15 menit atau hubungi admin.' }, 429);
           }
         } catch (_) { /* tabel belum ada (migrasi belum jalan): jangan blokir login */ }
 

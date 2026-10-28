@@ -1,0 +1,131 @@
+/* Gaya halaman Kost Hade — dulu blok <style> sebaris di app.html.
+   Dipisah agar CSP tidak perlu 'unsafe-inline'. */
+    body { 
+      font-family: 'Plus Jakarta Sans', sans-serif; 
+    }
+    .loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(8px);
+      display: flex; align-items: center; justify-content: center; z-index: 10000;
+    }
+    /* .hidden (Tailwind) berada di berkas yang dimuat SEBELUM style ini, jadi tanpa aturan
+       setara ini overlay "Sinkronisasi Cloud" tidak pernah bisa ditutup: layar login
+       tertutup abu-abu terus walau data sudah selesai dimuat. */
+    .loading-overlay.hidden { display: none !important; white-space: nowrap; }
+    
+    /* Premium Blue to Red Gradient for Active Navigation */
+    .nav-btn-active {
+      background: linear-gradient(135deg, #2563eb 0%, #e11d48 100%) !important; /* Royal Blue to Crimson */
+      color: #ffffff !important;
+      box-shadow: 0 4px 15px -3px rgba(37, 99, 235, 0.3);
+    }
+    @media (max-width: 767px) {
+      .nav-btn-active {
+        background: linear-gradient(135deg, #2563eb 0%, #e11d48 100%) !important;
+        border-top: 3px solid #e11d48;
+      }
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    .hide-scrollbar::-webkit-scrollbar { display: none; }
+    /* Menu di HP: 10 tombol tidak muat sebaris, dan karena scrollbar disembunyikan tidak
+       ada tanda bahwa daftar bisa digeser (menu terakhir tampak terpotong). Beri pola
+       dua baris yang membungkus, dan pertahankan geser-samping di layar sangat sempit. */
+    @media (max-width: 767px) {
+      #sidebar-nav { flex-wrap: wrap; overflow-x: visible; row-gap: 4px; }
+      #sidebar-nav > li { flex: 1 1 auto; min-width: calc(33.33% - 8px); }
+      #sidebar-nav > li > button { justify-content: center; padding-left: 6px; padding-right: 6px; }
+    }
+    
+    /* Exclusive metallic border & card hover effects */
+    .premium-card {
+      transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .premium-card:hover {
+      transform: translateY(-4px) scale(1.01);
+      box-shadow: 0 20px 25px -5px rgba(37, 99, 235, 0.05), 0 10px 10px -5px rgba(225, 29, 72, 0.05);
+    }
+
+    /* Print styling rules */
+    .double-underline {
+      border-bottom: 3px double #334155;
+    }
+
+    /* HIDE DELETE BUTTONS FOR USER LEVEL */
+    .role-user .btn-delete-action {
+      display: none !important;
+    }
+    .role-user .restricted-user-view {
+      display: none !important;
+    }
+    /* body.className diganti saat login, jadi aturan harus menang atas utility Tailwind */
+    body.role-user li.restricted-user-view { display: none !important; }
+    body.role-user section.restricted-user-view { display: none !important; }
+    body.role-admin li.restricted-user-view { display: block !important; }
+    /* Multitenan: tiga tingkat akses (user, admin, master).
+       Aturan display HANYA ditulis untuk <li> menu, dan selalu didahului selektor body.role-*
+       supaya menang atas utility Tailwind tanpa merusak kelas lain.
+       Spesifisitas dijaga: aturan "sembunyi" memakai body:not(...) (0,2,1), jadi aturan
+       "tampil" wajib memakai body.role-x li (0,1,1) + .role-x (0,2,1) di selektor yang sama,
+       kalau tidak aturan sembunyi selalu menang. */
+    body:not(.role-master) li.hanya-master { display: none !important; }      /* Reset & Kost */
+    body.role-master li.hanya-master { display: block !important; }
+    body:not(.role-user) li.hanya-admin-master { display: block !important; } /* Parameter */
+    body.role-user li.hanya-admin-master { display: none !important; }
+    body.role-user li.restricted-user-view,                                     /* menu User */
+    body:not(.role-admin):not(.role-master) li.restricted-user-view { display: none !important; }
+    body:not(.role-master) li.hanya-master,
+    body:not(.role-master) section.hanya-master { display: none !important; }
+    /* Baris penyaring khusus master di layar admin (mis. pilih level pada form user) */
+    body:not(.role-master) .khusus-master { display: none !important; }
+    /* Opsi "Master" pada pilihan role hanya untuk akun master.
+       <option> tidak bisa disembunyikan di semua browser, jadi dinonaktifkan dari JS juga. */
+    body:not(.role-master) option.khusus-master-opsi { display: none !important; }
+        /* Tabel data di HP: ditampilkan sebagai kartu bertumpuk supaya tombol aksi
+         (WA/Edit/Hapus/Checkout) tidak perlu digeser ke samping. */
+      @media (max-width: 640px) {
+        .tabel-hp { min-width: 0 !important; }
+        .tabel-hp thead { display: none !important; }
+        .tabel-hp, .tabel-hp tbody, .tabel-hp tr, .tabel-hp td { display: block !important; width: 100% !important; }
+        .tabel-hp tr { border: 1px solid #e2e8f0; border-radius: 12px; margin: 8px; padding: 8px 10px; background: #fff; }
+        .tabel-hp td { border: none !important; padding: 3px 2px !important; text-align: left !important; min-width: 0 !important; }
+        .tabel-hp td:empty { display: none !important; }
+        .tabel-hp td:last-child { padding-top: 6px !important; }
+        .tabel-hp td:last-child > div { justify-content: flex-start !important; }
+      }
+      @media print {
+        body.mode-cetak * { visibility: hidden !important; }
+        body.mode-cetak .area-cetak,
+        body.mode-cetak .area-cetak * { visibility: visible !important; }
+        body.mode-cetak .area-cetak { position: absolute; left: 0; top: 0; width: 100%; padding: 12px; background: #fff; }
+      }
+    html, body { background: #f8fafc; color: #1e293b; min-height: 100%; }
+    /* Lapisan paling bawah: kalau halaman webview lama tidak mendukung position:fixed dengan benar,
+       tetap ada warna latar supaya tidak putih tanpa penjelasan. */
+    #letak-aman { position: absolute; inset: 0; background: #eff6ff; }
+    /* Mode aman: dipasang dari JS bila Tailwind tidak tersedia. Mengganti position:fixed
+       dengan aliran normal supaya halaman pasti terlihat di WebView lama. */
+    body.tanpa-tailwind, body.tanpa-tailwind html { overflow: auto !important; height: auto !important; }
+    body.tanpa-tailwind #login-screen {
+      position: static !important; inset: auto !important; display: block !important;
+      min-height: 100vh; padding: 16px 0; background: #eff6ff !important;
+    }
+    body.tanpa-tailwind #login-screen > div { position: static !important; }
+    body.tanpa-tailwind #app-container, body.tanpa-tailwind #loading { display: none !important; }
+    /* Aturan cadangan di bawah INI SANGAT TERBATAS (#status-lanjut saja).
+       Sebelumnya ada aturan lebar seperti `#login-screen { position:fixed }`,
+       `#login-screen p {display:block}` dan `#login-screen input, button {width:100%}` yang
+       berada SETELAH Tailwind sehingga menang atas kelas Tailwind: kartu login jadi
+       transparan/bertumpuk dan tombol memanjang penuh — tampak seperti layar kosong. */
+    #status-lanjut { display: block; text-align: center; font-size: 12px; color: #475569; padding: 12px; }
+    /* Kelas probe khusus untuk mendeteksi apakah tailwind.css termuat (lihat tailwindSiap()).
+       Sengaja BUKAN kelas Tailwind, supaya aturan display di blok <style> ini tidak
+       menimpa utility (kaskade: <style> dimuat sesudah tailwind.css). */
+    .probe-ui-hade-fleks { display: flex; }
+  
