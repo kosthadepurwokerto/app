@@ -23,8 +23,9 @@ ck "API tanpa login ditolak 401" "$(code "$B/api/dashboard")" "401"
 ck "Halaman utama tersaji 200" "$(code "$B/")" "200"
 ck "index.html memuat adapter" "$(grep -c 'src="d1-adapter.js"' /tmp/hade_body)" "1"
 ck "Login GET ditolak 405" "$(code "$B/api/login")" "405"
-ck "Login password salah ditolak 401" "$(code -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah"}' "$B/api/login")" "401"
-ck "Login admin berhasil 200" "$(code -c $J -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "200"
+ck "Login password salah ditolak 401" "$(code -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"salah"}' "$B/api/login")" "401"
+ck "Login pakai nama pengguna ditolak 400 (hanya No. HP)" "$(code -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "400"
+ck "Login admin berhasil 200" "$(code -c $J -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"Kostsaya12345"}' "$B/api/login")" "200"
 ck "Cookie sesi HttpOnly terpasang" "$(grep -c 'hade_sesi' $J)" "1"
 code -b $J "$B/api/session" >/dev/null
 ck "Session mengembalikan role admin" "$(jq_ 'd.user.role')" "admin"
@@ -243,16 +244,16 @@ code -b $J "$B/api/bootstrap" >/dev/null
 ck "Kategori baru membawa saldoNormal Kredit ke klien" "$(jq_ "((d.kategori.Neraca||[]).find(c=>c.nama==='Pinjaman Bank')||{}).saldoNormal || 'tidak ada'")" "Kredit"
 ck "Kas dashboard ikut naik (kategori dinamis dihitung server)" "$(jq_ "d.stats.sisaKas >= 20000000 ? 'naik' : 'tidak'")" "naik"
 
-TOKEN_APK=$(curl -s -H 'Origin: null' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
+TOKEN_APK=$(curl -s -H 'Origin: null' -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"Kostsaya12345"}' "$B/api/login" | sed -n 's/.*"token": *"\([^"]*\)".*/\1/p')
 echo "== BATAS PERCOBAAN LOGIN ==="
-for i in $(seq 1 10); do curl -s -o /dev/null -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah$i"}' "$B/api/login"; done
-ck "Setelah 10x salah, login benar pun ditolak 429" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"Kostsaya12345"}' "$B/api/login")" "429"
-ck "Akun lain tidak ikut terkunci" "$(actj $J '{"action":"users.create","data":{"username":"cek-login","password":"Cekpass12345","role":"staff","hp":"081200000101"}}' >/dev/null; loginj cek-login Cekpass12345)" "200"
+for i in $(seq 1 10); do curl -s -o /dev/null -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"salah$i"}' "$B/api/login"; done
+ck "Setelah 10x salah, login benar pun ditolak 429" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"Kostsaya12345"}' "$B/api/login")" "429"
+ck "Akun lain tidak ikut terkunci" "$(actj $J '{"action":"users.create","data":{"username":"cek-login","password":"Cekpass12345","role":"staff","hp":"081200000101"}}' >/dev/null; loginj 081200000101 Cekpass12345)" "200"
 
 echo "== AKSES DARI APK (origin null) ==="
 ck "Preflight OPTIONS dari APK dijawab 204" "$(curl -s -o /dev/null -w '%{http_code}' -X OPTIONS -H 'Origin: null' -H 'Access-Control-Request-Method: POST' "$B/api/login")" "204"
-ck "Header CORS untuk origin null terkirim" "$(curl -s -D - -o /dev/null -H 'Origin: null' -X POST -H 'content-type: application/json' -d '{"username":"admin","password":"salah"}' "$B/api/login" | grep -ci 'access-control-allow-origin: null')" "1"
-ck "Login membalas token untuk APK" "$(loginj token admin Kostsaya12345 >/dev/null; echo ok)" "ok"
+ck "Header CORS untuk origin null terkirim" "$(curl -s -D - -o /dev/null -H 'Origin: null' -X POST -H 'content-type: application/json' -d '{"username":"081200000100","password":"salah"}' "$B/api/login" | grep -ci 'access-control-allow-origin: null')" "1"
+ck "Login membalas token untuk APK" "$(loginj 081200000100 Kostsaya12345 >/dev/null; echo ok)" "ok"
 ck "Token APK didapat dari login" "$([ -n "$TOKEN_APK" ] && echo ya || echo tidak)" "ya"
 ck "Token APK dipakai lewat header x-sesi-apk (bukan cookie)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TOKEN_APK" "$B/api/bootstrap")" "200"
 ck "Header sesi palsu ditolak 401" "$(curl -s -o /dev/null -w '%{http_code}' -H 'x-sesi-apk: palsu123' "$B/api/bootstrap")" "401"
@@ -264,16 +265,16 @@ code -b $J "$B/api/bootstrap" >/dev/null
 KID=$(jq_ "d.kategori.Pengeluaran.find(c=>c.nama==='Uji Kategori').id")
 ck "Hapus kategori tak terpakai" "$(actj $J "{\"action\":\"categories.delete\",\"data\":{\"id\":$KID}}")" "200"
 ck "Akun baru tanpa No. HP ditolak 400" "$(actj $J '{"action":"users.create","data":{"username":"tanpa-hp","password":"Tanpahp123","role":"staff"}}')" "400"
-ck "Buat user staff" "$(actj $J '{"action":"users.create","data":{"username":"staf","password":"Staffpass123","role":"staff","fullname":"Petugas","hp":"081200000102"}}')" "200"
+ck "Buat user staff" "$(actj $J '{"action":"users.create","data":{"username":"staf","password":"Staffpass123","role":"staff","fullname":"Petugas","hp":"081200000103"}}')" "200"
 ck "Username tidak valid ditolak 400" "$(actj $J '{"action":"users.create","data":{"username":"a b c","password":"12345678"}}')" "400"
 ck "Admin tidak bisa hapus dirinya sendiri (selalu 404 diuji lewat id acak)" "$(actj $J '{"action":"users.delete","data":{"id":"usr_tidakada"}}')" "404"
-ck "Buat user staff kedua" "$(actj $J '{"action":"users.create","data":{"username":"staf2","password":"Staffpass123","role":"staff","fullname":"Petugas 2","hp":"081200000103"}}')" "200"
+ck "Buat user staff kedua" "$(actj $J '{"action":"users.create","data":{"username":"staf2","password":"Staffpass123","role":"staff","fullname":"Petugas 2","hp":"081200000104"}}')" "200"
 code -b $J "$B/api/bootstrap" >/dev/null
 SUID=$(jq_ "d.users.find(u=>u.username==='staf2').id")
 ck "Hapus user staff (tanpa jejak transaksi) berhasil" "$(actj $J "{\"action\":\"users.delete\",\"data\":{\"id\":\"$SUID\"}}")" "200"
 
 echo "== OTORISASI ROLE =="
-ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -H "x-real-ip: 10.77.0.1" -d '{"username":"staf","password":"Staffpass123"}' "$B/api/login")" "200"
+ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -H "x-real-ip: 10.77.0.1" -d '{"username":"081200000103","password":"Staffpass123"}' "$B/api/login")" "200"
 # akun baru dari UI admin wajib ganti password lebih dulu; uji role dimulai setelah itu
 code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"Staffpass123","baru":"Staffpass123"}' "$B/api/password" >/dev/null
 ck "Staff TIDAK boleh hapus kamar (403)" "$(actj $S '{"action":"rooms.delete","data":{"noKamar":"101"}}')" "403"
@@ -351,12 +352,12 @@ ck "Opsi CORS untuk origin lain TIDAK dikirim" "$(curl -s -D - -o /dev/null -H '
 RATE_IP="10.99.0.$RANDOM"
 N429=0
 for i in $(seq 1 70); do
-  C=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-real-ip: $RATE_IP" -H "cf-connecting-ip: $RATE_IP" -d '{"username":"admin","password":"salah"}' "$B/api/login")
+  C=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-real-ip: $RATE_IP" -H "cf-connecting-ip: $RATE_IP" -d '{"username":"081200000100","password":"salah"}' "$B/api/login")
   [ "$C" = "429" ] && N429=$((N429+1))
 done
 if [ $N429 -eq 0 ]; then echo "… jendela batas laju habis dari uji sebelumnya, menunggu 60 detik"; sleep 61
   for i in $(seq 1 70); do
-    C=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-real-ip: $RATE_IP" -H "cf-connecting-ip: $RATE_IP" -d '{"username":"admin","password":"salah"}' "$B/api/login")
+    C=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-real-ip: $RATE_IP" -H "cf-connecting-ip: $RATE_IP" -d '{"username":"081200000100","password":"salah"}' "$B/api/login")
     [ "$C" = "429" ] && N429=$((N429+1))
   done
 fi
@@ -367,7 +368,7 @@ ck "IP lain tidak ikut terblokir" "$(curl -s -o /dev/null -w '%{http_code}' -H "
 actj $J '{"action":"users.create","data":{"username":"awal","password":"Awalan12345","role":"staff","fullname":"Akun Awal","hp":"081200000104"}}' >/dev/null
 CLEAN_IP="10.99.2.$RANDOM"
 CLEAN_IP="10.44.7.$((RANDOM%200))"
-curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"awal","password":"Awalan12345"}' "$B/api/login" -o /tmp/hade_login_awal.json
+curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"081200000104","password":"Awalan12345"}' "$B/api/login" -o /tmp/hade_login_awal.json
 TOKEN_AWAL=$(node -e "console.log(require('/tmp/hade_login_awal.json').token||'')")
 # token disimpan dulu ke berkas: memakai "|" ke node membuat curl gagal membaca stdin (token kosong)
 curl -s -H "x-sesi-apk: $TOKEN_AWAL" "$B/api/session" -o /tmp/hade_sesi_awal.json
@@ -377,7 +378,7 @@ ck "Akun baru: data TIDAK bisa dibuka sebelum ganti password (403)" "$(curl -s -
 CK_AWAL=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOKEN_AWAL" -d "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"pengeluaran\",\"kategori\":\"Listrik & Air\",\"jumlah\":1000,\"tanggal\":\"$TODAY\"}}" "$B/api/action")
 ck "Akun baru: aksi data juga ditolak sebelum ganti password (403)" "$CK_AWAL" "403"
 ck "Akun baru: boleh mengganti password (200)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOKEN_AWAL" -d '{"lama":"Awalan12345","baru":"AwalanBaru123"}' "$B/api/password")" "200"
-curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"awal","password":"AwalanBaru123"}' "$B/api/login" -o /tmp/hade_login_awal2.json
+curl -s -X POST -H 'content-type: application/json' -H "x-real-ip: $CLEAN_IP" -H "cf-connecting-ip: $CLEAN_IP" -d '{"username":"081200000104","password":"AwalanBaru123"}' "$B/api/login" -o /tmp/hade_login_awal2.json
 TOKEN_AWAL2=$(node -e "console.log(require('/tmp/hade_login_awal2.json').token||'')")
 ck "Setelah ganti password, data terbuka kembali (200)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TOKEN_AWAL2" "$B/api/bootstrap")" "200"
 

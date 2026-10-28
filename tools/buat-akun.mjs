@@ -41,3 +41,7 @@ const barisUser = `insert into users (id, username, fullname, role, password_has
 const barisAkses = `insert or ignore into akses_kost (user_id, kost) values ('${id}', '${kost}');`;
 console.log(barisUser);
 console.log(barisAkses);
+// Login hanya lewat No. HP: akun uji perlu nomor HP. Isi lewat env UJI_HP.
+if (process.env.UJI_HP) {
+  console.log(`update users set hp='${String(process.env.UJI_HP).replace(/\D/g, '')}' where id='${id}';`);
+}

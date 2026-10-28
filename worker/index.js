@@ -1187,6 +1187,24 @@ async function mintaPilihBilaBanyak(env, u, secure, hariSesi) {
   }, 200, { 'set-cookie': setSesiCookie(tokenPilih, secure, hariSesi * 86400) });
 }
 
+/**
+ * Pesan gagal login yang menjelaskan sebabnya, tanpa membocorkan keberadaan akun.
+ * Bila akun memang masih memakai sandi awal (must_change_password) atau sandinya sudah
+ * pernah diganti sendiri, pengguna diberi tahu supaya tidak menebak-nebak.
+ * Akun yang tidak ditemukan tetap memakai pesan umum yang sama.
+ */
+async function pesanSandiSalah(env, daftarAkun) {
+  const UMUM = 'Kombinasi nama pengguna atau kata sandi tidak sesuai.';
+  const akun = (daftarAkun || []).filter(Boolean);
+  if (!akun.length) return { error: UMUM };
+  const harusGanti = akun.some((a) => a.must_change_password);
+  if (harusGanti) {
+    return { error: 'Sandi belum sesuai. Akun ini masih memakai sandi awal, jadi sandi lama sudah tidak berlaku — gunakan sandi baru yang sudah diganti, atau minta admin mereset sandi.' };
+  }
+  // Sandi sudah diganti sendiri: tegaskan sandi awal tidak berlaku lagi.
+  return { error: 'Sandi tidak sesuai. Akun ini sudah pernah mengganti sandi, jadi sandi awal tidak berlaku. Hubungi admin bila lupa sandi.' };
+}
+
 async function cariAkunLogin(env, diketik, kostDiminta) {
   const d = normalNamaPengguna(diketik);
 
@@ -1200,34 +1218,8 @@ async function cariAkunLogin(env, diketik, kostDiminta) {
     return akun || null;
   }
 
-  // 2) Username/email. Username kini unik PER KOST, jadi "admin" bisa ada di beberapa kost.
-  //    Aturan pemilihan: kost yang diminta (kolom/tautan) menang; bila tidak ada, dan hanya
-  //    satu kost memiliki username itu -> akun tersebut; bila lebih dari satu -> minta pilih.
-  const nama = d.includes('@') ? d : d;
-  const cariUsername = async (u) => {
-    const r = await env.DB.prepare('select * from users where username=? and aktif=1').bind(u).all();
-    return (r.results || []);
-  };
-  let calon = [];
-  const kostK = String(kostDiminta || '').trim().toLowerCase();
-  if (kostK) {
-    const satu = await env.DB.prepare(
-      'select * from users where username=? and aktif=1 and (kost=? or kost in (select kunci from kosts where lower(nama_app)=?))'
-    ).bind(d, kostK, kostK).first();
-    if (satu) return satu;
-    // kalau kost diminta tetapi username ada di kost lain, jangan tebak: anggap tidak ketemu
-  }
-  calon = await cariUsername(d);
-  if (calon.length === 1) return calon[0];
-  if (calon.length > 1) return { __banyak: calon };
-
-  // 3) Bila diketik email penuh dan tidak ada, coba bagian sebelum '@'
-  if (d.includes('@')) {
-    const depan = d.split('@')[0];
-    calon = await cariUsername(depan);
-    if (calon.length === 1) return calon[0];
-    if (calon.length > 1) return { __banyak: calon };
-  }
+  // 2) Login HANYA lewat No. HP. Kolom yang bukan nomor HP ditolak tanpa mencari
+  //    username, supaya nama pengguna tidak bisa dipakai sebagai pintu masuk.
   return null;
 }
 
@@ -1266,7 +1258,7 @@ async function tanganiApi(req, env, url, secure, today) {
           if (!cocokSandi.length) {
             await env.DB.prepare('insert into login_percobaan (username, ip, berhasil) values (?,?,0)')
               .bind(uname, ip).run().catch(() => {});
-            return json({ error: 'Kombinasi nama pengguna atau kata sandi tidak sesuai.' }, 401);
+            return json(await pesanSandiSalah(env, kandidat), 401);
           }
           const unik = ['admin', 'master'].includes(cocokSandi[0].role) ? cocokSandi : cocokSandi.slice(0, 1);
           if (unik.length === 1) {
@@ -1294,7 +1286,12 @@ async function tanganiApi(req, env, url, secure, today) {
           .bind(uname, ip, cocok ? 1 : 0).run().catch(() => {});
         if (!cocok) {
           await logic.audit(env, { id: null, username: uname, role: 'sistem' }, 'login.gagal', 'users', uname, null, { ip }).catch(() => {});
-          return json({ error: 'Kombinasi nama pengguna atau kata sandi tidak sesuai.' }, 401);
+          // Login hanya lewat No. HP: kalau yang diketik bukan nomor HP, jelaskan langsung
+          // supaya pengguna tidak mengira sandinya salah.
+          if (!logic.miripNomorHp(uname)) {
+            return json({ error: 'Login hanya bisa memakai No. HP. Masukkan nomor HP yang terdaftar di akun, contoh 081234567890.' }, 400);
+          }
+          return json(await pesanSandiSalah(env, u ? [u] : []), 401);
         }
         const token = logic.randomToken();
         const exp = new Date(Date.now() + hariSesi * 86400000).toISOString();

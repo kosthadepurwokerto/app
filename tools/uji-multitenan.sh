@@ -18,9 +18,9 @@ rm -rf "$PERSIST"; mkdir -p "$PERSIST"
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=db/schema.sql >/tmp/m-schema.log 2>&1 || { echo "SKEMA GAGAL"; tail -5 /tmp/m-schema.log; exit 1; }
 
 # Akun master (role master) + admin kost pertama
-UJI_TANPA_GANTI=1 node tools/buat-akun.mjs master 'Masterpass123' master 'Sang Master' > /tmp/m-master.sql
+UJI_TANPA_GANTI=1 UJI_HP=081200000200 node tools/buat-akun.mjs master 'Masterpass123' master 'Sang Master' > /tmp/m-master.sql
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=/tmp/m-master.sql >/dev/null 2>&1
-UJI_TANPA_GANTI=1 node tools/buat-akun.mjs admin 'Kostsaya12345' admin 'Administrator Utama' > /tmp/m-admin.sql
+UJI_TANPA_GANTI=1 UJI_HP=081200000100 node tools/buat-akun.mjs admin 'Kostsaya12345' admin 'Administrator Utama' > /tmp/m-admin.sql
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=/tmp/m-admin.sql >/dev/null 2>&1
 
 npx wrangler dev --local --persist-to "$PERSIST" --var COOKIE_SECURE:false --port $PORT >/tmp/m-dev.log 2>&1 &
@@ -34,26 +34,26 @@ tokof() { sed -n 's/.*"token": *"\([^"]*\)".*/\1/p' "$1"; }
 act() { curl -s -o /tmp/act.out -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $1" -d "$2" $B/api/action; }
 
 echo "== 1. LOGIN & PERAN =="
-ck "Master login" "$(login $JAR_M /tmp/r1 master Masterpass123)" "200"
+ck "Master login" "$(login $JAR_M /tmp/r1 081200000200 Masterpass123)" "200"
 ck "Login balas role master" "$(json /tmp/r1 "d.user.role")" "master"
-ck "Admin login" "$(login $A /tmp/r2 admin Kostsaya12345)" "200"
+ck "Admin login" "$(login $A /tmp/r2 081200000100 Kostsaya12345)" "200"
 ck "Login memuat branding" "$(json /tmp/r2 "d.kost.namaApp+'/'+d.kost.kota")" "Kost Hade/Purwokerto"
 TM_MASTER=$(tokof /tmp/r1); TA=$(tokof /tmp/r2)
 
 echo "== 2. HANYA MASTER KELOLA DAFTAR KOST =="
 ck "Admin lihat daftar kost 403" "$(curl -s -o /dev/null -w '%{http_code}' -b $A $B/api/master/kost)" "403"
 ck "Admin buat kost 403" "$(curl -s -o /dev/null -w '%{http_code}' -b $A -X POST -H 'content-type: application/json' -d '{"namaApp":"Nakal","username":"nakal","password":"Nakal12345"}' $B/api/master/kost)" "403"
-ck "Master buat Kost Melati" "$(curl -s -b $JAR_M -o /tmp/r3 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","kota":"Semarang","tagline":"Kost Putri","username":"adminmelati","password":"Melati12345"}' $B/api/master/kost)" "200"
+ck "Master buat Kost Melati" "$(curl -s -b $JAR_M -o /tmp/r3 -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","kota":"Semarang","tagline":"Kost Putri","username":"081200000300","password":"Melati12345","hp":"081200000300"}' $B/api/master/kost)" "200"
 ck "Kunci = slug nama" "$(json /tmp/r3 'd.kost.kunci')" "kost-melati"
 ck "Nama dobel ditolak 409" "$(curl -s -o /dev/null -w '%{http_code}' -b $JAR_M -X POST -H 'content-type: application/json' -d '{"namaApp":"Kost Melati","username":"lain","password":"Lain123456"}' $B/api/master/kost)" "409"
 ck "Master lihat 2 kost" "$(curl -s -b $JAR_M $B/api/master/kost | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>console.log(JSON.parse(s).daftar.length))")" "2"
 
 echo "== 3. ADMIN KOST BARU =="
-curl -s -o /tmp/r4 -X POST -H 'content-type: application/json' -d '{"username":"adminmelati","password":"Melati12345"}' $B/api/login
+curl -s -o /tmp/r4 -X POST -H 'content-type: application/json' -d '{"username":"081200000300","password":"Melati12345"}' $B/api/login
 TM=$(tokof /tmp/r4)
 ck "Wajib ganti sandi (bootstrap 403)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TM" $B/api/bootstrap)" "403"
 curl -s -o /dev/null -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TM" -d '{"lama":"Melati12345","baru":"MelatiBaru123"}' $B/api/password
-curl -s -o /tmp/r5 -X POST -H 'content-type: application/json' -d '{"username":"adminmelati","password":"MelatiBaru123"}' $B/api/login
+curl -s -o /tmp/r5 -X POST -H 'content-type: application/json' -d '{"username":"081200000300","password":"MelatiBaru123"}' $B/api/login
 TM=$(tokof /tmp/r5)
 ck "Setelah ganti sandi (bootstrap 200)" "$(curl -s -o /dev/null -w '%{http_code}' -H "x-sesi-apk: $TM" $B/api/bootstrap)" "200"
 ck "Branding Melati" "$(curl -s -H "x-sesi-apk: $TM" $B/api/bootstrap -o /tmp/r6; json /tmp/r6 "d.kost.namaApp+'/'+d.kost.kota")" "Kost Melati/Semarang"
@@ -129,7 +129,7 @@ ck "Cookie sesi pilih-kost terpasang" "$(curl -s -o /dev/null -w '%{http_code}' 
 # Password awal (dibuat master) wajib diganti dulu; ini tidak boleh mengunci pilihan kost.
 ck "Ganti sandi awal berhasil" "$(curl -s -b /tmp/hp17.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"lama":"TigaAdmin123","baru":"TigaBaru12345"}' $B/api/password)" "200"
 ck "Pilih Kost Melati" "$(curl -s -b /tmp/hp17.jar -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -H "x-sesi-apk: $TOK_HP" -d '{"kunci":"kost-melati"}' $B/api/pilih-kost)" "200"
-ck "Setelah pilih: masuk Kost Melati (admin kelihatan)" "$(curl -s -b /tmp/hp17.jar -H "x-sesi-apk: $TOK_HP" $B/api/bootstrap -o /tmp/t18; node -e "const d=JSON.parse(require('fs').readFileSync('/tmp/t18','utf8'));console.log(d.kost.namaApp+'/'+d.users.find(u=>u.role==='admin').username)")" "Kost Melati/adminmelati"
+ck "Setelah pilih: masuk Kost Melati (admin kelihatan)" "$(curl -s -b /tmp/hp17.jar -H "x-sesi-apk: $TOK_HP" $B/api/bootstrap -o /tmp/t18; node -e "const d=JSON.parse(require('fs').readFileSync('/tmp/t18','utf8'));console.log(d.kost.namaApp+'/'+d.users.find(u=>u.role==='admin').username)")" "Kost Melati/081200000300"
 # Nomor HP yang terlihat seperti HP tapi tidak terdaftar: JANGAN nyasar ke username mirip.
 ck "HP tak terdaftar tidak nyasar ke username" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'content-type: application/json' -d '{"username":"081200000000","password":"TigaBaru12345"}' $B/api/login)" "401"
 # Admin tidak boleh mendaftarkan admin: hanya master.
