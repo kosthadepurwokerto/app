@@ -273,6 +273,21 @@ code -b $J "$B/api/bootstrap" >/dev/null
 SUID=$(jq_ "d.users.find(u=>u.username==='staf2').id")
 ck "Hapus user staff (tanpa jejak transaksi) berhasil" "$(actj $J "{\"action\":\"users.delete\",\"data\":{\"id\":\"$SUID\"}}")" "200"
 
+# --- REGRESI: eskalasi hak akses antar-admin (account takeover) ---
+# Admin biasa tidak boleh membuat admin, mengganti sandi/hapus admin lain.
+ck "Admin non-master TIDAK boleh membuat akun admin (403)" "$(actj $J '{"action":"users.create","data":{"username":"admin-palsu","password":"Palsu123456","role":"admin","hp":"081200000105"}}')" "403"
+ck "Admin non-master TIDAK boleh membuat akun master (403)" "$(actj $J '{"action":"users.create","data":{"username":"master-palsu","password":"Palsu123456","role":"master","hp":"081200000106"}}')" "403"
+code -b $J "$B/api/bootstrap" >/dev/null
+AID=$(jq_ "d.users.find(u=>u.username==='admin').id")
+ck "Admin non-master TIDAK boleh mengganti sandi admin lain (403)" "$(actj $J "{\"action\":\"users.update\",\"data\":{\"id\":\"$AID\",\"hp\":\"081200000100\",\"password\":\"Ambilalih123\"}}")" "403"
+ck "Admin non-master TIDAK boleh menurunkan role admin lain (403)" "$(actj $J "{\"action\":\"users.update\",\"data\":{\"id\":\"$AID\",\"hp\":\"081200000100\",\"role\":\"staff\"}}")" "403"
+ck "Admin non-master TIDAK boleh menghapus admin lain (403)" "$(actj $J "{\"action\":\"users.delete\",\"data\":{\"id\":\"$AID\"}}")" "403"
+# Isolasi IP: semua login positif memakai IP berbeda. lockout per (username, ip)
+# dan jendela 60 detik ikut menghitung login sukses (baris 26/28/247/256), jadi
+# tanpa IP sendiri percobaan ini pasti 429 alih-alih 401.
+ck "Sandi admin tidak berubah setelah percobaan takeover" "$(code -o /dev/null -X POST -H 'content-type: application/json' -H 'x-real-ip: 10.88.0.9' -H 'cf-connecting-ip: 10.88.0.9' -d '{"username":"081200000100","password":"Ambilalih123"}' "$B/api/login")" "401"
+ck "Sesi admin asli tetap berlaku" "$(code -b $J "$B/api/bootstrap")" "200"
+
 echo "== OTORISASI ROLE =="
 ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -H "x-real-ip: 10.77.0.1" -d '{"username":"081200000103","password":"Staffpass123"}' "$B/api/login")" "200"
 # akun baru dari UI admin wajib ganti password lebih dulu; uji role dimulai setelah itu

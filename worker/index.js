@@ -822,8 +822,46 @@ function validUser(d, isNew) {
   return { username, role, fullname, password, hp, hpHapus };
 }
 
+const PERINGKAT = { staff: 1, admin: 2, master: 3 };
+
+/**
+ * Otorisasi pengelolaan akun (users.create/update/delete).
+ * Tanpa ini, admin mana pun bisa mengganti sandi / menghapus admin lain —
+ * termasuk akun di kost yang tidak ia kelola (account takeover antar-admin).
+ *
+ * Aturan:
+ *   - master: boleh semua.
+ *   - admin : hanya akun milik kost yang ia punya akses_kost-nya,
+ *             dan hanya terhadap akun ber-role staff (tidak boleh menyentuh sesama admin).
+ *   - selain itu: ditolak 403.
+ */
+async function otorisasiTargetUser(ctx, target, { untukBuat = false } = {}) {
+  if (ctx.user.role === 'master') return;
+  if (ctx.user.role !== 'admin') throw logic.httpError(403, 'Aksi ini hanya untuk admin.');
+
+  const kostTarget = untukBuat ? ctx.kost : (target && target.kost) || ctx.kost;
+  if (kostTarget !== ctx.kost) {
+    throw logic.httpError(403, 'Anda hanya boleh mengelola akun di kost yang sedang aktif.');
+  }
+  const izin = await ctx.env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?')
+    .bind(ctx.user.id, kostTarget).first();
+  if (!izin) throw logic.httpError(403, 'Anda tidak punya akses ke kost akun tersebut.');
+  if (untukBuat) return;
+
+  const peringkatSaya = PERINGKAT[ctx.user.role] || 0;
+  if ((PERINGKAT[target.role] || 0) >= peringkatSaya) {
+    throw logic.httpError(403, 'Hanya master yang boleh mengubah akun admin lain.');
+  }
+}
+
 async function addUser(ctx, d) {
   const { username, role, fullname, password, hp } = validUser(d, true);
+  await otorisasiTargetUser(ctx, null, { untukBuat: true });
+  // admin biasa tidak boleh membuat admin (hanya master) — membuat admin berarti
+  // bisa saling mengubah/mereset sandi via menu pengguna.
+  if (role === 'admin' && ctx.user.role !== 'master') {
+    throw logic.httpError(403, 'Hanya master yang boleh membuat akun admin.');
+  }
   const dup = await ctx.env.DB.prepare('select id from users where username=? and kost=?').bind(username, ctx.kost).first();
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai di kost ini. Nama yang sama boleh dipakai di kost lain.`);
   // Nomor HP adalah identitas login: harus unik.
@@ -858,6 +896,7 @@ async function updateUser(ctx, d) {
   const id = String(d.id || '');
   const old = await ctx.env.DB.prepare('select * from users where id=?').bind(id).first();
   if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
+  await otorisasiTargetUser(ctx, old);
   const base = { ...d, username: d.username || old.username, role: d.role || old.role, fullname: d.fullname || old.fullname };
   const { username, role, fullname, password, hp, hpHapus } = validUser(base, false);
   // HP adalah identitas login, jadi akun lama yang belum punya HP wajib melengkapinya
@@ -902,6 +941,7 @@ async function deleteUser(ctx, d) {
   const id = String(d.id || '');
   const old = await ctx.env.DB.prepare('select * from users where id=?').bind(id).first();
   if (!old) throw logic.httpError(404, 'Pengguna tidak ditemukan.');
+  await otorisasiTargetUser(ctx, old);
   if (old.id === ctx.user.id) throw logic.httpError(409, 'Tidak bisa menghapus akun yang sedang dipakai.');
   if (['admin', 'master'].includes(old.role)) {
     const admins = await ctx.env.DB.prepare("select count(*) as n from users where role=? and aktif=1 and kost=? and id<>?").bind(old.role, old.kost, id).first();
@@ -1598,8 +1638,10 @@ async function tanganiApi(req, env, url, secure, today) {
           return json({ error: 'Aksi ini hanya untuk master.' }, 403);
         }
         // Hanya master yang boleh membuat akun master lain.
-        if (action === 'users.create' && String((data && data.role) || '') === 'master' && sesi.role !== 'master') {
-          return json({ error: 'Hanya master yang boleh membuat akun master.' }, 403);
+        if (action === 'users.create' && sesi.role !== 'master') {
+          const roleDiminta = String((data && data.role) || 'staff');
+          if (roleDiminta === 'master') return json({ error: 'Hanya master yang boleh membuat akun master.' }, 403);
+          if (roleDiminta === 'admin') return json({ error: 'Hanya master yang boleh membuat akun admin.' }, 403);
         }
         const ctx = {
           env, db: dbKost(env.DB, sesi.kost), user: sesi, today, kost: sesi.kost,
