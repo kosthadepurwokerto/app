@@ -123,20 +123,18 @@ async function sesiAktif(env, req) {
 // ---------- pembacaan data ----------
 async function dashboard(env, DB, kost) {
   const db = DB || env.DB;
-  // Query berurutan (bukan Promise.all): batch/beberapa statement paralel di D1 lokal
-  // sesekali terbaca sebelum tulisan sebelumnya terlihat, sehingga dashboard menampilkan
-  // angka lama walau data sudah tersimpan. Konsistensi lebih penting daripada beberapa ms.
-  // Catatan konsistensi: query berurutan (bukan Promise.all) karena di D1 lokal batch
-  // paralel sesekali terbaca sebelum tulisan sebelumnya terlihat.
+  // Query berurutan (bukan Promise.all): beberapa statement paralel di D1 lokal sesekali
+  // terbaca sebelum tulisan sebelumnya terlihat, sehingga dashboard menampilkan angka lama
+  // walau data sudah tersimpan. Konsistensi lebih penting daripada beberapa ms.
+  // 200 transaksi terakhir: cukup untuk cetak ulang struk beberapa bulan ke belakang.
   const rooms = await db.prepare('select * from rooms order by no_kamar').all();
   const tenants = await db.prepare('select * from tenants order by created_at desc').all();
   const bills = await db.prepare("select * from bills where status='belum_bayar' order by jatuh_tempo, id").all();
-  // 200 transaksi terakhir: cukup untuk cetak ulang struk beberapa bulan ke belakang.
   const pays = await db.prepare('select * from payments where voided_at is null order by tgl_bayar desc, id desc limit 200').all();
 
   // Angka kas/tunggakan dihitung per kost oleh worker/ringkasan.js (query kecil &
   // eksplisit per tabel). Query agregat panjang sebelumnya tidak bisa difilter otomatis.
-  const ringkas = await ringkasKost(env.DB, kost);
+  const ringkas = await ringkasKost(DB || env.DB, kost);
   const roomMap = {};
   const aktif = (tenants.results || []).filter((t) => t.status === 'aktif');
   (rooms.results || []).forEach((r) => { roomMap[r.id] = r.no_kamar; });
@@ -194,6 +192,12 @@ const KUNCI_BUKTI = /^bukti\/\d{4}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 
 async function unggahBerkas(req, env, sesi, opsi) {
   const pakaiR2 = logic.KTP_MODE === 'r2' && !!env.KTP;
+  // Binding KTP ada di wrangler.toml tetapi bucket-nya belum dibuat = salah konfigurasi,
+  // BUKAN alasan menyimpan foto KTP ke D1 diam-diam (D1 membatasi baris ~2 MB).
+  if (logic.KTP_MODE === 'r2' && !env.KTP) {
+    console.error('[hade] binding R2 KTP tidak terpasang — unggah berkas ditolak');
+    return json({ error: 'Penyimpanan berkas belum siap di server. Hubungi admin.' }, 503);
+  }
   let form;
   try { form = await req.formData(); } catch { return json({ error: 'Unggahan tidak valid. Kirim sebagai multipart/form-data.' }, 400); }
   const file = form.get('file');
@@ -266,6 +270,11 @@ async function lihatBukti(env, kunci, sesi) {
 
 async function unggahKtp(req, env, sesi) {
   const pakaiR2 = logic.KTP_MODE === 'r2' && !!env.KTP;
+  // Sama seperti unggahBerkas: binding hilang = salah konfigurasi, jangan jatuh ke D1 diam-diam.
+  if (logic.KTP_MODE === 'r2' && !env.KTP) {
+    console.error('[hade] binding R2 KTP tidak terpasang — unggah KTP ditolak');
+    return json({ error: 'Penyimpanan foto KTP belum siap di server. Hubungi admin.' }, 503);
+  }
   let form;
   try { form = await req.formData(); } catch { return json({ error: 'Unggahan tidak valid. Kirim sebagai multipart/form-data.' }, 400); }
   const file = form.get('file');

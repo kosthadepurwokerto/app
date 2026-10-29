@@ -190,7 +190,13 @@ export function dbKost(db, kost) {
   return {
     prepare,
     batch: async (daftar) => {
-      const siap = (daftar || []).map((s) => s && s._st ? s._st : s);
+      // Statement ter-wrap milik dbKost() sudah menyisipkan kost sendiri — pakai apa adanya.
+      // Statement MENTAH (db.prepare() biasa, tanpa filter kost) di sini akan membuat tulis/baca
+      // menembus batas kost, jadi langsung ditolak: pemanggil wajib memakai dbKost().prepare().
+      const siap = (daftar || []).map((s) => {
+        if (s && s._st) return s._st;
+        throw new Error('db-kost: batch() hanya menerima statement dari dbKost().prepare() — statement mentah tidak terfilter kost.');
+      });
       return db.batch(siap);
     },
     exec: (sql) => db.exec(sql),

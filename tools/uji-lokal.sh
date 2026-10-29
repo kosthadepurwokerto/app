@@ -22,10 +22,9 @@ rm -f "$PIDF"
 rm -rf "$PERSIST"; mkdir -p "$PERSIST"
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=db/schema.sql >/tmp/hk-schema.log 2>&1 || { echo "SKEMA GAGAL"; tail -5 /tmp/hk-schema.log; exit 1; }
 if grep -qi 'error' /tmp/hk-schema.log; then echo "SKEMA ADA ERROR:"; grep -i -A3 'error' /tmp/hk-schema.log | head -20; exit 1; fi
-# migrasi kolom/tabel baru: skema dasar tidak memuat tenant_kamar (pindah kamar) dsb.
-# skema dasar sudah memuat kolom 013/014; sisanya (login per kost, hp multi kost, pindah kamar) masih baru
-# skema dasar sudah memuat kolom 001-016; hanya 017 (riwayat kamar) yang tabelnya masih baru
-for m in db/migrasi-017-*.sql; do
+# migrasi yang objeknya BELUM masuk db/schema.sql. Skema dasar memuat kolom 001-016,
+# tetapi tabel tenant_kamar (017) dan kolom audit_log.kost (018) baru dibuat oleh migrasi.
+for m in db/migrasi-017-*.sql db/migrasi-018-*.sql; do
   npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$m" >>/tmp/hk-schema.log 2>&1 || { echo "MIGRASI GAGAL: $m"; tail -5 /tmp/hk-schema.log; exit 1; }
 done
 # Akun seed WAJIB punya No. HP: login hanya menerima No. HP (username ditolak),

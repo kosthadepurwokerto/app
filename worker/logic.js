@@ -174,10 +174,24 @@ export const KUNCI_KTP = /^ktp\/\d{4}\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 // Jejak audit dari aplikasi: berisi SIAPA pelakunya (trigger DB tidak tahu user).
 export async function audit(env, user, aksi, tabel, rowId, lama, baru) {
   if (!env || !env.DB) return;
-  await env.DB.prepare('insert into audit_log (actor, actor_name, aksi, tabel, row_id, data_lama, data_baru) values (?,?,?,?,?,?,?)')
-    .bind(user ? user.id : null, user ? user.username : null, aksi, tabel, rowId === null || rowId === undefined ? null : String(rowId),
-      lama ? JSON.stringify(lama) : null, baru ? JSON.stringify(baru) : null)
-    .run();
+  // Baris audit milik kost `user.kost`: tanpa kolom ini, admin satu kost bisa membaca
+  // jejak aktivitas kost lain dari tabel yang tidak difilter db-kost (lihat migrasi 018).
+  const baris = [
+    user ? user.id : null, user ? user.username : null, aksi, tabel,
+    rowId === null || rowId === undefined ? null : String(rowId),
+    lama ? JSON.stringify(lama) : null, baru ? JSON.stringify(baru) : null,
+    user && user.kost ? user.kost : null,
+  ];
+  try {
+    await env.DB.prepare('insert into audit_log (actor, actor_name, aksi, tabel, row_id, data_lama, data_baru, kost) values (?,?,?,?,?,?,?,?)')
+      .bind(...baris).run();
+  } catch (e) {
+    // Kolom belum ada (migrasi 018 belum dijalankan di basis data ini): catat tanpa kost
+    // supaya aktivitas tetap tercatat alih-alih hilang.
+    if (!/no column named kost|no such column: kost/i.test(String(e && e.message))) throw e;
+    await env.DB.prepare('insert into audit_log (actor, actor_name, aksi, tabel, row_id, data_lama, data_baru) values (?,?,?,?,?,?,?)')
+      .bind(...baris.slice(0, 7)).run();
+  }
 }
 
 export async function createTenant(ctx, data) {
@@ -211,9 +225,16 @@ export async function createTenant(ctx, data) {
   if (!room) throw httpError(404, `Kamar ${noKamar} tidak ditemukan.`);
   if (room.status !== 'tersedia') throw httpError(409, `Kamar ${noKamar} tidak tersedia (status: ${room.status}).`);
   // kamar bisa sudah dijanjikan ke penyewa lain lewat pindah kamar terjadwal (tenant_kamar bertanggal depan)
-  const janji = await ctx.db.prepare(
-    "select t.nama, k.mulai from tenant_kamar k join tenants t on t.id=k.tenant_id where k.kamar_id=? and k.mulai>? order by k.mulai limit 1"
-  ).bind(room.id, ctx.today || new Date().toISOString().slice(0, 10)).first().catch(() => null);
+  // `tenant_id` disertakan: kalau penyewa yang dijanjikan ternyata sudah pindah lagi hari ini,
+  // kontrak lama itu tak lagi mengunci kamar. Cek ke sqlite_master dulu karena tabel ini dibuat
+  // oleh migrasi 017 dan bisa belum ada di basis data lama.
+  const adaRiwayat = await ctx.env.DB.prepare(
+    "select count(*) as n from sqlite_master where type='table' and name='tenant_kamar'"
+  ).first().catch(() => null);
+  const janji = (adaRiwayat && adaRiwayat.n) ? await ctx.db.prepare(
+    "select k.tenant_id, t.nama, k.mulai from tenant_kamar k join tenants t on t.id=k.tenant_id " +
+    "where k.kamar_id=? and k.mulai>? and k.sampai is null and t.status='aktif' and t.kamar_id<>? order by k.mulai limit 1"
+  ).bind(room.id, ctx.today || new Date().toISOString().slice(0, 10), room.id).first().catch(() => null) : null;
   if (janji) throw httpError(409, `Kamar ${noKamar} sudah dijanjikan untuk ${janji.nama} mulai ${janji.mulai} (pindah kamar).`);
   if (num(room.harga_bulanan) <= 0) throw httpError(400, `Harga bulanan kamar ${noKamar} belum diisi.`);
 
@@ -621,7 +642,9 @@ export async function pindahKamar(ctx, data) {
     throw httpError(409, `Kamar ${noBaru} masih ditempati ${bentrok.nama} sampai ${bentrok.keluar || 'tanpa tanggal keluar'}.`);
 
   // riwayat kontrak: tutup yang lama, buka yang baru
-  const riwayat = await ctx.db.prepare(
+  // query langsung ke sqlite_master, bukan lewat ctx.db: db-kost menyuntik filter `kost`
+  // ke setiap FROM dan tabel sistem itu tidak punya kolom kost.
+  const riwayat = await ctx.env.DB.prepare(
     "select count(*) as n from sqlite_master where type='table' and name='tenant_kamar'"
   ).first();
   const stmts = [];
@@ -650,7 +673,9 @@ export async function pindahKamar(ctx, data) {
     // Reservasi masa depan cukup dari baris tenant_kamar bertanggal depan; pendaftaran penyewa
     // baru di kamar itu ditolak lewat cekPesanKamar() di createTenant.
   }
-  await ctx.db.batch(stmts);
+  // stmts kosong untuk pindahan ke depan saat tabel riwayat belum ada: D1 menolak
+  // batch([]) dengan "No SQL statements detected".
+  if (stmts.length) await ctx.db.batch(stmts);
   await ctx.audit('tenant.pindah', 'tenants', t.id,
     { kamar: noAsal, kamar_id: t.kamar_id },
     { kamar: noBaru, kamar_id: tujuan.id, tgl, berlaku: sudahBerlaku ? 'sekarang' : 'terjadwal' });

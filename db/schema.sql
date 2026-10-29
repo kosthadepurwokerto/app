@@ -51,18 +51,8 @@ create table if not exists sessions (
 );
 create index if not exists idx_sessions_user on sessions(user_id);
 
--- ---------- MULTITENAN: DAFTAR KOST ----------
--- Kunci = slug dari nama aplikasi; menjadi pemisah data antarkost.
-create table if not exists kosts (
-  kunci       text primary key,
-  nama_app    text not null unique,
-  kota        text,
-  tagline     text,
-  logo_kunci  text,
-  logo_tipe   text,
-  aktif       integer not null default 1,
-  created_at  text not null default (datetime('now'))
-);
+-- ---------- MULTITENAN: AKSES USER KE KOST ----------
+-- Tabel `kosts` sendiri didefinisikan di bagian atas file (sebelum `users`).
 -- Akses user ke kost (satu akun boleh membuka beberapa kost).
 create table if not exists akses_kost (
   user_id text not null references users(id) on delete cascade,
