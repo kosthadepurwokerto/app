@@ -1096,10 +1096,6 @@ export default {
     // /favicon.ico, /login, /robots.txt, dsb. dulu semuanya 500 karena ini.
     let res = null;
     try { res = await env.ASSETS.fetch(req); } catch (e) { res = null; }
-    if (!res || !(res instanceof Response) || (res.status === 404 && typeof ambilBerkasCadangan === 'function')) {
-      const cad = typeof ambilBerkasCadangan === 'function' ? await ambilBerkasCadangan(env, url) : null;
-      if (cad) return cad;
-    }
     if (!res || !(res instanceof Response)) {
       return new Response('Tidak ditemukan.', {
         status: 404,
@@ -1182,14 +1178,7 @@ async function SajikanHalaman(env, url) {
     });
   }
 
-  let hal = _halaman || (await bacaHalaman(env, url));
-  if (!hal) {
-    const cad = await ambilBerkasCadangan(env, new URL('/app.html', url.origin));
-    if (cad) {
-      const isi = await cad.text();
-      if (/<html/i.test(isi)) hal = { isi, rilisAkhir: '' };
-    }
-  }
+  const hal = _halaman || (await bacaHalaman(env, url));
   if (!hal) {
     return new Response('Halaman aplikasi belum tersedia.', {
       status: 500,
