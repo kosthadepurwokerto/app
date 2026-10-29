@@ -601,7 +601,7 @@
       const switcherContainer = document.getElementById('quick-user-options');
       switcherContainer.innerHTML = `
         <div class="px-3 py-2 text-xs font-semibold text-slate-600">
-          <div class="truncate">${activeUser.fullname}</div>
+          <div class="truncate">${esc(activeUser.fullname || activeUser.username || '-')}</div>
           <div class="text-[10px] text-slate-400">@${esc(activeUser.username || '-')} • ${esc(labelRole)}</div>
         </div>
         <button data-h="openGantiPassword" class="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 flex items-center gap-2 text-xs font-semibold transition">
@@ -1511,7 +1511,7 @@
             <div>
               <div class="flex justify-between items-center mb-3">
                 <span class="text-xl font-black text-slate-800">${esc(k[0])}</span>
-                <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${isOccupied ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}">${k[4]}</span>
+                <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${isOccupied ? 'bg-blue-50 text-blue-600 border border-blue-100' : 'bg-rose-50 text-rose-600 border border-rose-100'}">${esc(k[4])}</span>
               </div>
               <p class="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">${esc(k[1])}</p>
               <div class="space-y-1">
@@ -1572,7 +1572,7 @@
     function renderAvailableRooms(rooms) {
       const select = document.getElementById('select-kamar');
       select.innerHTML = rooms.length > 0 
-        ? '<option value="">-- Pilih Kamar --</option>' + rooms.map(r => `<option value="${r}">${r}</option>`).join('') 
+        ? '<option value="">-- Pilih Kamar --</option>' + rooms.map(r => `<option value="${esc(r)}">${esc(r)}</option>`).join('') 
         : '<option value="">Semua Kamar Terisi</option>';
     }
 
@@ -1790,8 +1790,8 @@
         let angkaBersih = String(t[3]).replace(/[^0-9]/g, '');
         return `
           <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
-            <td class="py-4 px-6 text-slate-500 whitespace-nowrap">${t[0]}</td>
-            <td class="py-4 px-4 font-bold text-slate-900">${t[1]}</td>
+            <td class="py-4 px-6 text-slate-500 whitespace-nowrap">${esc(t[0])}</td>
+            <td class="py-4 px-4 font-bold text-slate-900">${esc(t[1])}</td>
             <td class="py-4 px-4">
               <span class="px-2.5 py-0.5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-black uppercase">${esc(t[2])}</span>
             </td>
@@ -2211,12 +2211,12 @@
         : '<span class="text-rose-500 font-bold">Belum ada foto KTP.</span>';
 
       const select = document.getElementById('edit-tenant-kamar');
-      select.innerHTML = `<option value="${kamar}">${kamar}</option>`;
+      select.innerHTML = `<option value="${esc(kamar)}">${esc(kamar)}</option>`;
       if (cachedData) {
         const availableRooms = cachedData.kamar.filter(k => k[4] === 'Tersedia').map(k => k[0]);
         availableRooms.forEach(r => {
           if (r !== kamar) {
-            select.innerHTML += `<option value="${r}">${r}</option>`;
+            select.innerHTML += `<option value="${esc(r)}">${esc(r)}</option>`;
           }
         });
       }
@@ -2373,7 +2373,7 @@
             <td class="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">${esc(item[1])}</td>
             <td class="py-4 px-4">
               <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${colorClass}">
-                ${item[2]}
+                ${esc(item[2])}
               </span>
             </td>
             <td class="py-4 px-4 font-bold text-slate-800">${esc(item[3])}</td>
