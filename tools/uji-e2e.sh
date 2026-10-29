@@ -96,6 +96,9 @@ code -b $J "$B/api/dashboard" >/dev/null
 ck "Dashboard mengirim kontak darurat & penanda KTP" "$(jq_ "(p=>[p[9],p[10],p[11]].join('|'))(d.penyewa.find(x=>x[0]==='TEN-0001'))")" "Ibu Ratna|08133334444|ada"
 ck "Foto bisa dibuka oleh user login" "$(code -b $J "$B/api/ktp/penyewa/TEN-0001")" "200"
 ck "Foto tidak bisa dibuka tanpa login" "$(code "$B/api/ktp/penyewa/TEN-0001")" "401"
+# mode r2: berkas harus benar-benar di R2, bukan di tabel ktp_berkas (batas baris D1 ~2 MB)
+ck "Foto KTP disimpan di R2 (bukan D1)" "$(node -e "const r=JSON.parse(require('child_process').execSync('npx wrangler d1 execute hadekost-db --local --persist-to ${PERSIST:-/tmp/hklocal} --json --command \"select count(*) n from ktp_berkas where kunci=\'$KTKEY\'\" 2>/dev/null').toString())[0].results[0].n;console.log(r)")" "0"
+ck "Foto KTP di R2 bisa dibaca kembali persis" "$(curl -s -b $J -o /tmp/ktp-balik "$B/api/ktp/$KTKEY"; cmp -s /tmp/ktp-uji.png /tmp/ktp-balik && echo sama || echo beda)" "sama"
 ck "HP darurat tidak valid ditolak 400" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0001","hpDarurat":"12"}}')" "400"
 ck "Edit tanpa field kontak tidak menghapus data lama" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0001","nama":"Budi Santoso"}}')" "200"
 code -b $J "$B/api/dashboard" >/dev/null
@@ -329,6 +332,7 @@ ck "Staff TIDAK boleh hapus penyewa (403)" "$(actj $S '{"action":"tenants.delete
 ck "Staff TIDAK boleh buat user (403)" "$(actj $S '{"action":"users.create","data":{"username":"xx","password":"12345678"}}')" "403"
 ck "Staff boleh mencatat transaksi" "$(actj $S "{\"action\":\"ledger.create\",\"data\":{\"jenis\":\"pengeluaran\",\"kategori\":\"Listrik & Air\",\"jumlah\":1000,\"tanggal\":\"$TODAY\"}}")" "200"
 code -b $S "$B/api/bootstrap" >/dev/null
+ck "Staff TIDAK boleh pindah kamar (403 dini)" "$(actj $S '{"action":"tenants.pindah","data":{"id":"TEN-0001","kamar":"102","tanggal":"'$TODAY'"}}')" "403"
 ck "Staff TIDAK boleh check-out (403)" "$(actj $S '{"action":"tenants.checkout","data":{"id":"TEN-0001","kamar":"101"}}')" "403"
 ck "Staff TIDAK boleh edit penyewa (403)" "$(actj $S '{"action":"tenants.update","data":{"id":"TEN-0001","nama":"X Y"}}')" "403"
 ck "Staff TIDAK boleh tambah kamar (403)" "$(actj $S '{"action":"rooms.create","data":{"noKamar":"777","hargaBulanan":1}}')" "403"

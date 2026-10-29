@@ -1396,6 +1396,34 @@
     </div>
   </div>
 
+  <div id="pindah-kamar-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 p-6 max-w-md w-full animate-fade-in relative flex flex-col text-slate-800">
+      <div class="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-rose-600 rounded-t-2xl"></div>
+      <div class="flex justify-between items-center mt-2 mb-4">
+        <span class="text-[10px] font-black text-blue-600 uppercase tracking-widest">Pindah Kamar</span>
+        <button data-h="closePindahKamarModal" class="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600 transition"><i class="fas fa-times"></i></button>
+      </div>
+      <p id="pindah-kamar-info" class="text-xs text-slate-500 mb-4 leading-relaxed"></p>
+      <input type="hidden" id="pindah-kamar-id">
+      <input type="hidden" id="pindah-kamar-asal">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Kamar Tujuan</label>
+          <select id="pindah-kamar-tujuan" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition bg-white font-bold"></select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Berlaku Mulai Tanggal</label>
+          <input type="date" id="pindah-kamar-tanggal" class="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl text-slate-800 outline-none focus:ring-2 focus:ring-blue-500 text-sm transition">
+          <p class="text-[10px] text-slate-400 mt-1.5">Tanggal hari ini atau lampau: kamar langsung berganti. Tanggal depan: pindahan terjadwal (kamar tujuan dikunci dari pendaftaran penyewa baru).</p>
+        </div>
+      </div>
+      <div class="bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 text-[11px] text-amber-700 leading-relaxed">
+        Tagihan yang sudah terbit <b>tidak</b> dihitung ulang. Bila harga kamar berbeda, sesuaikan tagihan secara manual.
+      </div>
+      <button id="pindah-kamar-simpan" class="w-full bg-gradient-to-r from-blue-600 to-rose-600 hover:from-blue-700 hover:to-rose-700 text-white py-3.5 rounded-xl font-bold transition shadow-md shadow-blue-500/10 text-sm mt-4">Pindahkan</button>
+    </div>
+  </div>
+
   <!-- MODAL: UNDANG CALON PENYEWA VIA WHATSAPP -->
   <div id="undang-wa-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-md hidden items-center justify-center z-[10000] p-4">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg animate-fade-in">

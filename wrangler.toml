@@ -16,9 +16,17 @@ migrations_dir = "db"
 COOKIE_SECURE = "true"
 
 # Foto KTP penyewa (berkas biner TIDAK ditaruh di D1)
-# Aktifkan blok ini setelah bucket dibuat:
-#   npx wrangler r2 bucket create hadekost-ktp      (butuh token dengan izin Workers R2 Storage)
-# lalu set KTP_MODE = 'r2' di worker/logic.js.
+# Selama bucket belum ada, binding ini HARUS dikomentari: `wrangler deploy` menolak
+# konfigurasi yang menunjuk bucket tidak ada (R2 bucket not found, kode 10085).
+# Tanpa binding, kode otomatis menyimpan foto di tabel ktp_berkas (D1) — tetap jalan,
+# tapi D1 membatasi ukuran baris ~2 MB, jadi hanya cocok sementara.
+#
+# Mengaktifkan R2:
+#   1. Buat API token Cloudflare dengan izin  Account > Workers R2 Storage: Edit
+#      (token yang ada sekarang tidak punya izin R2 -> error 10000/Authentication error)
+#   2. CLOUDFLARE_API_TOKEN=... npx wrangler r2 bucket create hadekost-ktp
+#   3. Buka komentar tiga baris di bawah, lalu npx wrangler deploy
+#   4. Foto lama di D1 tidak ikut pindah; unggah ulang foto yang perlu disimpan di R2.
 # [[r2_buckets]]
 # binding = "KTP"
 # bucket_name = "hadekost-ktp"

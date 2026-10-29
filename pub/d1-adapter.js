@@ -90,6 +90,7 @@
     checkoutTenant: (id, kamar) => aksi('tenants.checkout', { id, kamar }).then((m) => { data.dashboard = null; return m; }),
     deleteTenant: (id, kamar) => aksi('tenants.delete', { id, kamar }).then((m) => { data.dashboard = null; return m; }),
     editTenant: (d) => aksi('tenants.update', d).then((m) => { data.dashboard = null; return m; }),
+    pindahKamar: (d) => aksi('tenants.pindah', d).then((m) => { data.dashboard = null; return m; }),
 
     // ---------------- PEMBAYARAN ----------------
     recordPayment: (d) => aksi('payments.create', d).then((m) => { data.dashboard = null; return m; }),

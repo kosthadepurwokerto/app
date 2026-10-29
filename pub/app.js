@@ -596,6 +596,7 @@
     daftarAksi('edit-penyewa', (d) => openEditTenantModal(d.kode, d.nama, d.hp, d.kamar, d.masuk, d.status, d.tempo));
     daftarAksi('hapus-penyewa', (d) => promptDeleteTenant(d.kode, d.nama, d.kamar, d.status));
     daftarAksi('checkout', (d) => promptTenantCheckout(d.kode, d.nama, d.kamar));
+    daftarAksi('pindah-kamar', (d) => bukaPindahKamar(d.kode, d.nama, d.kamar));
     daftarAksi('bayar-cepat', (d) => quickPayPort(d.nama, d.kamar));
     daftarAksi('void-ledger', (d) => promptDeleteOpsTransaction(d.id, d.ket));
     daftarAksi('wa-pengingat', (d) => kirimPengingatWa(d.bill));
@@ -1606,6 +1607,9 @@
                   <i class="fas fa-trash-alt text-[10px]"></i>
                 </button>
                 ${statusActive ? `
+                  <button data-aksi="pindah-kamar" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" class="w-11 h-11 md:w-8 md:h-8 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 border border-indigo-100 flex items-center justify-center transition" title="Pindah Kamar">
+                    <i class="fas fa-right-left text-[10px]"></i>
+                  </button>
                   <button data-aksi="checkout" data-kode="${esc(p[0])}" data-nama="${esc(p[1])}" data-kamar="${esc(p[3])}" class="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-100 text-[9px] font-black tracking-widest uppercase transition btn-delete-action" title="Keluarkan Penyewa / Check-out">
                     Checkout
                   </button>
@@ -2182,6 +2186,63 @@
       modal.classList.remove('flex');
       modal.classList.add('hidden');
     }
+
+    // ---- PINDAH KAMAR ----
+    // Beda dengan "Pindah Suite Kamar" di modal edit (yang berlaku hari ini juga):
+    // di sini tanggal pindah bisa dipilih, termasuk akhir bulan (terjadwal).
+    function bukaPindahKamar(kode, nama, kamarAsal) {
+      document.getElementById('pindah-kamar-id').value = kode;
+      document.getElementById('pindah-kamar-asal').value = kamarAsal;
+      const sel = document.getElementById('pindah-kamar-tujuan');
+      const daftar = ((cachedData && cachedData.kamar) || [])
+        .filter((k) => ['Tersedia', 'tersedia'].includes(k[4]) && k[0] !== kamarAsal)
+        .map((k) => k[0]);
+      sel.innerHTML = daftar.length
+        ? daftar.map((r) => `<option value="${esc(r)}">${esc(r)}</option>`).join('')
+        : '<option value="">(tidak ada kamar kosong)</option>';
+      const tgl = document.getElementById('pindah-kamar-tanggal');
+      tgl.value = new Date().toLocaleDateString('en-CA');
+      tgl.min = new Date().toLocaleDateString('en-CA');
+      document.getElementById('pindah-kamar-info').innerHTML =
+        `<b>${esc(nama)}</b> — kamar sekarang <b>${esc(kamarAsal || '-')}</b>.`
+        + (daftar.length ? '' : ' <span class="text-rose-600 font-bold">Semua kamar lain terisi; kosongkan dulu satu kamar.</span>');
+      document.getElementById('pindah-kamar-simpan').disabled = !daftar.length;
+      document.getElementById('pindah-kamar-simpan').classList.toggle('opacity-40', !daftar.length);
+      const modal = document.getElementById('pindah-kamar-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closePindahKamarModal() {
+      const modal = document.getElementById('pindah-kamar-modal');
+      modal.classList.remove('flex');
+      modal.classList.add('hidden');
+    }
+
+    (function () {
+      const tombol = document.getElementById('pindah-kamar-simpan');
+      if (!tombol) return;
+      tombol.onclick = function () {
+        const id = document.getElementById('pindah-kamar-id').value;
+        const kamar = document.getElementById('pindah-kamar-tujuan').value;
+        const tanggal = document.getElementById('pindah-kamar-tanggal').value;
+        if (!kamar) { showCustomAlert('Kamar Kosong', 'Belum ada kamar tujuan yang bisa dipilih.', false); return; }
+        if (!tanggal) { showCustomAlert('Tanggal Kosong', 'Isi tanggal mulai pindah kamar.', false); return; }
+        tombol.disabled = true;
+        showLoading(true);
+        google.script.run.withFailureHandler((err) => {
+          tombol.disabled = false;
+          showLoading(false);
+          handleError(err);
+        }).withSuccessHandler((msg) => {
+          tombol.disabled = false;
+          showLoading(false);
+          closePindahKamarModal();
+          showCustomAlert('Berhasil', msg, true);
+          loadAllTenantsList();
+        }).pindahKamar({ id, kamar, tanggal });
+      };
+    })();
 
     // OPEN & CLOSE EDIT MODAL
     function openEditRoomModal(noKamar, tipe, hargaBulanan, hargaHarian) {
@@ -3398,6 +3459,7 @@
 /* ---- Dipakai oleh atribut data-h di HTML; sengaja dibuka ke window. ---- */
 try { window.batalkanPilihKost = batalkanPilihKost; } catch (e) {}
 try { window.bukaImporWa = bukaImporWa; } catch (e) {}
+try { window.bukaPindahKamar = bukaPindahKamar; } catch (e) {}
 try { window.bukaUndangWa = bukaUndangWa; } catch (e) {}
 try { window.bukaWaUndangan = bukaWaUndangan; } catch (e) {}
 try { window.calculateBilling = calculateBilling; } catch (e) {}
@@ -3405,6 +3467,7 @@ try { window.cancelEditCategory = cancelEditCategory; } catch (e) {}
 try { window.cancelEditUser = cancelEditUser; } catch (e) {}
 try { window.closeEditRoomModal = closeEditRoomModal; } catch (e) {}
 try { window.closeEditTenantModal = closeEditTenantModal; } catch (e) {}
+try { window.closePindahKamarModal = closePindahKamarModal; } catch (e) {}
 try { window.closeModal = closeModal; } catch (e) {}
 try { window.closeReceiptModal = closeReceiptModal; } catch (e) {}
 try { window.filterCategoriesTable = filterCategoriesTable; } catch (e) {}
@@ -3451,10 +3514,10 @@ try { window.uraiPesanWa = uraiPesanWa; } catch (e) {}
    `this` di dalam fungsi menunjuk elemen yang memicu aksi. ---- */
 var AKSI = {
   'batalkanPilihKost': batalkanPilihKost, 'bukaImporWa': bukaImporWa,
-  'bukaUndangWa': bukaUndangWa, 'bukaWaUndangan': bukaWaUndangan,
+  'bukaPindahKamar': bukaPindahKamar, 'bukaUndangWa': bukaUndangWa, 'bukaWaUndangan': bukaWaUndangan,
   'calculateBilling': calculateBilling, 'cancelEditCategory': cancelEditCategory,
   'cancelEditUser': cancelEditUser, 'closeEditRoomModal': closeEditRoomModal,
-  'closeEditTenantModal': closeEditTenantModal, 'closeModal': closeModal,
+  'closeEditTenantModal': closeEditTenantModal, 'closePindahKamarModal': closePindahKamarModal, 'closeModal': closeModal,
   'closeReceiptModal': closeReceiptModal, 'filterCategoriesTable': filterCategoriesTable,
   'filterLedgerData': filterLedgerData, 'filterOpsLedger': filterOpsLedger,
   'filterPayments': filterPayments, 'filterRoomCards': filterRoomCards,

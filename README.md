@@ -67,12 +67,32 @@ Setelah deploy, aplikasi tersedia di `https://hadekost.<subdomain>.workers.dev`.
 - Cookie: `HttpOnly; SameSite=Lax; Secure` (lokal: `COOKIE_SECURE=false`).
 - Tidak ada kredensial di repo. Akun dibuat lewat `tools/buat-akun.mjs`.
 
+## Pindah kamar
+
+Tombol ⇄ di baris penyewa (menu Penyewa) membuka modal pindah kamar; staf biasa tidak
+diberi izin (aksi `tenants.pindah`, role admin).
+
+- **Tanggal pindah hari ini atau lampau**: kamar lama jadi `tersedia`, kamar baru `terisi`,
+  dan `tenants.kamar_id` langsung berganti.
+- **Tanggal pindah di masa depan** (mis. pindah akhir bulan): `tenants.kamar_id` **tidak**
+  diubah, tapi kamar tujuan dikunci — `tenants.create` menolak kamar itu dengan 409
+  sampai tanggal pindah tiba. Kamar baru dipakai setelah pindahan dijalankan ulang /
+  diproses.
+- Riwayat kontrak disimpan di `tenant_kamar` (migrasi 017): satu baris per kamar, `sampai`
+  null = kontrak berjalan. Pindah lewat **Edit Penyewa** juga mencatat riwayat ini, dan
+  check-out menutup kontrak yang terbuka.
+- Tagihan yang sudah terbit **tidak** dihitung ulang saat pindah (harga kamar bisa beda);
+  sesuaikan manual bila perlu.
+- Uji: `tools/uji-pindah-kamar.sh` — otomatis disisipkan ke `tools/uji-lokal.sh`.
+
 ## Yang belum tersedia di versi D1
 
-- Pindah kamar (check-out, edit penyewa, bayar N bulan, bukti bayar sudah ada).
-- Foto KTP lewat R2: kode sudah siap, butuh token API Cloudflare berizin
-  **Workers R2 Storage** (`npx wrangler r2 bucket create hadekost-ktp`, lalu aktifkan blok
-  `[[r2_buckets]]` di `wrangler.toml`). Selama belum aktif, foto disimpan di tabel `ktp_berkas`.
+- Foto KTP lewat R2 **belum aktif di produksi**: token API Cloudflare yang dipakai sekarang
+  tidak punya izin *Workers R2 Storage* (error `10000 Authentication error`), jadi bucket
+  `hadekost-ktp` belum bisa dibuat. Blok `[[r2_buckets]]` di `wrangler.toml` masih dikomentari
+  dan foto disimpan sementara di tabel `ktp_berkas` (D1, batas baris ~2 MB).
+  Jalur R2 di kode sudah diuji lokal (unggah → baca kembali identik, tidak menyentuh D1);
+  langkah mengaktifkannya ada di komentar `wrangler.toml`.
 
 ## Migrasi database
 
@@ -86,7 +106,9 @@ bash tools/sql-produksi.sh db/migrasi-00X-nama-migrasi.sql --ya
 
 Daftar migrasi yang ada sekarang: 001 kolom dasar, 002 kontak penyewa, 003 ktp_berkas,
 004 pengingat WA, 005 sumber penyewa, 006 index kuota, 007 bayar banyak bulan,
-008 tanggal mulai tagihan, 009 bukti bayar, 010 periode lunas, 011 counter kode penyewa.
+008 tanggal mulai tagihan, 009 bukti bayar, 010 periode lunas, 011 counter kode penyewa,
+012 batas login, 013 multitenan, 014 login hp, 015 username per kost, 016 hp banyak kost,
+017 pindah kamar (`tenant_kamar`).
 `schema.sql` sudah memuat semua kolom tersebut, jadi DB baru **tidak** perlu menjalankan 001-011.
 
 ## Backup & pemulihan

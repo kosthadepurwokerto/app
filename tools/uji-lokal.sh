@@ -22,6 +22,12 @@ rm -f "$PIDF"
 rm -rf "$PERSIST"; mkdir -p "$PERSIST"
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=db/schema.sql >/tmp/hk-schema.log 2>&1 || { echo "SKEMA GAGAL"; tail -5 /tmp/hk-schema.log; exit 1; }
 if grep -qi 'error' /tmp/hk-schema.log; then echo "SKEMA ADA ERROR:"; grep -i -A3 'error' /tmp/hk-schema.log | head -20; exit 1; fi
+# migrasi kolom/tabel baru: skema dasar tidak memuat tenant_kamar (pindah kamar) dsb.
+# skema dasar sudah memuat kolom 013/014; sisanya (login per kost, hp multi kost, pindah kamar) masih baru
+# skema dasar sudah memuat kolom 001-016; hanya 017 (riwayat kamar) yang tabelnya masih baru
+for m in db/migrasi-017-*.sql; do
+  npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$m" >>/tmp/hk-schema.log 2>&1 || { echo "MIGRASI GAGAL: $m"; tail -5 /tmp/hk-schema.log; exit 1; }
+done
 # Akun seed WAJIB punya No. HP: login hanya menerima No. HP (username ditolak),
 # jadi tanpa UJI_HP seluruh uji runtuh di langkah login pertama.
 UJI_TANPA_GANTI=1 UJI_HP=081200000100 node tools/buat-akun.mjs admin 'Kostsaya12345' admin 'Administrator Utama' > "$PERSIST/akun.sql"
@@ -29,12 +35,21 @@ npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$PER
 rm -f "$PERSIST/akun.sql"
 
 # 3) server
-npx wrangler dev --local --persist-to "$PERSIST" --var COOKIE_SECURE:false --port 8787 >/tmp/hkdev.log 2>&1 &
+setsid npx wrangler dev --local --persist-to "$PERSIST" --var COOKIE_SECURE:false --port 8787 >/tmp/hkdev.log 2>&1 < /dev/null &
 echo $! > "$PIDF"
 for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:8787/api/session && break; sleep 1; done
 
 # 4) uji
-bash tools/uji-e2e.sh
+/usr/bin/python3 - <<'PY'
+src=open('tools/uji-e2e.sh').read()
+extra=open('tools/uji-pindah-kamar.sh').read()
+ekor="echo\nif [ $fail -eq 0 ]"
+i=src.rindex(ekor)
+if '== PINDAH KAMAR ==' not in src:
+    src=src[:i]+extra+src[i:]
+open('/tmp/uji-e2e-gabung.sh','w').write(src)
+PY
+bash /tmp/uji-e2e-gabung.sh
 HASIL=$?
 
 # 5) bersihkan proses

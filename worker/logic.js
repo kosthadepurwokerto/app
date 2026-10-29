@@ -210,6 +210,11 @@ export async function createTenant(ctx, data) {
   const room = await ctx.db.prepare('select * from rooms where no_kamar = ?').bind(noKamar).first();
   if (!room) throw httpError(404, `Kamar ${noKamar} tidak ditemukan.`);
   if (room.status !== 'tersedia') throw httpError(409, `Kamar ${noKamar} tidak tersedia (status: ${room.status}).`);
+  // kamar bisa sudah dijanjikan ke penyewa lain lewat pindah kamar terjadwal (tenant_kamar bertanggal depan)
+  const janji = await ctx.db.prepare(
+    "select t.nama, k.mulai from tenant_kamar k join tenants t on t.id=k.tenant_id where k.kamar_id=? and k.mulai>? order by k.mulai limit 1"
+  ).bind(room.id, ctx.today || new Date().toISOString().slice(0, 10)).first().catch(() => null);
+  if (janji) throw httpError(409, `Kamar ${noKamar} sudah dijanjikan untuk ${janji.nama} mulai ${janji.mulai} (pindah kamar).`);
   if (num(room.harga_bulanan) <= 0) throw httpError(400, `Harga bulanan kamar ${noKamar} belum diisi.`);
 
   // kode penyewa: ambil nomor terakhir lalu coba insert; bila balapan dengan petugas lain,
@@ -508,6 +513,18 @@ export async function updateTenant(ctx, data) {
     stmts.push(ctx.db.prepare("update rooms set status='terisi' where id=?").bind(kamarId));
   }
   await ctx.db.batch(stmts);
+  // Pindah kamar lewat edit penyewa harus ikut tercatat di riwayat tenant_kamar,
+  // kalau tidak, kontrak lama tetap terbuka dan pindahKamar() berikutnya menutup kontrak yang salah.
+  if (t.kamar_id && kamarId && t.kamar_id !== kamarId) {
+    await ctx.db.prepare("update tenant_kamar set sampai=? where tenant_id=? and kamar_id=? and sampai is null and mulai<=?")
+      .bind(ctx.today, t.id, t.kamar_id, ctx.today).run().catch(() => {});
+    await ctx.db.prepare("insert into tenant_kamar(tenant_id, kamar_id, mulai, sampai, created_by) values(?,?,?,null,?)")
+      .bind(t.id, kamarId, ctx.today, ctx.user && ctx.user.id ? ctx.user.id : null).run().catch(() => {});
+  }
+  if (status === 'keluar') {
+    await ctx.db.prepare("update tenant_kamar set sampai=? where tenant_id=? and sampai is null")
+      .bind(tglKeluar || ctx.today, t.id).run().catch(() => {});
+  }
   await ctx.audit('tenant.update', 'tenants', t.id,
     { nama: t.nama, hp: t.hp, kamar_id: t.kamar_id, kontak_darurat: t.kontak_darurat, hp_darurat: t.hp_darurat, status: t.status },
     { nama, hp, kamar_id: kamarId, kontak_darurat: kontak, hp_darurat: hpDarurat, ktp: !!(ktpKeyBaru || t.ktp_key), status });
@@ -566,6 +583,85 @@ export async function checkoutTenant(ctx, tenantId, roomNo) {
   await ctx.audit('checkout', 'tenants', t.id, { status: 'aktif' },
     { status: 'keluar', tgl_keluar: ctx.today, tunggakan: sisa.s });
   return `Check-out selesai. Kamar ${room ? room.no_kamar : roomNo} kini kosong.` + (sisa.s ? ` Tagihan belum lunas ${rupiah(sisa.s)} tetap tercatat sebagai tunggakan.` : '');
+}
+
+// Pindah kamar sesuai tanggal berlaku (bisa di masa depan = \"pindah akhir bulan\").
+// Riwayat sewa disimpan di tenant_kamar: kontrak lama ditutup pada tgl-1, kontrak baru
+// dibuka pada tgl. Penyewa yang aktif di kamar tujuan menolak pindahan (satu kontrak per
+// kamar aktif), kecuali tanggal pindah sesudah tanggal keluarnya penyewa itu.
+//
+// BATAS HARI INI: `tenants.kamar_id` selalu menunjukkan kamar yang berlaku hari ini
+// (atau tujuan pindah terdekat). Pindahan bertanggal masa depan TIDAK langsung mengubah
+// kamar & tagihan sekarang; komentar pindahKamar() menjelaskan kenapa penagihan sengaja
+// tidak disentuh otomatis. Baris tenant_kamar bertanggal depan diproses modul saat
+// `tools/proses-pindah.sh` dijalankan (di luar aplikasi), atau dilaporkan di UI sebagai
+// \"pindah terjadwal\".
+export async function pindahKamar(ctx, data) {
+  const t = await ctx.db.prepare('select * from tenants where kode=? or id=?')
+    .bind(String(data.id || ''), Number(data.id) || -1).first();
+  if (!t) throw httpError(404, 'Penyewa tidak ditemukan.');
+  if (t.status !== 'aktif') throw httpError(409, 'Penyewa yang sudah keluar tidak bisa dipindah kamar.');
+  const noBaru = String(data.kamar || '').trim();
+  if (!noBaru) throw httpError(400, 'Kamar tujuan wajib dipilih.');
+  const tujuan = await ctx.db.prepare('select * from rooms where no_kamar=?').bind(noBaru).first();
+  if (!tujuan) throw httpError(404, `Kamar ${noBaru} tidak ditemukan.`);
+  if (tujuan.id === t.kamar_id) throw httpError(400, 'Penyewa sudah menempati kamar itu.');
+  const tgl = toISODate(data.tanggal);
+  if (!tgl) throw httpError(400, 'Tanggal pindah tidak valid.');
+  if (tgl < t.tgl_masuk) throw httpError(400, 'Tanggal pindah tidak boleh sebelum tanggal check-in.');
+
+  const asal = t.kamar_id ? await ctx.db.prepare('select * from rooms where id=?').bind(t.kamar_id).first() : null;
+  const noAsal = asal ? asal.no_kamar : '-';
+
+  // bentrok di kamar tujuan: ada penyewa aktif lain yang belum keluar pada tgl pindah
+  const bentrok = await ctx.db.prepare(
+    "select kode, nama, coalesce(tgl_keluar,'') as keluar from tenants where kamar_id=? and status='aktif' and id<>?"
+  ).bind(tujuan.id, t.id).first();
+  if (bentrok && (!bentrok.keluar || bentrok.keluar >= tgl))
+    throw httpError(409, `Kamar ${noBaru} masih ditempati ${bentrok.nama} sampai ${bentrok.keluar || 'tanpa tanggal keluar'}.`);
+
+  // riwayat kontrak: tutup yang lama, buka yang baru
+  const riwayat = await ctx.db.prepare(
+    "select count(*) as n from sqlite_master where type='table' and name='tenant_kamar'"
+  ).first();
+  const stmts = [];
+  if (riwayat && riwayat.n) {
+    // BATAS: hanya mengubah kamar penyewa yang BELUM pindah ke kamar lain, supaya
+    // pindahKamar() tidak menutup kontrak kamar yang bukan lagi kamar penyewa itu.
+    // Pindahan bertanggal masa depan (mulai > hari ini) juga tidak diusik.
+    stmts.push(ctx.db.prepare(
+      "update tenant_kamar set sampai=? where tenant_id=? and kamar_id=? and sampai is null and mulai<=? and kamar_id=(select kamar_id from tenants where id=?)"
+    ).bind(tgl, t.id, t.kamar_id, tgl, t.id));
+    stmts.push(ctx.db.prepare(
+      "insert into tenant_kamar(tenant_id, kamar_id, mulai, sampai, created_by) values(?,?,?,null,?)"
+    ).bind(t.id, tujuan.id, tgl, ctx.user && ctx.user.id ? ctx.user.id : null));
+  }
+
+  // kamar hari ini hanya berubah bila pindahan berlaku hari ini/sudah lampau
+  const sudahBerlaku = tgl <= ctx.today;
+  if (sudahBerlaku) {
+    stmts.push(ctx.db.prepare('update tenants set kamar_id=? where id=?').bind(tujuan.id, t.id));
+    if (t.kamar_id) stmts.push(ctx.db.prepare(
+      "update rooms set status='tersedia' where id=? and status='terisi' and id not in (select kamar_id from tenants where status='aktif' and kamar_id is not null)"
+    ).bind(t.kamar_id));
+    stmts.push(ctx.db.prepare("update rooms set status='terisi' where id=?").bind(tujuan.id));
+  } else {
+    // Kamar tujuan TIDAK ditandai 'dipesan': skema rooms hanya mengenal tersedia/terisi/perbaikan.
+    // Reservasi masa depan cukup dari baris tenant_kamar bertanggal depan; pendaftaran penyewa
+    // baru di kamar itu ditolak lewat cekPesanKamar() di createTenant.
+  }
+  await ctx.db.batch(stmts);
+  await ctx.audit('tenant.pindah', 'tenants', t.id,
+    { kamar: noAsal, kamar_id: t.kamar_id },
+    { kamar: noBaru, kamar_id: tujuan.id, tgl, berlaku: sudahBerlaku ? 'sekarang' : 'terjadwal' });
+
+  const info = await ctx.db.prepare(
+    "select coalesce(sum(jumlah),0) as s from bills where tenant_id=? and status='belum_bayar'"
+  ).bind(t.id).first();
+  const pesan = sudahBerlaku
+    ? `Pindah kamar selesai: ${t.nama} dari ${noAsal} ke ${noBaru} sejak ${tgl}.`
+    : `Pindah kamar dijadwalkan: ${t.nama} ke ${noBaru} mulai ${tgl}. Kamar ${noBaru} ditandai terpesan.`;
+  return pesan + (info && info.s ? ` Tagihan lama (${rupiah(info.s)}) tetap mengikuti kontrak berikutnya; periksa tagihan bila harganya berbeda.` : '');
 }
 
 export async function deleteTenant(ctx, tenantId, roomNo) {
