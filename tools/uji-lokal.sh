@@ -34,12 +34,17 @@ UJI_TANPA_GANTI=1 UJI_HP=081200000100 node tools/buat-akun.mjs admin 'Kostsaya12
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$PERSIST/akun.sql" >/dev/null 2>&1
 rm -f "$PERSIST/akun.sql"
 
-# 3) server
+# 3) bucket R2 lokal: `wrangler r2 bucket create` tidak mengenal --local, jadi bucket
+#    dibuat langsung ke persist lokal (metadata sqlite miniflare). Tanpa ini `wrangler dev`
+#    menolak start saat wrangler.toml memuat binding [[r2_buckets]].
+/usr/bin/python3 tools/r2-lokal.py "$PERSIST" hadekost-ktp >/tmp/hk-r2.log 2>&1 || { echo "R2 LOKAL GAGAL"; tail -5 /tmp/hk-r2.log; exit 1; }
+
+# 4) server
 setsid npx wrangler dev --local --persist-to "$PERSIST" --var COOKIE_SECURE:false --port 8787 >/tmp/hkdev.log 2>&1 < /dev/null &
 echo $! > "$PIDF"
 for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:8787/api/session && break; sleep 1; done
 
-# 4) uji
+# 5) uji
 /usr/bin/python3 - <<'PY'
 src=open('tools/uji-e2e.sh').read()
 extra=open('tools/uji-pindah-kamar.sh').read()

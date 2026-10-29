@@ -1073,19 +1073,34 @@ export default {
     // disimpan sebagai pub/app.html (bukan nama yang dilayani otomatis) dan disajikan
     // dari sini untuk "/" dan "/index.html".
     if (req.method === 'GET' || req.method === 'HEAD') {
-      const hal = SajikanHalaman(env, url);
+      const hal = await SajikanHalaman(env, url);
       if (hal) return hal;
     }
 
     // Berkas statis lain (d1-adapter.js, ikon, manifest) tetap lewat lapisan aset.
     // Header ditempel pada objek respons apa adanya (jangan dibuat ulang — respons aset
     // bisa berupa stream dan akan kehilangan isinya).
-    const res = await env.ASSETS.fetch(req);
-    res.headers.set('x-frame-options', 'DENY');
-    res.headers.set('x-content-type-options', 'nosniff');
-    res.headers.set('referrer-policy', 'same-origin');
-    res.headers.set('permissions-policy', 'geolocation=(), camera=(), microphone=()');
-    return res;
+    //
+    // Jalur yang tidak ada TIDAK dijawab lapisan aset: manifest aset SPA mengembalikan
+    // null untuk path tak dikenal (bukan 404), dan membaca .headers pada null membuat
+    // Worker melempar exception -> 500 ke pengunjung & membengkakkan metrik error.
+    // /favicon.ico, /login, /robots.txt, dsb. dulu semuanya 500 karena ini.
+    let res = null;
+    try { res = await env.ASSETS.fetch(req); } catch (e) { res = null; }
+    if (!res || !(res instanceof Response)) {
+      return new Response('Tidak ditemukan.', {
+        status: 404,
+        headers: kepalaKeamanan(new Headers({ 'content-type': 'text/plain; charset=utf-8' }), false),
+      });
+    }
+    // Header respons lapisan aset bersifat immutable, jadi salin dulu lalu bungkus ulang.
+    const h = new Headers(res.headers);
+    h.set('x-frame-options', 'DENY');
+    h.set('x-content-type-options', 'nosniff');
+    h.set('referrer-policy', 'same-origin');
+    h.set('permissions-policy', 'geolocation=(), camera=(), microphone=()');
+
+    return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
   },
 };
 

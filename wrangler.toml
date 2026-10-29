@@ -30,3 +30,7 @@ COOKIE_SECURE = "true"
 # [[r2_buckets]]
 # binding = "KTP"
 # bucket_name = "hadekost-ktp"
+
+[[r2_buckets]]
+binding = "KTP"
+bucket_name = "hadekost-ktp"
