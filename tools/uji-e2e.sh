@@ -23,6 +23,10 @@ ck "API tanpa login ditolak 401" "$(code "$B/api/dashboard")" "401"
 ck "Halaman utama tersaji 200" "$(code "$B/")" "200"
 ck "index.html memuat adapter" "$(grep -c 'src="/d1-adapter.js"' /tmp/hade_body)" "1"
 ck "app.js abaikan event input pada form login (bukan submit)" "$(curl -s "$B/app.js" | grep -c "event.type !== 'submit'")" "1"
+# Tombol dropdown akun dipetakan lewat AKSI[nama], jadi nama fungsi TIDAK boleh berkurung:
+# "handleLogout()" tidak pernah ditemukan dan tombolnya mati tanpa galat.
+ck "data-h tombol keluar & ganti password tanpa kurung" "$(curl -s "$B/app.js" | grep -c -E 'data-h="(handleLogout|openGantiPassword)"')" "2"
+ck "tidak ada data-h bernama fungsi berkurung" "$(curl -s "$B/app.js" | grep -v "^\s*//" | grep -c -E 'data-h="[a-zA-Z_][a-zA-Z0-9_]*\(\)"')" "0"
 ck "app.js memblokir submit login kosong (tidak menembak API)" "$(curl -s "$B/app.js" | grep -c 'if (!uName && !pWord)')" "1"
 ck "Jalur tak dikenal dijawab 404 (bukan 500)" "$(curl -s -o /dev/null -w '%{http_code}' "$B/tidak-ada-uji.html")" "404"
 ck "favicon tak dikenal dijawab 404" "$(curl -s -o /dev/null -w '%{http_code}' "$B/favicon.ico")" "404"

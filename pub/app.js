@@ -604,10 +604,10 @@
           <div class="truncate">${activeUser.fullname}</div>
           <div class="text-[10px] text-slate-400">@${esc(activeUser.username || '-')} • ${esc(labelRole)}</div>
         </div>
-        <button data-h="openGantiPassword()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 flex items-center gap-2 text-xs font-semibold transition">
+        <button data-h="openGantiPassword" class="w-full text-left px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 flex items-center gap-2 text-xs font-semibold transition">
           <i class="fas fa-key text-[10px]"></i> Ganti Password
         </button>
-        <button data-h="handleLogout()" class="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-50 text-rose-600 flex items-center gap-2 text-xs font-semibold transition">
+        <button data-h="handleLogout" class="w-full text-left px-3 py-2 rounded-lg hover:bg-rose-50 text-rose-600 flex items-center gap-2 text-xs font-semibold transition">
           <i class="fas fa-sign-out-alt text-[10px]"></i> Keluar / Logout
         </button>`;
     }
