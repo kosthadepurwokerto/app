@@ -2370,7 +2370,7 @@
 
         return `
           <tr class="hover:bg-slate-50 transition border-b border-slate-100 last:border-0 text-slate-700 text-xs md:text-sm">
-            <td class="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">${item[1]}</td>
+            <td class="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">${esc(item[1])}</td>
             <td class="py-4 px-4">
               <span class="px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${colorClass}">
                 ${item[2]}

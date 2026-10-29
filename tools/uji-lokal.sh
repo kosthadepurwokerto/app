@@ -46,10 +46,10 @@ for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:8787/api/session 
 # 5) uji
 /usr/bin/python3 - <<'PY'
 src=open('tools/uji-e2e.sh').read()
-extra=open('tools/uji-pindah-kamar.sh').read()
+extra=open('tools/uji-pindah-kamar.sh').read()+open('tools/uji-nominal.sh').read()
 ekor="echo\nif [ $fail -eq 0 ]"
 i=src.rindex(ekor)
-if '== PINDAH KAMAR ==' not in src:
+if '== VALIDASI NOMINAL' not in src:
     src=src[:i]+extra+src[i:]
 open('/tmp/uji-e2e-gabung.sh','w').write(src)
 PY

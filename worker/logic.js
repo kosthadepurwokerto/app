@@ -76,10 +76,35 @@ export function klemJatuhTempo(iso) {
   return `${y}-${p(m)}-${p(Math.max(1, Math.min(31, d || 1)))}`;
 }
 
+// Angka dari klien boleh berupa number atau teks ("500000", " 1.500 ", "Rp 2.000").
+// Aturan: HANYA pemisah ribuan yang dibuang (. atau , dikelompokkan 3 digit) dan awalan "Rp".
+// Desimal dikenali dari ". atau ," yang TIDAK berpola ribuan — jadi "1.500" = 1500 dan
+// "12,5" = 12.5. Sebelumnya semua karakter selain digit dibuang, sehingga "Rp 12.500"
+// tersimpan 12500, "-5000" menjadi 5000, dan "1,5" menjadi 15 (silent corruption).
 export const num = (v) => {
-  if (v === null || v === undefined || v === '') return 0;
-  const n = Number(String(v).replace(/[^0-9.-]/g, ''));
-  return Number.isFinite(n) ? n : 0;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : 0;
+  if (v === null || v === undefined || v === true || v === false || typeof v === 'object') return 0;
+  let s = String(v).trim().replace(/^rp\.?\s*/i, '').replace(/\s+/g, '');
+  if (!s) return 0;
+  const negatif = s.startsWith('-');
+  s = s.replace(/^[-+]/, '');
+  if (!/^[0-9.,]+$/.test(s)) return 0;
+  if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');          // 1.500.000
+  else if (/^\d{1,3}(,\d{3})+$/.test(s)) s = s.replace(/,/g, '');       // 1,500,000
+  else if (/^\d+,\d{1,2}$/.test(s)) s = s.replace(',', '.');            // 12,5
+  else if (/[.,]/.test(s) && !/^\d*\.\d+$/.test(s)) return 0;           // sisa format asing
+  const n = Number(s);
+  if (!Number.isFinite(n)) return 0;
+  return negatif ? -n : n;
+};
+// Nominal uang (ledger, pembayaran, harga): integer positif, dibatasi 1..999.999.999.999.
+// Dikembalikan null bila input tidak sah supaya pemanggil bisa menolak dengan 400,
+// bukan diam-diam mencatat 0 atau nilai hasil parsing yang salah.
+export const nominalUang = (v) => {
+  if (typeof v !== 'number' && typeof v !== 'string') return null;
+  const n = num(v);
+  if (!Number.isInteger(n) || n <= 0 || n > 999999999999) return null;
+  return n;
 };
 export const rupiah = (v) => 'Rp ' + Number(v || 0).toLocaleString('id-ID');
 export const bulanPeriode = (iso) => iso.slice(0, 8) + '01';
@@ -349,7 +374,10 @@ export async function recordPayment(ctx, data) {
     jt = klemJatuhTempo(addMonths(jt, 1));
     daftar.push({ id: null, tenant_id: t.id, periode: bulanPeriode(jt), jatuh_tempo: jt, jumlah: acuan.jumlah, status: 'belum_bayar', baru: true });
   }
-  const jumlah = num(data.jumlah) || daftar.reduce((a, b) => a + num(b.jumlah), 0);
+  const jumlahMasuk = data.jumlah === null || data.jumlah === undefined || data.jumlah === '' ? null : nominalUang(data.jumlah);
+  if (jumlahMasuk === null && !(data.jumlah === null || data.jumlah === undefined || data.jumlah === ''))
+    throw httpError(400, 'Nominal pembayaran harus berupa angka bulat lebih dari 0.');
+  const jumlah = jumlahMasuk || daftar.reduce((a, b) => a + num(b.jumlah), 0);
   if (jumlah <= 0) throw httpError(400, 'Nominal pembayaran harus lebih dari 0.');
   const total = daftar.reduce((a, b) => a + num(b.jumlah), 0);
   if (total !== jumlah)
@@ -553,8 +581,8 @@ export async function updateTenant(ctx, data) {
 }
 
 export async function addOpsTransaction(ctx, data) {
-  const jumlah = num(data.jumlah);
-  if (jumlah <= 0) throw httpError(400, 'Nominal transaksi harus lebih dari 0.');
+  const jumlah = nominalUang(data.jumlah);
+  if (jumlah == null) throw httpError(400, 'Nominal transaksi harus berupa angka bulat lebih dari 0 (maksimal Rp 999.999.999.999).');
   const jenis = String(data.jenis || '').toLowerCase();
   if (!['pendapatan', 'pengeluaran', 'neraca'].includes(jenis)) throw httpError(400, `Jenis transaksi "${data.jenis}" tidak dikenal.`);
   const tgl = toISODate(data.tanggal) || ctx.today;
