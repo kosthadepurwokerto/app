@@ -21,16 +21,20 @@ COOKIE_SECURE = "true"
 # Tanpa binding, kode otomatis menyimpan foto di tabel ktp_berkas (D1) — tetap jalan,
 # tapi D1 membatasi ukuran baris ~2 MB, jadi hanya cocok sementara.
 #
-# Mengaktifkan R2:
-#   1. Buat API token Cloudflare dengan izin  Account > Workers R2 Storage: Edit
-#      (token yang ada sekarang tidak punya izin R2 -> error 10000/Authentication error)
+# STATUS: binding di bawah AKTIF untuk lokal/uji. Deploy produksi dengan binding ini akan
+# DITOLAK (R2 bucket not found, kode 10085) sampai bucket hadekost-ktp benar-benar dibuat.
+# Pembuatan bucket butuh token berizin "Account > Workers R2 Storage: Edit" — token di
+# ~/.cf_token belum punya (R2 membalas Authentication error 10000).
+#
+# Mengaktifkan R2 di produksi:
+#   1. Ganti token di ~/.cf_token dengan token berizin Workers R2 Storage: Edit,
+#      atau buat bucket lewat dashboard Cloudflare (R2 > Create bucket > hadekost-ktp).
 #   2. CLOUDFLARE_API_TOKEN=... npx wrangler r2 bucket create hadekost-ktp
-#   3. Buka komentar tiga baris di bawah, lalu npx wrangler deploy
+#   3. npx wrangler deploy
 #   4. Foto lama di D1 tidak ikut pindah; unggah ulang foto yang perlu disimpan di R2.
+# Selama langkah 1 belum dilakukan, deploy produksi harus tanpa baris [[r2_buckets]]
+# (kode otomatis menyimpan foto di tabel ktp_berkas/D1).
 # [[r2_buckets]]
 # binding = "KTP"
 # bucket_name = "hadekost-ktp"
 
-[[r2_buckets]]
-binding = "KTP"
-bucket_name = "hadekost-ktp"
