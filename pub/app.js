@@ -265,8 +265,10 @@
       // submit → API dipanggil dengan nomor setengah jadi ("0") → modal "Akses Ditolak"
       // muncul sebelum pengguna menekan tombol Masuk.
       if (event && event.type && event.type !== 'submit') {
-        if (event.cancelable) event.preventDefault();
-        return false;
+        // Jangan react ke klik yang naik dari kontrol isian (checkbox, tombol, dsb.):
+        // event itu bukan submit form. preventDefault() di sini membuat checkbox "ingat saya"
+        // tidak bisa dicentang/dibuang. Hanya event submit yang diproses.
+        return;
       }
       if (event && event.cancelable) event.preventDefault();
       const elU = document.getElementById('login-username');
@@ -3637,7 +3639,10 @@ document.addEventListener('click', function (e) {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   jalankanAksi(el, 'click', e);
 }, false);
-['submit', 'input', 'change'].forEach(function (jenis) {
+// Hanya form/submit yang dipetakan ke handler. `input`/`change` sengaja TIDAK dipetakan:
+// keduanya naik (bubble) dari kolom isian ke <form data-h="...">, sehingga setiap karakter
+// yang diketik ikut memicu handler form (bug: login terkirim setengah jadi, checkbox mati).
+['submit'].forEach(function (jenis) {
   document.addEventListener(jenis, function (e) {
     var el = cariAksi(e.target);
     if (!el) return;
