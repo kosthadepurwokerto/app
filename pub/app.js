@@ -259,9 +259,15 @@
     }
 
     function handleLoginSubmit(event) {
-      // Halaman login bisa ikut ter-submit sendiri (Enter di kolom sandi, autofill browser,
-      // atau submit programatis): jangan kirim apa pun kalau pengguna belum mengetik apa-apa,
-      // karena server lalu membalas 400 "Login hanya bisa memakai No. HP" seolah namanya salah.
+      // Form ini hanya boleh dikirim lewat tombol submit / Enter — bukan dari peristiwa
+      // `input` (dulu: mendeteksi autofill). Bug nyata: setiap karakter yang diketik di kolom
+      // No. HP naik ke <form> sebagai `input`, lalu handler global memperlakukannya sebagai
+      // submit → API dipanggil dengan nomor setengah jadi ("0") → modal "Akses Ditolak"
+      // muncul sebelum pengguna menekan tombol Masuk.
+      if (event && event.type && event.type !== 'submit') {
+        if (event.cancelable) event.preventDefault();
+        return false;
+      }
       if (event && event.cancelable) event.preventDefault();
       const elU = document.getElementById('login-username');
       const elP = document.getElementById('login-password');
