@@ -15,26 +15,13 @@ migrations_dir = "db"
 [vars]
 COOKIE_SECURE = "true"
 
-# Foto KTP penyewa (berkas biner TIDAK ditaruh di D1)
-# Selama bucket belum ada, binding ini HARUS dikomentari: `wrangler deploy` menolak
-# konfigurasi yang menunjuk bucket tidak ada (R2 bucket not found, kode 10085).
-# Tanpa binding, kode otomatis menyimpan foto di tabel ktp_berkas (D1) — tetap jalan,
-# tapi D1 membatasi ukuran baris ~2 MB, jadi hanya cocok sementara.
+# Foto KTP penyewa: berkas biner di R2 (bukan D1 — D1 membatasi baris ~2 MB).
+# Bucket hadekost-ktp harus dibuat lebih dulu lewat dashboard Cloudflare
+# (R2 > Create bucket). Bila bucket tidak ada, `wrangler deploy` DITOLAK dengan
+# "R2 bucket not found" (kode 10085) — itu benar, jangan hapus binding ini diam-diam:
+# menghapusnya membuat produksi kembali menyimpan foto ke D1 tanpa terlihat.
 #
-# STATUS: binding di bawah AKTIF untuk lokal/uji. Deploy produksi dengan binding ini akan
-# DITOLAK (R2 bucket not found, kode 10085) sampai bucket hadekost-ktp benar-benar dibuat.
-# Pembuatan bucket butuh token berizin "Account > Workers R2 Storage: Edit" — token di
-# ~/.cf_token belum punya (R2 membalas Authentication error 10000).
-#
-# Mengaktifkan R2 di produksi:
-#   1. Ganti token di ~/.cf_token dengan token berizin Workers R2 Storage: Edit,
-#      atau buat bucket lewat dashboard Cloudflare (R2 > Create bucket > hadekost-ktp).
-#   2. CLOUDFLARE_API_TOKEN=... npx wrangler r2 bucket create hadekost-ktp
-#   3. npx wrangler deploy
-#   4. Foto lama di D1 tidak ikut pindah; unggah ulang foto yang perlu disimpan di R2.
-# Selama langkah 1 belum dilakukan, deploy produksi harus tanpa baris [[r2_buckets]]
-# (kode otomatis menyimpan foto di tabel ktp_berkas/D1).
-# [[r2_buckets]]
-# binding = "KTP"
-# bucket_name = "hadekost-ktp"
-
+# Foto lama di tabel ktp_berkas (D1) tidak ikut pindah; unggah ulang foto yang perlu.
+[[r2_buckets]]
+binding = "KTP"
+bucket_name = "hadekost-ktp"

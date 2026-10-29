@@ -92,6 +92,8 @@ printf '\x89PNG\r\n\x1a\n' > /tmp/ktp-uji.png   # cukup dikenali sebagai gambar 
 KRES=$(code -b $J -X POST -F "file=@/tmp/ktp-uji.png;type=image/png" "$B/api/ktp")
 ck "Unggah foto KTP berhasil" "$KRES" "200"
 KTKEY=$(jq_ 'd.kunci')
+simpan_ktp() { npx wrangler d1 execute hadekost-db --local --persist-to "${PERSIST:-/tmp/hklocal}" --json --command "select data_baru from audit_log where aksi='ktp.upload' order by created_at desc limit 1" 2>/dev/null | node -e "let b='';process.stdin.on('data',c=>b+=c).on('end',()=>{try{console.log(JSON.parse(JSON.parse(b)[0].results[0].data_baru).simpan)}catch{console.log('')}})"; }
+ck "Unggahan KTP tercatat disimpan di r2 (bukan fallback d1)" "$(simpan_ktp)" "r2"
 ck "Format salah ditolak 400" "$(printf 'x' > /tmp/bukan.txt; code -b $J -X POST -F 'file=@/tmp/bukan.txt;type=text/plain' "$B/api/ktp")" "400"
 ck "Unggah tanpa login ditolak 401" "$(code -X POST -F "file=@/tmp/ktp-uji.png;type=image/png" "$B/api/ktp")" "401"
 ck "Kontak darurat tersimpan saat registrasi" "$(actj $J "{\"action\":\"tenants.update\",\"data\":{\"id\":\"TEN-0001\",\"kontakDarurat\":\"Ibu Ratna\",\"hpDarurat\":\"08133334444\",\"ktpKey\":\"$KTKEY\",\"ktpTipe\":\"image/png\"}}")" "200"
