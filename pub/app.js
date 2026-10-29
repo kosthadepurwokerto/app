@@ -3664,3 +3664,56 @@ document.addEventListener('error', function (e) {
   var t = e.target;
   if (t && t.nodeType === 1 && atr(t, 'data-h') !== null) t.src = atr(t, 'data-h');
 }, true);
+
+/* ---- Kolom uang: teks + pemisah ribuan otomatis (menerima 1.500 / 1,500 / Rp 1.500) ----
+   Tujuan: pengguna Excel bisa ketik/salin "1.500" tanpa ditolak input type=number.
+   ATURAN PENTING: tanda minus / nilai tidak valid TIDAK boleh "diperbaiki" di klien.
+   Dulu "-5.000" dibersihkan jadi "5000" lalu tersimpan sebagai pengeluaran positif
+   (uang keluar berubah jadi uang masuk, lolos dari validasi server). Sekarang nilai
+   negatif tetap dikirim apa adanya supaya server menolaknya dengan pesan jelas. */
+window.__rapikanUang = function (el) {
+  if (!el || el.nodeType !== 1 || !el.hasAttribute || !el.hasAttribute('data-uang')) return;
+  var v = String(el.value == null ? '' : el.value);
+  if (!/^\s*(?:rp\.?\s*)?[0-9][0-9.,\s]*\s*$/i.test(v)) return; // negatif/ngawur: biarkan
+  var d = v.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+  var tampil = d ? Number(d).toLocaleString('id-ID') : '';
+  if (el.value !== tampil) {
+    var ujung = el.selectionStart === el.value.length;
+    el.value = tampil;
+    if (ujung) { try { el.setSelectionRange(tampil.length, tampil.length); } catch (_) {} }
+  }
+};
+window.__digitUang = function (el) {
+  if (!el || !el.hasAttribute || !el.hasAttribute('data-uang')) return;
+  var v = String(el.value == null ? '' : el.value);
+  if (/^\s*(?:rp\.?\s*)?[0-9][0-9.,\s]*\s*$/i.test(v)) el.value = v.replace(/[^0-9]/g, '');
+};
+(function () {
+  var terpasang = typeof WeakSet === 'function' ? new WeakSet() : null;
+  function pasang(el) {
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-uang')) return;
+    if (terpasang) { if (terpasang.has(el)) return; terpasang.add(el); }
+    el.addEventListener('input', function () { window.__rapikanUang(el); });
+    el.addEventListener('blur', function () { window.__rapikanUang(el); });
+    window.__rapikanUang(el);
+  }
+  function sapu(akar) {
+    var semua = (akar || document).querySelectorAll('input[data-uang]');
+    for (var i = 0; i < semua.length; i++) pasang(semua[i]);
+  }
+  window.__sapuUang = sapu;
+  function mulai() { sapu(document); }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') mulai();
+  else document.addEventListener('DOMContentLoaded', mulai);
+  try {
+    new MutationObserver(function () { sapu(document); })
+      .observe(document.documentElement, { childList: true, subtree: true });
+  } catch (_) {}
+  // Form dikirim: nilai jadi digit polos (server parsing tidak berubah).
+  document.addEventListener('submit', function (e) {
+    var f = e.target;
+    if (!f || !f.querySelectorAll) return;
+    var el = f.querySelectorAll('input[data-uang]');
+    for (var i = 0; i < el.length; i++) window.__digitUang(el[i]);
+  }, true);
+})();
