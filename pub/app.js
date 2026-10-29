@@ -3592,6 +3592,11 @@ function aksiDariNama(nama) {
 function atr(el, nama) {
   return el && el.getAttribute ? el.getAttribute(nama) : null;
 }
+/** Elemen pemicu aksi TERDEKAT yang merupakan <form>. */
+function cariAksiForm(el) {
+  var f = el && el.closest ? el.closest('form[data-h]') : null;
+  return f && f === el ? f : null;
+}
 function argAksi(el) {
   var mentah = atr(el, 'data-h-arg');
   if (!mentah) return [];
@@ -3636,6 +3641,11 @@ function jalankanAksi(el, jenis, event) {
 document.addEventListener('click', function (e) {
   var el = cariAksi(e.target);
   if (!el) return;
+  // Kontrol di dalam <form data-h="..."> membawa aksi yang sama dengan form-nya. Klik apa pun
+  // di dalam form (kolom, label, tombol batal) menaik sebagai 'click' dan dulu ikut menjalankan
+  // handler submit → modal "Belum Lengkap" muncul padahal pengguna baru mulai mengisi.
+  // Tombol submit tetap dilayani listener 'submit' di bawah.
+  if (cariAksiForm(el)) return;
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   jalankanAksi(el, 'click', e);
 }, false);

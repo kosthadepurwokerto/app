@@ -28,6 +28,10 @@ ck "app.js abaikan event input pada form login (bukan submit)" "$(curl -s "$B/ap
 ck "data-h tombol keluar & ganti password tanpa kurung" "$(curl -s "$B/app.js" | grep -c -E 'data-h="(handleLogout|openGantiPassword)"')" "2"
 ck "tidak ada data-h bernama fungsi berkurung" "$(curl -s "$B/app.js" | grep -v "^\s*//" | grep -c -E 'data-h="[a-zA-Z_][a-zA-Z0-9_]*\(\)"')" "0"
 ck "app.js memblokir submit login kosong (tidak menembak API)" "$(curl -s "$B/app.js" | grep -c 'if (!uName && !pWord)')" "1"
+# Klik di dalam <form data-h> tidak boleh dijalankan sebagai aksi: dulu klik kolom Tambah Kost
+# ikut memanggil simpanKostBaru dan memunculkan modal "Belum Lengkap" padahal baru mulai mengisi.
+ck "app.js abaikan klik yang menaik dari form ber-data-h" "$(curl -s "$B/app.js" | grep -c 'if (cariAksiForm(el)) return;')" "1"
+ck "fungsi cariAksiForm ada di app.js" "$(curl -s "$B/app.js" | grep -c 'function cariAksiForm')" "1"
 ck "Jalur tak dikenal dijawab 404 (bukan 500)" "$(curl -s -o /dev/null -w '%{http_code}' "$B/tidak-ada-uji.html")" "404"
 ck "favicon tak dikenal dijawab 404" "$(curl -s -o /dev/null -w '%{http_code}' "$B/favicon.ico")" "404"
 ck "Berkas statis aset tetap 200 dengan header aman" "$(curl -s -D- -o /dev/null "$B/app.js" | grep -ci 'x-content-type-options: nosniff')" "1"
