@@ -259,9 +259,35 @@
     }
 
     function handleLoginSubmit(event) {
-      event.preventDefault();
-      const uName = document.getElementById('login-username').value.trim();
-      const pWord = document.getElementById('login-password').value;
+      // Halaman login bisa ikut ter-submit sendiri (Enter di kolom sandi, autofill browser,
+      // atau submit programatis): jangan kirim apa pun kalau pengguna belum mengetik apa-apa,
+      // karena server lalu membalas 400 "Login hanya bisa memakai No. HP" seolah namanya salah.
+      if (event && event.cancelable) event.preventDefault();
+      const elU = document.getElementById('login-username');
+      const elP = document.getElementById('login-password');
+      if (!elU || !elP) return false;
+      const uName = (elU.value || '').trim();
+      const pWord = elP.value || '';
+      if (!uName && !pWord) {
+        setTombolLogin(false);
+        return false;
+      }
+      // Tanpa nomor HP sama sekali (mis. sandi terisi autofill, kolom nomor masih kosong):
+      // beri tahu sekali, jangan kirim ke API.
+      if (!uName) {
+        setTombolLogin(false);
+        elU.focus();
+        elU.classList.add('ring-2', 'ring-rose-400');
+        setTimeout(() => elU.classList.remove('ring-2', 'ring-rose-400'), 2000);
+        showCustomAlert('Nomor HP Kosong', 'Isi No. HP yang terdaftar lebih dulu, contoh 081234567890.', false);
+        return false;
+      }
+      // Sudah ada isinya tapi belum tampak seperti nomor HP: tandai kolomnya, tetap kirim
+      // supaya pesan dari server (yang tahu aturan persisnya) tetap tampil.
+      if (!hampirNomorHp(uName)) {
+        elU.classList.add('ring-2', 'ring-rose-400');
+        setTimeout(() => elU.classList.remove('ring-2', 'ring-rose-400'), 2000);
+      }
       // Kost TIDAK lagi wajib diketik: utamakan kolom (bila dibuka), lalu ?kost= dari tautan.
       // Kalau kosong, server memakai kost milik akun (username unik).
       const kodeKost = ((document.getElementById('login-kost') || {}).value || '').trim()
@@ -292,6 +318,17 @@
           showCustomAlert("Akses Ditolak", err.message || "Login gagal.", false);
         })
         .finally(() => setTombolLogin(false));
+    }
+
+    /**
+     * Cek longgar: apakah isian ini "sedang diketik sebagai nomor HP"?
+     * Dipakai hanya untuk mencegah kiriman ke server saat kolom belum berisi apa pun.
+     * Validasi ketat tetap di server (logic.miripNomorHp) — format diterima di sini harus
+     * mencakup semua bentuk yang diterima server: 0812…, 62812…, +62 812…, 0812-3456-7890.
+     */
+    function hampirNomorHp(nilai) {
+      const t = String(nilai || '').replace(/[\s\-().]/g, '');
+      return /^(\+?62|0)8\d{6,}$/.test(t);
     }
 
     /** Ambil sesi (user + kost), terapkan branding, masuk aplikasi. */
