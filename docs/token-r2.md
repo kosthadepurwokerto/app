@@ -1,8 +1,14 @@
-# Token Cloudflare khusus R2 (untuk audit bucket)
+# Token Cloudflare khusus R2 (OPSIONAL — untuk audit bucket saja)
 
-Token di `~/.cf_token` hanya punya izin Workers/D1 — tidak bisa melihat daftar bucket R2
-(`GET /r2/buckets` → 403 / error 10000). Akibatnya kegagalan audit bucket pernah salah
-dibaca sebagai "bucket belum ada". Token terpisah di bawah menutup celah itu.
+**Tidak perlu dibuat** untuk menjalankan atau men-deploy hadekost. Bucket `hadekost-ktp`
+sudah ada dan binding `KTP` sudah aktif di produksi (dibuat lewat dashboard, tanpa token).
+Aplikasi menyimpan dan membaca foto lewat binding itu, bukan lewat token.
+
+Token terpisah di bawah hanya berguna bila ingin **melihat daftar bucket** dari server atau
+menelusuri objek saat diagnosis. Tanpa token ini, `GET /r2/buckets` menjawab 403 /
+error 10000 — itu **izin yang kurang, bukan tanda bucket tidak ada**. Jangan membaca 403
+sebagai "bucket belum dibuat".
+
 
 ## Langkah di dashboard (dilakukan pemilik akun)
 
