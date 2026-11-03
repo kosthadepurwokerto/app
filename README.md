@@ -104,6 +104,8 @@ migrasi berurutan di `db/migrasi-*.sql` yang belum pernah diterapkan (kolom/inde
 bash tools/sql-produksi.sh db/migrasi-00X-nama-migrasi.sql --ya
 ```
 
+Migrasi 022 menambahkan jurnal berpasangan untuk pembayaran sewa: Debit Kas/Bank dan Kredit Pendapatan Sewa. Jalankan migrasi ini satu kali sebelum deploy versi yang menggunakannya; database baru memakai `db/schema.sql`.
+
 Daftar migrasi yang ada sekarang: 001 kolom dasar, 002 kontak penyewa, 003 ktp_berkas,
 004 pengingat WA, 005 sumber penyewa, 006 index kuota, 007 bayar banyak bulan,
 008 tanggal mulai tagihan, 009 bukti bayar, 010 periode lunas, 011 counter kode penyewa,

@@ -42,6 +42,23 @@
       #sidebar-nav > li { flex: 1 1 auto; min-width: calc(33.33% - 8px); }
       #sidebar-nav > li > button { justify-content: center; padding-left: 6px; padding-right: 6px; }
     }
+    @media print {
+      body.mode-cetak-laporan * { visibility: hidden !important; }
+      body.mode-cetak-laporan #sec-laporan,
+      body.mode-cetak-laporan #sec-laporan * { visibility: visible !important; }
+      body.mode-cetak-laporan #sec-laporan {
+        display: block !important; position: absolute; inset: 0 auto auto 0;
+        width: 100%; padding: 20px; margin: 0; background: #fff !important;
+      }
+      body.mode-cetak-laporan .no-print { display: none !important; }
+      body.mode-cetak-laporan #financial-report-content { padding: 0; }
+      body.mode-cetak-laporan #financial-report-content { max-width: none !important; color: #111 !important; }
+      body.mode-cetak-laporan #financial-report-content * { color: #111 !important; box-shadow: none !important; }
+      body.mode-cetak-laporan #financial-report-content .bg-emerald-50,
+      body.mode-cetak-laporan #financial-report-content .bg-rose-50,
+      body.mode-cetak-laporan #financial-report-content .bg-slate-50,
+      body.mode-cetak-laporan #financial-report-content .bg-blue-50 { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
     
     /* Exclusive metallic border & card hover effects */
     .premium-card {

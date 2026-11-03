@@ -201,11 +201,12 @@ export async function audit(env, user, aksi, tabel, rowId, lama, baru) {
   if (!env || !env.DB) return;
   // Baris audit milik kost `user.kost`: tanpa kolom ini, admin satu kost bisa membaca
   // jejak aktivitas kost lain dari tabel yang tidak difilter db-kost (lihat migrasi 018).
+  // Kolom kost ber-FOREIGN KEY ke kosts.kunci, jadi yang dicatat adalah slug (user.kost).
   const baris = [
     user ? user.id : null, user ? user.username : null, aksi, tabel,
     rowId === null || rowId === undefined ? null : String(rowId),
     lama ? JSON.stringify(lama) : null, baru ? JSON.stringify(baru) : null,
-    user && user.kost ? user.kost : null,
+    user ? (user.kost || null) : null,
   ];
   try {
     await env.DB.prepare('insert into audit_log (actor, actor_name, aksi, tabel, row_id, data_lama, data_baru, kost) values (?,?,?,?,?,?,?,?)')
@@ -268,7 +269,9 @@ export async function createTenant(ctx, data) {
   // Nomor terakhir diambil dari tabel counter (bukan max(kode) di tenants), supaya kode penyewa
   // yang sudah dihapus TIDAK dipakai ulang untuk orang lain.
   // `.first()` mengembalikan null bila baris counter belum ada (DB baru), bukan objek kosong
-  const seq = (await ctx.db.prepare("select coalesce(value,0) as n from counters where nama='kode_penyewa'").first()) || { n: 0 };
+  // Counter per kost: tanpa syarat kost, cost lain memakai nomor yang sama (kode bentrok).
+  const seq = (await ctx.db.prepare("select coalesce(value,0) as n from counters where kost=? and nama='kode_penyewa'")
+    .bind(ctx.kost).first()) || { n: 0 };
   let kode = 'TEN-' + String(Number(seq.n) + 1).padStart(4, '0');
   // CATATAN: jangan pakai String(undefined || '').trim() sembarangan — nilai "undefined"
   // jadi teks. Bentuk di bawah aman untuk nilai kosong.
@@ -285,23 +288,18 @@ export async function createTenant(ctx, data) {
   let ins = null, tenantId = null;
   for (let coba = 0; coba < 5 && !ins; coba++) {
     try {
-      // Step ke-1 HANYA klaim kamar. `batch()` D1 tidak selalu memberi meta.changes
-      // pada statement non-terakhir, jadi status klaim tidak boleh dibaca dari hasil batch.
-      // `changes` di D1 mencatat baris yang DITULIS, bukan hanya yang benar-benar berubah
-      // (update ke nilai yang sama tetap dihitung). Karena itu kondisi "kamar masih kosong"
-      // dicek ulang sesudah update: kalau ternyata sudah ada penyewa aktif, klaim dibatalkan.
-      const klaim = await ctx.db.prepare("update rooms set status='terisi' where id=? and status='tersedia'").bind(room.id).run();
-      const terisi = await ctx.db.prepare("select count(*) as n from tenants where kamar_id=? and status='aktif'").bind(room.id).first();
-      if ((terisi && terisi.n > 0) || (klaim && klaim.meta && Number(klaim.meta.changes) === 0)) {
-        throw httpError(409, `Kamar ${noKamar} baru saja diisi petugas lain. Muat ulang halaman.`);
-      }
-      const insRes = await ctx.db.prepare(
+      // Unique partial index di tenants(kamar_id) adalah pengaman atomik race penghunian.
+      // Batch memasukkan penyewa dan mengubah status kamar sekaligus agar gagal constraint
+      // tidak meninggalkan kamar terisi tanpa penyewa.
+      const insStmt = ctx.tulis.prepare(
         `insert into tenants (kode, nama, hp, kamar_id, kontak_darurat, hp_darurat, ktp_key, ktp_tipe, sumber, tgl_masuk, status)
          values (?,?,?,?,?,?,?,?,?,?,?)`
-      ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, sumber, tglMasuk, 'aktif').run();
-      // counter disimpan SEBELUM insert: kalaupun insert gagal/rollback, nomor ini tidak dipakai ulang
-      // (bolong nomor lebih aman daripada dua penyewa dengan kode sama)
-      await ctx.db.prepare("insert into counters (kost, nama, value) values (?, 'kode_penyewa', ?) on conflict(kost, nama) do update set value=excluded.value")
+      ).bind(kode, nama, normPhone(data.hp), room.id, kontak || null, hpDarurat || null, ktpKey, ktp, sumber, tglMasuk, 'aktif');
+      const statusStmt = ctx.db.prepare("update rooms set status='terisi' where id=? and status='tersedia'").bind(room.id);
+      const hasil = await ctx.db.batch([insStmt, statusStmt]);
+      const insRes = hasil[0];
+      // counter monotonic per kost; bolong nomor lebih aman daripada reuse.
+      await ctx.env.DB.prepare("insert into counters (kost, nama, value) values (?, 'kode_penyewa', ?) on conflict(kost, nama) do update set value=excluded.value")
         .bind(ctx.kost, Number(kode.slice(4))).run();
       await ctx.db.prepare('update tenants set tgl_mulai_tagihan=?, hari_penuh=? where id=?').bind(tglMulai, hariPenuh ? 1 : 0, insRes.meta.last_row_id).run();
       ins = insRes;
@@ -310,6 +308,9 @@ export async function createTenant(ctx, data) {
       // D1 kadang melaporkan "UNIQUE constraint failed: index 'sqlite_autoindex_tenants_1'"
       // tanpa menyebut kolom, jadi cukup kenali galat UNIQUE pada insert penyewa.
       const pesanGalat = String(e && e.message || '');
+      if (/idx_tenants_one_active_room/i.test(pesanGalat)) {
+        throw httpError(409, `Kamar ${noKamar} sudah ditempati penyewa aktif.`);
+      }
       if (/UNIQUE/i.test(pesanGalat) && /tenan|sqlite_autoindex/i.test(pesanGalat)) {
         const nomor = Number(kode.slice(4)) + 1;
         kode = 'TEN-' + String(nomor).padStart(4, '0');
@@ -323,7 +324,7 @@ export async function createTenant(ctx, data) {
     throw httpError(500, 'Gagal membuat kode penyewa. Coba lagi.');
   }
 
-  await ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status, kost) values (?,?,?,?,?,?)')
+  await ctx.tulis.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status, kost) values (?,?,?,?,?,?)')
     // Jatuh tempo pertama = tanggal mulai tagihan + 1 bulan (25 Feb -> 25 Mar).
     // Bila bulan pertama tidak penuh, nominal dihitung per hari sisa bulan berjalan.
     .bind(tenantId, bulanPeriode(tglMulai), klemJatuhTempo(addMonths(tglMulai, 1)),
@@ -370,8 +371,14 @@ export async function recordPayment(ctx, data) {
     throw httpError(409, `Tidak ada tagihan terbuka untuk ${t.nama}. Tagihan dibuat otomatis saat registrasi atau setelah pembayaran lunas.`);
   }
   let jt = String(acuan.jatuh_tempo).slice(0, 10);
+  const anchor = toISODate(t.tgl_mulai_tagihan || t.tgl_masuk) || jt;
+  const bulanDariAnchor = (iso) => {
+    const [ay, am] = anchor.split('-').map(Number);
+    const [y, m] = iso.slice(0, 10).split('-').map(Number);
+    return (y - ay) * 12 + (m - am);
+  };
   while (daftar.length < bulan) {
-    jt = klemJatuhTempo(addMonths(jt, 1));
+    jt = addMonths(anchor, bulanDariAnchor(jt) + 1);
     daftar.push({ id: null, tenant_id: t.id, periode: bulanPeriode(jt), jatuh_tempo: jt, jumlah: acuan.jumlah, status: 'belum_bayar', baru: true });
   }
   const jumlahMasuk = data.jumlah === null || data.jumlah === undefined || data.jumlah === '' ? null : nominalUang(data.jumlah);
@@ -388,7 +395,11 @@ export async function recordPayment(ctx, data) {
   // TETAPI diklem juga ke tanggal 1-28 supaya tidak melompati bulan saat bulan pendek
   // (31 Mar -> 30 Apr -> 31 Apr tidak ada; dulu ini membuat periode Mei terlewat).
   const tglJatuh = String(daftar[daftar.length - 1].jatuh_tempo).slice(0, 10);
-  const nextJt = klemJatuhTempo(addMonths(tglJatuh, 1));
+  const anchorJatuh = toISODate(t.tgl_mulai_tagihan || t.tgl_masuk) || tglJatuh;
+  const [ay, am] = anchorJatuh.split('-').map(Number);
+  const [jy, jm] = tglJatuh.split('-').map(Number);
+  const selisihBulan = (jy - ay) * 12 + (jm - am);
+  const nextJt = addMonths(anchorJatuh, selisihBulan + 1);
   const nextPeriode = bulanPeriode(nextJt);
   const dup = await ctx.db.prepare('select id from bills where tenant_id=? and periode=?').bind(t.id, nextPeriode).first();
 
@@ -402,12 +413,23 @@ export async function recordPayment(ctx, data) {
       const stmts = [];
       // tagihan yang belum ada di DB dibuat dulu, lalu dilunasi (per periode, unik per penyewa)
       for (const b of daftar.filter((x) => x.baru)) {
-        stmts.push(ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+        stmts.push(ctx.tulis.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
           .bind(t.id, b.periode, b.jatuh_tempo, b.jumlah, 'belum_bayar'));
       }
       // satu baris pembayaran untuk seluruh bulan (struk menampilkan jumlah bulan bayar)
-      stmts.push(ctx.db.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, bukti_key, created_by) values (?,?,?,?,?,?,?,?)')
+      stmts.push(ctx.tulis.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, bukti_key, created_by) values (?,?,?,?,?,?,?,?)')
         .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), buktiKey || null, ctx.user.id));
+      // Pembayaran tunai sewa: Debit Kas/Bank, Kredit Pendapatan Sewa.
+      // Header + baris jurnal satu batch dengan pembayaran agar tidak tercatat setengah.
+      const jurnalSiap = await ctx.db.prepare("select name from sqlite_master where type='table' and name='journal_entries'").first().catch(() => null);
+      if (jurnalSiap) {
+      stmts.push(ctx.tulis.prepare("insert into journal_entries (tanggal,sumber,source_ref,keterangan,created_by,kost) values (?,'pembayaran',?,?,?,?)")
+        .bind(tgl, nomor, `Sewa ${t.nama} · ${t.no_kamar}`, ctx.user.id, ctx.kost));
+      stmts.push(ctx.tulis.prepare("insert into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit,kost) select id,'1000','Kas/Bank',?,0,? from journal_entries where sumber='pembayaran' and source_ref=? and kost=?")
+        .bind(jumlah, ctx.kost, nomor, ctx.kost));
+      stmts.push(ctx.tulis.prepare("insert into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit,kost) select id,'4100','Pendapatan Sewa',0,?,? from journal_entries where sumber='pembayaran' and source_ref=? and kost=?")
+        .bind(jumlah, ctx.kost, nomor, ctx.kost));
+      }
       // Simpan periode-periode yang dilunasi struk ini (mis. ["2026-02-01","2026-03-01"]).
       // Dulu void menebak lewat "periode >= ? limit N", yang bisa membuka bulan yang dibayar struk lain.
       stmts.push(ctx.db.prepare("update payments set bulan=?, periode_lunas=? where nomor_struk=?")
@@ -424,7 +446,7 @@ export async function recordPayment(ctx, data) {
         // nominal bulan berikutnya = harga kamar saat ini (bukan nominal prorata bulan pertama)
         const kamarNow = await ctx.db.prepare('select harga_bulanan from rooms where id=?').bind(t.kamar_id).first();
         const nominalNext = num(kamarNow && kamarNow.harga_bulanan) || num(daftar[0].jumlah);
-        stmts.push(ctx.db.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+        stmts.push(ctx.tulis.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
           .bind(t.id, nextPeriode, nextJt, nominalNext, 'belum_bayar'));
       }
       bukti = await ctx.db.batch(stmts);
@@ -450,6 +472,8 @@ export async function voidPayment(ctx, id) {
   const bill = p.bill_id ? await ctx.db.prepare('select * from bills where id=?').bind(p.bill_id).first() : null;
 
   const stmts = [ctx.db.prepare("update payments set voided_at=strftime('%Y-%m-%dT%H:%M:%f','now') where id=?").bind(p.id)];
+  const jurnalSiap = await ctx.db.prepare("select name from sqlite_master where type='table' and name='journal_entries'").first().catch(() => null);
+  if (jurnalSiap) stmts.push(ctx.db.prepare("update journal_entries set voided_at=strftime('%Y-%m-%dT%H:%M:%f','now') where sumber='pembayaran' and source_ref=?").bind(p.nomor_struk));
   const bulan = Math.max(1, Math.min(24, Number(p.bulan) || 1));
   if (bill) {
     // buka kembali SEMUA bulan yang dibayar dalam satu struk (bayar N bulan), bukan hanya bulan pertama
@@ -521,13 +545,10 @@ export async function updateTenant(ctx, data) {
     if (!room) throw httpError(404, `Kamar ${noKamar} tidak ditemukan.`);
     if (room.id !== t.kamar_id) {
       if (t.status !== 'aktif') throw httpError(409, 'Penyewa yang sudah keluar tidak bisa dipindah kamar.');
-      // Klaim atomik: `status='tersedia'` di dalam UPDATE, lalu diverifikasi lewat hitungan penyewa aktif.
-      // Cek-lalu-tulis (dulu) bisa lolos dua petugas bersamaan.
-      await ctx.db.prepare("update rooms set status='terisi' where id=? and status='tersedia'").bind(room.id).run();
+      // Unique partial index di tenants(kamar_id) menjadi pengaman race; jangan ubah kamar
+      // sebelum batch penyewa karena batch yang gagal harus meninggalkan status lama utuh.
       const isi = await ctx.db.prepare("select count(*) as n from tenants where kamar_id=? and status='aktif' and id<>?").bind(room.id, t.id).first();
-      if (isi && isi.n > 0) {
-        throw httpError(409, `Kamar ${noKamar} sudah terisi.`);
-      }
+      if (isi && isi.n > 0) throw httpError(409, `Kamar ${noKamar} sudah terisi.`);
       kamarId = room.id;
     }
   }
@@ -561,13 +582,20 @@ export async function updateTenant(ctx, data) {
   if (kamarId && status === 'aktif') {
     stmts.push(ctx.db.prepare("update rooms set status='terisi' where id=?").bind(kamarId));
   }
-  await ctx.db.batch(stmts);
+  try {
+    await ctx.db.batch(stmts);
+  } catch (e) {
+    if (/idx_tenants_one_active_room/i.test(String(e && e.message || e))) {
+      throw httpError(409, `Kamar ${noKamar || 'tujuan'} sudah ditempati penyewa aktif.`);
+    }
+    throw e;
+  }
   // Pindah kamar lewat edit penyewa harus ikut tercatat di riwayat tenant_kamar,
   // kalau tidak, kontrak lama tetap terbuka dan pindahKamar() berikutnya menutup kontrak yang salah.
   if (t.kamar_id && kamarId && t.kamar_id !== kamarId) {
     await ctx.db.prepare("update tenant_kamar set sampai=? where tenant_id=? and kamar_id=? and sampai is null and mulai<=?")
       .bind(ctx.today, t.id, t.kamar_id, ctx.today).run().catch(() => {});
-    await ctx.db.prepare("insert into tenant_kamar(tenant_id, kamar_id, mulai, sampai, created_by) values(?,?,?,null,?)")
+    await ctx.tulis.prepare("insert into tenant_kamar(tenant_id, kamar_id, mulai, sampai, created_by) values(?,?,?,null,?)")
       .bind(t.id, kamarId, ctx.today, ctx.user && ctx.user.id ? ctx.user.id : null).run().catch(() => {});
   }
   if (status === 'keluar') {
@@ -578,6 +606,41 @@ export async function updateTenant(ctx, data) {
     { nama: t.nama, hp: t.hp, kamar_id: t.kamar_id, kontak_darurat: t.kontak_darurat, hp_darurat: t.hp_darurat, status: t.status },
     { nama, hp, kamar_id: kamarId, kontak_darurat: kontak, hp_darurat: hpDarurat, ktp: !!(ktpKeyBaru || t.ktp_key), status });
   return `Data penyewa ${nama} diperbarui.`;
+}
+
+function akunJurnalLedger(jenis, kategori, saldoNormal) {
+  const nama = String(kategori || '');
+  const low = nama.toLowerCase();
+  if (/penyusutan|depresiasi/.test(low)) return {
+    debit: ['6100', 'Beban Penyusutan'], kredit: ['1600', 'Akumulasi Penyusutan Aset Tetap'],
+  };
+  if (jenis === 'pendapatan') return { debit: ['1000', 'Kas/Bank'], kredit: ['4xxx', `Pendapatan — ${nama}`] };
+  if (jenis === 'pengeluaran') return { debit: ['5xxx', `Beban — ${nama}`], kredit: ['1000', 'Kas/Bank'] };
+  if (/deposit|jaminan/.test(low)) {
+    if (/pengembalian/.test(low)) return { debit: ['2100', 'Utang Deposit Penyewa'], kredit: ['1000', 'Kas/Bank'] };
+    return { debit: ['1000', 'Kas/Bank'], kredit: ['2100', 'Utang Deposit Penyewa'] };
+  }
+  if (/modal|setoran/.test(low)) return { debit: ['1000', 'Kas/Bank'], kredit: ['3000', 'Modal Pemilik'] };
+  if (/prive|penarikan/.test(low)) return { debit: ['3100', 'Prive Pemilik'], kredit: ['1000', 'Kas/Bank'] };
+  if (/aset|pembelian/.test(low)) return { debit: ['1500', 'Aset Tetap'], kredit: ['1000', 'Kas/Bank'] };
+  return String(saldoNormal || '').toLowerCase() === 'kredit'
+    ? { debit: ['1000', 'Kas/Bank'], kredit: ['3900', nama] }
+    : { debit: ['5900', nama], kredit: ['1000', 'Kas/Bank'] };
+}
+
+async function jurnalLedger(ctx, { id, tanggal, jenis, kategori, jumlah, keterangan }) {
+  const ada = await ctx.db.prepare("select name from sqlite_master where type='table' and name='journal_entries'").first().catch(() => null);
+  if (!ada) return;
+  const akun = akunJurnalLedger(jenis, kategori, '');
+  const ref = `ledger:${id}`;
+  await ctx.tulis.prepare("insert or ignore into journal_entries (tanggal,sumber,source_ref,keterangan,created_by) values (?,'ledger',?,?,?)")
+    .bind(tanggal, ref, keterangan || kategori, ctx.user.id).run();
+  const entry = await ctx.db.prepare("select id from journal_entries where sumber='ledger' and source_ref=?").bind(ref).first();
+  if (!entry) throw httpError(500, 'Jurnal transaksi tidak terbentuk.');
+  await ctx.tulis.batch([
+    ctx.tulis.prepare('insert into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit) values (?,?,?,?,?)').bind(entry.id, akun.debit[0], akun.debit[1], jumlah, 0),
+    ctx.tulis.prepare('insert into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit) values (?,?,?,?,?)').bind(entry.id, akun.kredit[0], akun.kredit[1], 0, jumlah),
+  ]);
 }
 
 export async function addOpsTransaction(ctx, data) {
@@ -593,10 +656,15 @@ export async function addOpsTransaction(ctx, data) {
   // kategori harus milik jenis yang sama (mencegah "Neraca" memakai kategori pengeluaran dst.)
   const cat = await ctx.db.prepare('select * from categories where jenis=? and nama=? and aktif=1').bind(jenis, nama).first();
   if (!cat) throw httpError(400, `Kategori "${nama}" bukan kategori ${jenis}.`);
-  const ins = await ctx.db.prepare(
+  // INSERT WAJIB lewat ctx.tulis. ctx.db adalah pembungkus BACA: untuk INSERT ia hanya
+  // menambah kolom kost pada query yang dijalankan, tetapi jalur baca melebarkan nilai kost
+  // sehingga baris baru jatuh ke nilai pertama daftar (kost induk/admin), bukan kost aktif.
+  const ins = await ctx.tulis.prepare(
     'insert into ledger (tanggal, jenis, kategori_id, kategori, jumlah, keterangan, created_by) values (?,?,?,?,?,?,?)'
   ).bind(tgl, jenis, cat.id, cat.nama, jumlah, String(data.keterangan || ''), ctx.user.id).run();
-  await ctx.audit('ledger', 'ledger', ins.meta.last_row_id, null, { jenis, nama, jumlah, tgl });
+  const ledgerId = ins.meta.last_row_id;
+  await jurnalLedger(ctx, { id: ledgerId, tanggal: tgl, jenis, kategori: cat.nama, jumlah, keterangan: data.keterangan });
+  await ctx.audit('ledger', 'ledger', ledgerId, null, { jenis, nama, jumlah, tgl });
   return `Transaksi ${jenis} "${data.keterangan || nama}" berhasil dicatat.`;
 }
 
@@ -612,6 +680,7 @@ export async function voidOpsTransaction(ctx, id) {
   if (!row) throw httpError(404, 'Transaksi tidak ditemukan.');
   if (row.voided_at) throw httpError(409, 'Transaksi ini sudah dibatalkan.');
   await ctx.db.prepare("update ledger set voided_at=strftime('%Y-%m-%dT%H:%M:%f','now') where id=?").bind(lid).run();
+  await ctx.db.prepare("update journal_entries set voided_at=strftime('%Y-%m-%dT%H:%M:%f','now') where sumber='ledger' and source_ref=?").bind(`ledger:${lid}`).run().catch(() => {});
   await ctx.audit('ledger.void', 'ledger', lid, { jenis: row.jenis, kategori: row.kategori, jumlah: row.jumlah }, null);
   return 'Transaksi dibatalkan. Data tetap tersimpan untuk audit.';
 }
@@ -703,7 +772,16 @@ export async function pindahKamar(ctx, data) {
   }
   // stmts kosong untuk pindahan ke depan saat tabel riwayat belum ada: D1 menolak
   // batch([]) dengan "No SQL statements detected".
-  if (stmts.length) await ctx.db.batch(stmts);
+  if (stmts.length) {
+    try {
+      await ctx.db.batch(stmts);
+    } catch (e) {
+      if (/idx_tenants_one_active_room/i.test(String(e && e.message || e))) {
+        throw httpError(409, `Kamar ${noBaru} sudah ditempati penyewa aktif.`);
+      }
+      throw e;
+    }
+  }
   await ctx.audit('tenant.pindah', 'tenants', t.id,
     { kamar: noAsal, kamar_id: t.kamar_id },
     { kamar: noBaru, kamar_id: tujuan.id, tgl, berlaku: sudahBerlaku ? 'sekarang' : 'terjadwal' });
@@ -749,4 +827,20 @@ export function httpError(status, message) {
   const e = new Error(message);
   e.status = status;
   return e;
+}
+
+// Kost selalu dirujuk dengan slug; ID numerik belum menjadi kunci data.
+export function kunciSimpan(barisKost) {
+  return barisKost && barisKost.kunci ? String(barisKost.kunci) : null;
+}
+
+export function kunciBaca(barisKost) {
+  const kunci = kunciSimpan(barisKost);
+  return kunci ? [kunci] : [];
+}
+
+export function idDariKunci(teks, daftarKost) {
+  const kunci = String(teks ?? '').trim();
+  const baris = (daftarKost || []).find((kost) => kost && String(kost.kunci) === kunci);
+  return baris ? String(baris.kunci) : null;
 }

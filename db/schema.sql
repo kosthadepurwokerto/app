@@ -130,6 +130,8 @@ insert or ignore into counters (kost, nama, value) values ('kost-hade', 'kode_pe
 create unique index if not exists idx_tenants_kost_kode on tenants(kost, kode);
 create index if not exists idx_tenants_status on tenants(status);
 create index if not exists idx_tenants_kamar  on tenants(kamar_id);
+create unique index if not exists idx_tenants_one_active_room
+  on tenants(kamar_id) where status='aktif' and kamar_id is not null;
 
 -- ---------- BERKAS FOTO KTP (mode cadangan, bila R2 belum tersedia) ----------
 create table if not exists ktp_berkas (
@@ -186,6 +188,34 @@ create table if not exists payments (
 );
 create index if not exists idx_payments_tgl on payments(tgl_bayar desc);
 
+-- ---------- JURNAL BERGANDA ----------
+-- Satu pembayaran menghasilkan satu header dan minimal dua baris: Debit Kas,
+-- Kredit Pendapatan Sewa. Source_ref menjaga idempotensi saat retry jaringan.
+create table if not exists journal_entries (
+  id           integer primary key autoincrement,
+  tanggal      text not null,
+  sumber       text not null,
+  source_ref   text not null,
+  keterangan   text,
+  created_by   text references users(id),
+  voided_at    text,
+  kost         text not null default 'kost-hade',
+  created_at   text not null default (datetime('now')),
+  unique (kost, sumber, source_ref)
+);
+create table if not exists journal_lines (
+  id           integer primary key autoincrement,
+  journal_id   integer not null references journal_entries(id) on delete cascade,
+  akun_kode    text not null,
+  akun_nama    text not null,
+  debet        integer not null default 0 check (debet >= 0),
+  kredit       integer not null default 0 check (kredit >= 0),
+  kost         text not null default 'kost-hade',
+  check ((debet > 0 and kredit = 0) or (kredit > 0 and debet = 0))
+);
+create index if not exists idx_journal_entries_tanggal on journal_entries(tanggal desc);
+create index if not exists idx_journal_lines_journal on journal_lines(journal_id);
+
 -- ---------- LEDGER OPERASIONAL ----------
 create table if not exists ledger (
   id           integer primary key autoincrement,
@@ -212,6 +242,7 @@ create table if not exists audit_log (
   row_id     text,
   data_lama  text,
   data_baru  text,
+  kost       text,
   created_at text not null default (datetime('now'))
 );
 create index if not exists idx_audit_created on audit_log(created_at desc);

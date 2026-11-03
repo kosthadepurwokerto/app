@@ -62,11 +62,13 @@ echo "== PENYEWA =="
 ck "Penyewa nama 1 huruf ditolak 400" "$(actj $J '{"action":"tenants.create","data":{"nama":"A","kamar":"101","tglMasuk":"2026-10-01"}}')" "400"
 ck "Penyewa kamar fiktif ditolak 404" "$(actj $J '{"action":"tenants.create","data":{"nama":"Budi","kamar":"999","tglMasuk":"2026-10-01"}}')" "404"
 TODAY=$(date +%F)
+TEMPO_1=$(node --input-type=module -e "import {addMonths} from './worker/logic.js'; console.log(addMonths('$TODAY',1))")
+TEMPO_2=$(node --input-type=module -e "import {addMonths} from './worker/logic.js'; console.log(addMonths('$TODAY',2))")
 ck "Daftar penyewa Budi (hari ini)" "$(actj $J "{\"action\":\"tenants.create\",\"data\":{\"nama\":\"Budi Santoso\",\"hp\":\"8123456789\",\"kamar\":\"101\",\"tglMasuk\":\"$TODAY\"}}")" "200"
 ck "Kamar 101 tidak bisa didaftari penyewa kedua 409" "$(actj $J "{\"action\":\"tenants.create\",\"data\":{\"nama\":\"Siti\",\"kamar\":\"101\",\"tglMasuk\":\"$TODAY\"}}")" "409"
 code -b $J "$B/api/dashboard" >/dev/null
 code -b $J "$B/api/dashboard" >/dev/null
-ck "Dashboard: 1 terisi, 1 penyewa, tempo +1 bln" "$(jq_ "(k=>[d.stats.kamarTerisi,d.stats.totalPenyewa,k[5],d.penyewa.find(p=>p[0]==='TEN-0001')[6]].join('|'))(d.kamar.find(r=>r[0]==='101'))")" "1|1|Budi Santoso|$(date -d "+1 month" +%F)"
+ck "Dashboard: 1 terisi, 1 penyewa, tempo +1 bln" "$(jq_ "(k=>[d.stats.kamarTerisi,d.stats.totalPenyewa,k[5],d.penyewa.find(p=>p[0]==='TEN-0001')[6]].join('|'))(d.kamar.find(r=>r[0]==='101'))")" "1|1|Budi Santoso|$TEMPO_1"
 ck "Dashboard mengirim nominal tagihan [7]" "$(jq_ 'String(d.penyewa[0][7])')" "1100000"
 ck "Edit penyewa (nama/hp)" "$(actj $J '{"action":"tenants.update","data":{"id":"TEN-0001","nama":"Budi S.","hp":"08123456789"}}')" "200"
 code -b $J "$B/api/dashboard" >/dev/null
@@ -86,7 +88,7 @@ PYX
 )
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Void menyisakan tepat 1 tagihan terbuka (bukan 2)" "$(jq_ "(r=>r.filter(p=>p[1]==='Cek Void').length)(d.penyewa)")" "1"
-ck "Jatuh tempo kembali ke bulan masuk +1" "$(jq_ "d.penyewa.find(p=>p[1]==='Cek Void')[6]")" "$(date -d "+1 month" +%F)"
+ck "Jatuh tempo kembali ke bulan masuk +1" "$(jq_ "d.penyewa.find(p=>p[1]==='Cek Void')[6]")" "$TEMPO_1"
 
 # (3) aksi yang mengubah data sewa hanya untuk admin
 ck "Tanggal 30 Februari ditolak 400" "$(actj $J '{"action":"tenants.create","data":{"nama":"Tgl Salah","kamar":"102","tglMasuk":"2026-02-30"}}')" "400"
@@ -123,9 +125,10 @@ echo "== PEMBAYARAN =="
 ck "Bayar tanpa kamar ditolak 400 (dulu: menandai lunas penyewa lain)" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"jumlah\":1100000,\"tanggal\":\"$TODAY\"}}")" "400"
 ck "Bayar nominal salah ditolak 409" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"101\",\"jumlah\":500000,\"tanggal\":\"$TODAY\"}}")" "409"
 ck "Bayar tepat 1.100.000 diterima" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"101\",\"jumlah\":1100000,\"tanggal\":\"$TODAY\",\"keterangan\":\"Sewa\"}}")" "200"
+ck "Bootstrap memuat dua baris jurnal sewa" "$(code -b $J "$B/api/bootstrap" >/dev/null; jq_ "d.journals.filter(x=>x.sumber==='pembayaran').length")" "2"
 ck "Bayar tanggal masa depan ditolak 400" "$(actj $J '{"action":"payments.create","data":{"kamar":"101","jumlah":1100000,"tanggal":"2099-01-01"}}')" "400"
 code -b $J "$B/api/dashboard" >/dev/null
-ck "Setelah bayar: kas 1.100.000 & tempo +1 bln dari tagihan" "$(jq_ "[d.stats.sisaKas,(p=>p[6])(d.penyewa.find(x=>x[0]==='TEN-0001'))].join('|')")" "1100000|$(date -d "+2 month" +%F)"
+ck "Setelah bayar: kas 1.100.000 & tempo +1 bln dari tagihan" "$(jq_ "[d.stats.sisaKas,(p=>p[6])(d.penyewa.find(x=>x[0]==='TEN-0001'))].join('|')")" "1100000|$TEMPO_2"
 ck "Nomor struk format STR-YYYYMMDD-NNN" "$(jq_ "/STR-[0-9]{8}-[0-9]{3}/.test(d.transaksi.find(t=>t[2]==='101')[4])")" "true"
 PAYID=$(jq_ 'd.transaksi[0][5]')
 
@@ -172,7 +175,7 @@ ck "Void pembayaran" "$(actj $J "{\"action\":\"payments.void\",\"data\":{\"id\":
 ck "Void pembayaran yang sama ditolak 409" "$(actj $J "{\"action\":\"payments.void\",\"data\":{\"id\":$PAYID}}")" "409"
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Kas berkurang 1.100.000 setelah void (bukan berubah total)" "$(jq_ "String($KAS_SEBELUM - d.stats.sisaKas)")" "1100000"
-ck "Tagihan kembali jatuh tempo +1 bln" "$(jq_ "d.penyewa.find(p=>p[0]==='TEN-0001')[6]")" "$(date -d "+1 month" +%F)"
+ck "Tagihan kembali jatuh tempo +1 bln" "$(jq_ "d.penyewa.find(p=>p[0]==='TEN-0001')[6]")" "$TEMPO_1"
 ck "Pembayaran hilang dari daftar transaksi" "$(jq_ 'd.transaksi.length')" "0"
 ck "Bayar ulang setelah void diterima" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"101\",\"jumlah\":1100000,\"tanggal\":\"$TODAY\"}}")" "200"
 
@@ -339,6 +342,7 @@ ck "app.js memasang pendengar aksi data-h" "$(grep -c "addEventListener('click',
 
 echo "== OTORISASI ROLE =="
 ck "Login staff berhasil" "$(code -c $S -X POST -H 'content-type: application/json' -H "x-real-ip: 10.77.0.1" -d '{"username":"081200000103","password":"Staffpass123"}' "$B/api/login")" "200"
+ck "Staff tidak boleh membaca audit log (403)" "$(code -b $S "$B/api/audit-log")" "403"
 # akun baru dari UI admin wajib ganti password lebih dulu; uji role dimulai setelah itu
 code -b $S -X POST -H 'content-type: application/json' -d '{"lama":"Staffpass123","baru":"Staffpass123"}' "$B/api/password" >/dev/null
 ck "Staff TIDAK boleh hapus kamar (403)" "$(actj $S '{"action":"rooms.delete","data":{"noKamar":"101"}}')" "403"

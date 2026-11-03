@@ -22,9 +22,10 @@ rm -f "$PIDF"
 rm -rf "$PERSIST"; mkdir -p "$PERSIST"
 npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=db/schema.sql >/tmp/hk-schema.log 2>&1 || { echo "SKEMA GAGAL"; tail -5 /tmp/hk-schema.log; exit 1; }
 if grep -qi 'error' /tmp/hk-schema.log; then echo "SKEMA ADA ERROR:"; grep -i -A3 'error' /tmp/hk-schema.log | head -20; exit 1; fi
-# migrasi yang objeknya BELUM masuk db/schema.sql. Skema dasar memuat kolom 001-016,
-# tetapi tabel tenant_kamar (017) dan kolom audit_log.kost (018) baru dibuat oleh migrasi.
-for m in db/migrasi-017-*.sql db/migrasi-018-*.sql; do
+# migrasi yang objeknya belum masuk db/schema.sql. tenant_kamar (017) masih dibuat migrasi;
+# audit_log.kost sudah berada di skema bersih, migrasi 018 khusus upgrade DB lama.
+for m in db/migrasi-017-*.sql db/migrasi-020-*.sql db/migrasi-021-*.sql db/migrasi-022-*.sql db/migrasi-023-*.sql; do
+  [ -f "$m" ] || continue
   npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$m" >>/tmp/hk-schema.log 2>&1 || { echo "MIGRASI GAGAL: $m"; tail -5 /tmp/hk-schema.log; exit 1; }
 done
 # Akun seed WAJIB punya No. HP: login hanya menerima No. HP (username ditolak),
@@ -44,6 +45,7 @@ echo $! > "$PIDF"
 for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:8787/api/session && break; sleep 1; done
 
 # 5) uji
+node tools/uji-jurnal.mjs || exit 1
 /usr/bin/python3 - <<'PY'
 src=open('tools/uji-e2e.sh').read()
 extra=open('tools/uji-pindah-kamar.sh').read()+open('tools/uji-nominal.sh').read()

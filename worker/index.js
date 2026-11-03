@@ -3,6 +3,7 @@
 // Sajikan UI statis dari folder pub/ dan API JSON di /api/*.
 // =====================================================================
 import * as logic from './logic.js';
+import * as exportData from './export.js';
 import { dbKost, TABEL_BERKOST } from './db-kost.js';
 import { ringkasKost, daftarLedger } from './ringkasan.js';
 
@@ -112,8 +113,20 @@ async function sesiAktif(env, req) {
     await env.DB.prepare('delete from sessions where token_hash = ?').bind(hash).run();
     return null;
   }
-  // Kost aktif: pilihan sesi (bila akun punya akses), selain itu kost induk akun.
-  row.kost = row.sesi_kost || row.user_kost;
+  // Kost aktif selalu disimpan sebagai slug kanonik dari kosts.kunci.
+  const mentah = row.sesi_kost || row.user_kost || null;
+  const baris = mentah
+    ? await env.DB.prepare('select kunci from kosts where kunci=? limit 1').bind(String(mentah)).first()
+    : null;
+  if (baris) {
+    row.kost = baris.kunci;
+    row.kunciSimpan = logic.kunciSimpan(baris);
+    row.daftarKost = [String(baris.kunci)];
+  } else {
+    row.kost = mentah;
+    row.kunciSimpan = mentah;
+    row.daftarKost = mentah ? [String(mentah)] : [];
+  }
   // Sesi "belum memilih kost" dibuat saat login: ambil status wajib-ganti-sandi terbaru
   // dari tabel users, supaya akun yang barusan mengganti sandi langsung bisa memilih kost.
   if (!row.sesi_kost) row.must_change_password = 0;
@@ -127,10 +140,16 @@ async function dashboard(env, DB, kost) {
   // terbaca sebelum tulisan sebelumnya terlihat, sehingga dashboard menampilkan angka lama
   // walau data sudah tersimpan. Konsistensi lebih penting daripada beberapa ms.
   // 200 transaksi terakhir: cukup untuk cetak ulang struk beberapa bulan ke belakang.
-  const rooms = await db.prepare('select * from rooms order by no_kamar').all();
-  const tenants = await db.prepare('select * from tenants order by created_at desc').all();
-  const bills = await db.prepare("select * from bills where status='belum_bayar' order by jatuh_tempo, id").all();
-  const pays = await db.prepare('select * from payments where voided_at is null order by tgl_bayar desc, id desc limit 200').all();
+  // Syarat kost DITULIS EKSPLISIT di setiap query. `db` yang diberikan pemanggil bisa berupa
+  // pembungkus baca yang melebarkan `kost in (...)`, sehingga query tanpa syarat kost akan
+  // menampilkan data kost lain — dan query tanpa WHERE sama sekali tidak difilter.
+  const kunci = (Array.isArray(kost) ? kost : [kost]).filter((x) => x != null && x !== '');
+  const syarat = kunci.length === 1 ? 'kost = ?' : `kost in (${kunci.map(() => '?').join(',')})`;
+  const arg = kunci;
+  const rooms = await db.prepare(`select * from rooms where ${syarat} order by no_kamar`).bind(...arg).all();
+  const tenants = await db.prepare(`select * from tenants where ${syarat} order by created_at desc`).bind(...arg).all();
+  const bills = await db.prepare(`select * from bills where status='belum_bayar' and ${syarat} order by jatuh_tempo, id`).bind(...arg).all();
+  const pays = await db.prepare(`select * from payments where voided_at is null and ${syarat} order by tgl_bayar desc, id desc limit 200`).bind(...arg).all();
 
   // Angka kas/tunggakan dihitung per kost oleh worker/ringkasan.js (query kecil &
   // eksplisit per tabel). Query agregat panjang sebelumnya tidak bisa difilter otomatis.
@@ -305,6 +324,11 @@ async function lihatKtp(env, kunci, sesi) {
   if (sesi.role !== 'admin') return json({ error: 'Hanya admin yang boleh membuka foto KTP.' }, 403);
   // kunci harus persis bentuk yang kita buat (mencegah ../ dan kunci lain)
   if (!KUNCI_KTP.test(kunci)) return json({ error: 'Kunci foto tidak valid.' }, 400);
+  // Kunci R2/D1 bersifat rahasia: tetap cek kepemilikan per kost untuk semua jalur,
+  // termasuk URL langsung /api/ktp/{kunci}. Jangan mengandalkan format kunci saja.
+  const milik = await env.DB.prepare('select 1 from tenants where kost=? and ktp_key=? limit 1')
+    .bind(sesi.kost, kunci).first();
+  if (!milik) return json({ error: 'Foto KTP tidak ditemukan.' }, 404);
   await logic.audit(env, sesi, 'ktp.lihat', 'tenants', kunci, null, null);
   let body, tipe;
   if (logic.KTP_MODE === 'r2' && env.KTP) {
@@ -371,7 +395,7 @@ async function catatPengingat(ctx, billId) {
   const b = await ctx.db.prepare(`select b.id, b.tenant_id, b.jumlah, b.jatuh_tempo, t.nama, t.hp
                                      from bills b join tenants t on t.id=b.tenant_id where b.id=?`).bind(id).first();
   if (!b) throw logic.httpError(404, 'Tagihan tidak ditemukan.');
-  await ctx.db.prepare('insert or ignore into pengingat_wa (bill_id, tenant_id, hp, dikirim_oleh) values (?,?,?,?)')
+  await ctx.tulis.prepare('insert or ignore into pengingat_wa (bill_id, tenant_id, hp, dikirim_oleh) values (?,?,?,?)')
     .bind(b.id, b.tenant_id, b.hp || null, ctx.user.id).run();
   await ctx.audit('wa.ingatkan', 'bills', b.id, null, { nama: b.nama, hp: b.hp, jumlah: b.jumlah, jatuh_tempo: b.jatuh_tempo });
   return `Pengingat untuk ${b.nama} dicatat terkirim.`;
@@ -437,6 +461,7 @@ async function sajikanLogo(env, kunciLogo, kunciKost) {
  * Mengembalikan { status: 'baru' | 'sudah' }.
  */
 async function beriAksesKost(env, userId, kunci, { mintaPilih = false } = {}) {
+  // akses_kost.kost ber-FOREIGN KEY ke kosts.kunci: nilainya selalu slug.
   await env.DB.prepare('insert or ignore into akses_kost (user_id, kost) values (?,?)').bind(userId, kunci).run();
   const lama = await env.DB.prepare('select akses_diminta from users where id=?').bind(userId).first();
   await env.DB.prepare('update users set akses_diminta=? where id=?')
@@ -469,7 +494,11 @@ async function buatKost(req, env, sesi) {
         belum_punya_akun: true,
       }, 404);
     }
-    const sudahAda = await env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?').bind(akun.id, kunciDiminta).first();
+    const barisK = await env.DB.prepare('select kunci from kosts where kunci=?').bind(kunciDiminta).first();
+    const nilaiK = barisK ? logic.kunciBaca(barisK) : [kunciDiminta];
+    const sudahAda = await env.DB.prepare(
+      `select 1 as ada from akses_kost where user_id=? and kost in (${nilaiK.map(() => '?').join(',')})`)
+      .bind(akun.id, ...nilaiK).first();
     const pulang = await env.DB.prepare('select count(*) as n from akses_kost where user_id=?').bind(akun.id).first();
     await beriAksesKost(env, akun.id, kunciDiminta, { mintaPilih: true });
     await logic.audit(env, sesi, 'user.akses', 'akses_kost', `${akun.id}:${kunciDiminta}`, null, { hp: hpUkuran, kost: kunciDiminta });
@@ -567,7 +596,11 @@ async function daftarkanAdmin(req, env, sesi) {
   const akun = await env.DB.prepare('select id, username, role, kost from users where hp=?').bind(hp).first();
 
   if (akun) {
-    const sudah = await env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?').bind(akun.id, kunci).first();
+    const barisK = await env.DB.prepare('select kunci from kosts where kunci=?').bind(kunci).first();
+    const nilaiK = barisK ? logic.kunciBaca(barisK) : [kunci];
+    const sudah = await env.DB.prepare(
+      `select 1 as ada from akses_kost where user_id=? and kost in (${nilaiK.map(() => '?').join(',')})`)
+      .bind(akun.id, ...nilaiK).first();
     await beriAksesKost(env, akun.id, kunci, { mintaPilih: true });
     await logic.audit(env, sesi, 'user.akses', 'akses_kost', `${akun.id}:${kunci}`, null, { hp, kost: kunci, sudah: !!sudah });
     return json({
@@ -724,7 +757,7 @@ async function addRoom(ctx, d) {
   const { tipe, bulanan, harian } = validRoom(d);
   const dup = await ctx.db.prepare('select id from rooms where no_kamar=?').bind(no).first();
   if (dup) throw logic.httpError(409, `Unit Kamar ${no} sudah terdaftar.`);
-  await ctx.db.prepare('insert into rooms (no_kamar, tipe, harga_bulanan, harga_harian, status) values (?,?,?,?,?)')
+  await ctx.tulis.prepare('insert into rooms (no_kamar, tipe, harga_bulanan, harga_harian, status) values (?,?,?,?,?)')
     .bind(no, tipe, bulanan, harian, 'tersedia').run();
   await ctx.audit('room.create', 'rooms', no, null, { no, tipe, bulanan, harian });
   return `Kamar ${no} (${tipe}) berhasil ditambahkan.`;
@@ -773,7 +806,7 @@ async function addCategory(ctx, d) {
   const { jenis, nama, saldo, arusKas } = validKat(d);
   const dup = await ctx.db.prepare('select id from categories where jenis=? and nama=?').bind(jenis, nama).first();
   if (dup) throw logic.httpError(409, `Kategori "${nama}" sudah ada.`);
-  await ctx.db.prepare('insert into categories (jenis, nama, saldo_normal, arus_kas) values (?,?,?,?)').bind(jenis, nama, saldo, arusKas).run();
+  await ctx.tulis.prepare('insert into categories (jenis, nama, saldo_normal, arus_kas) values (?,?,?,?)').bind(jenis, nama, saldo, arusKas).run();
   await ctx.audit('category.create', 'categories', nama, null, { jenis, nama, saldo, arusKas });
   return `Kategori ${JENIS_KAT[jenis]} "${nama}" ditambahkan.`;
 }
@@ -854,8 +887,13 @@ async function otorisasiTargetUser(ctx, target, { untukBuat = false } = {}) {
   if (kostTarget !== ctx.kost) {
     throw logic.httpError(403, 'Anda hanya boleh mengelola akun di kost yang sedang aktif.');
   }
-  const izin = await ctx.env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?')
-    .bind(ctx.user.id, kostTarget).first();
+  // akses_kost menyimpan id baru (dan, untuk data lama, slug) — nilai di sini sudah
+  // dinormalkan oleh sesiAktif() (ctx.kost = slug kanonik), jadi
+  // cocokkan langsung dengan ctx.kost / kost induk target.
+  const nilai = [...new Set([kostTarget, String(ctx.user.kost || kostTarget)].filter(Boolean))];
+  const izin = await ctx.env.DB.prepare(
+    `select 1 as ada from akses_kost where user_id=? and kost in (${nilai.map(() => '?').join(',')})`)
+    .bind(ctx.user.id, ...nilai).first();
   if (!izin) throw logic.httpError(403, 'Anda tidak punya akses ke kost akun tersebut.');
   if (untukBuat) return;
 
@@ -873,13 +911,15 @@ async function addUser(ctx, d) {
   if (role === 'admin' && ctx.user.role !== 'master') {
     throw logic.httpError(403, 'Hanya master yang boleh membuat akun admin.');
   }
-  const dup = await ctx.env.DB.prepare('select id from users where username=? and kost=?').bind(username, ctx.kost).first();
+  const kunciSesi = ctx.kost;
+  const dup = await ctx.env.DB.prepare('select id from users where username=? and kost in (?,?)')
+    .bind(username, kunciSesi, ctx.kost).first();
   if (dup) throw logic.httpError(409, `Username "${username}" sudah dipakai di kost ini. Nama yang sama boleh dipakai di kost lain.`);
   // Nomor HP adalah identitas login: harus unik.
   if (hp) {
     const hpDipakai = await ctx.env.DB.prepare('select username, kost, must_change_password from users where hp=?').bind(hp).first();
     if (hpDipakai) {
-      const akunIni = await ctx.env.DB.prepare('select username from users where hp=? and kost=?').bind(hp, ctx.kost).first();
+      const akunIni = await ctx.env.DB.prepare('select username from users where hp=? and kost in (?,?)').bind(hp, kunciSesi, ctx.kost).first();
       // Akun yang belum pernah dipakai (password awal belum diganti) adalah sisa percobaan
       // pembuatan akun sebelumnya, bukan orang lain: izinkan dibuat ulang di kost ini.
       const belumDipakai = hpDipakai.must_change_password === 1 || hpDipakai.must_change_password === true;
@@ -896,9 +936,11 @@ async function addUser(ctx, d) {
   // saat login pertama (dijaga juga di API, bukan hanya di UI).
   const idBaru = 'usr_' + crypto.randomUUID().slice(0, 8);
   // user baru selalu milik kost yang sedang aktif (master pun membuat admin untuk kost aktif)
-  await ctx.env.DB.prepare('insert into users (id, username, fullname, role, password_hash, aktif, must_change_password, kost, hp) values (?,?,?,?,?,1,1,?,?)')
-    .bind(idBaru, username, fullname, role, hash, ctx.kost, hp || null).run();
-  await ctx.env.DB.prepare('insert or ignore into akses_kost (user_id, kost) values (?,?)').bind(idBaru, ctx.kost).run();
+  // Kolom kost ber-FOREIGN KEY ke kosts.kunci; selalu simpan slug kanonik.
+  const kunciTulis = ctx.kost;
+  await ctx.tulis.prepare('insert into users (id, username, fullname, role, password_hash, aktif, must_change_password, kost, hp) values (?,?,?,?,?,1,1,?,?)')
+    .bind(idBaru, username, fullname, role, hash, kunciTulis, hp || null).run();
+  await ctx.tulis.prepare('insert or ignore into akses_kost (user_id, kost) values (?,?)').bind(idBaru, kunciTulis).run();
   await ctx.audit('user.create', 'users', username, null, { username, role });
   return `Pengguna ${username} (${role}) dibuat. Pemilik akun wajib mengganti password saat login pertama.`;
 }
@@ -931,11 +973,11 @@ async function updateUser(ctx, d) {
   // Sandi hanya di-hash bila benar-benar diisi: string kosong berarti "jangan ubah sandi",
   // bukan "ubah sandi menjadi hash kosong" (dulu ini membuat akun tak bisa login).
   if (password) {
-    await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp), password_hash=?, must_change_password=1 where id=?')
+    await ctx.tulis.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp), password_hash=?, must_change_password=1 where id=?')
       .bind(username, fullname, role, aktif, hpBaru === undefined ? null : hpBaru, await logic.hashPassword(password), id).run();
     await ctx.env.DB.prepare('delete from sessions where user_id=? and token_hash<>?').bind(id, sesiHashOf(ctx)).run();
   } else {
-    await ctx.env.DB.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp) where id=?')
+    await ctx.tulis.prepare('update users set username=?, fullname=?, role=?, aktif=?, hp=coalesce(?, hp) where id=?')
       .bind(username, fullname, role, aktif, hpBaru === undefined ? null : hpBaru, id).run();
   }
   if (!aktif) await ctx.env.DB.prepare('delete from sessions where user_id=?').bind(id).run();
@@ -963,12 +1005,12 @@ async function deleteUser(ctx, d) {
     .bind(id, id).first();
   await ctx.env.DB.prepare('delete from sessions where user_id=?').bind(id).run();
   if (jejak.n) {
-    await ctx.env.DB.prepare('update users set aktif=0 where id=?').bind(id).run();
+    await ctx.tulis.prepare('update users set aktif=0 where id=?').bind(id).run();
     await ctx.audit('user.deactivate', 'users', id, { username: old.username }, null);
     return `Pengguna ${old.username} dinonaktifkan (punya riwayat transaksi, tidak dihapus).`;
   }
-  await ctx.env.DB.prepare('delete from users where id=?').bind(id).run();
-  await ctx.env.DB.prepare('delete from akses_kost where user_id=?').bind(id).run().catch(() => {});
+  await ctx.tulis.prepare('delete from users where id=?').bind(id).run();
+  await ctx.tulis.prepare('delete from akses_kost where user_id=?').bind(id).run().catch(() => {});
   await ctx.audit('user.delete', 'users', id, { username: old.username, role: old.role }, null);
   return `Pengguna ${old.username} dihapus.`;
 }
@@ -1005,15 +1047,47 @@ function slugKost(nama) {
   return s || '';
 }
 
+/**
+ * Validasi slug kost dari klien terhadap daftar kost terdaftar.
+ */
+async function slugkanKost(env, kunci) {
+  const s = String(kunci || '').trim();
+  if (!s) return '';
+  try {
+    const r = await env.DB.prepare('select kunci from kosts where kunci=? limit 1').bind(s).first();
+    if (r && r.kunci) return r.kunci;
+  } catch (e) { /* lookup gagal: pemanggil akan menolak slug yang tidak dikenal */ }
+  return s.toLowerCase();
+}
+
 /** Cek apakah akun boleh membuka kost tertentu (master: semua). */
 async function bolehKost(env, user, kunci) {
   if (user.role === 'master') return true;
   if (!kunci) return false;
-  if (user.kost === kunci) return true;
+  const k = await slugkanKost(env, kunci);
+  if (user.kost === k) return true;
+  const nilai = [k];
   try {
-    const r = await env.DB.prepare('select 1 as ada from akses_kost where user_id=? and kost=?').bind(user.id, kunci).first();
+    const r = await env.DB.prepare(
+      `select 1 as ada from akses_kost where user_id=? and kost in (${nilai.map(() => '?').join(',')})`)
+      .bind(user.id, ...nilai).first();
     return !!r;
-  } catch (e) { return user.kost === kunci; }
+  } catch (e) { return user.kost === k; }
+}
+
+/**
+ * Apakah kost berisi data? Dipakai sebelum menghapus kost: menghapus baris kosts
+ * yang masih memiliki penyewa/kamar/tagihan akan membuat datanya yatim (tak bisa dibuka).
+ */
+async function adaDataKost(env, barisKost) {
+  const nilai = logic.kunciBaca(barisKost);
+  if (!nilai.length) return false;
+  const syarat = nilai.length > 1 ? `kost in (${nilai.map(() => '?').join(',')})` : 'kost = ?';
+  for (const tabel of ['rooms', 'tenants', 'bills', 'payments', 'ledger']) {
+    const r = await env.DB.prepare(`select count(*) as n from ${tabel} where ${syarat}`).bind(...nilai).first();
+    if (r && Number(r.n) > 0) return true;
+  }
+  return false;
 }
 
 /** Simpan/perbarui parameter kost. Nama aplikasi hanya boleh diisi saat pembuatan. */
@@ -1215,13 +1289,12 @@ async function masukSebagai(env, u, secure, hariSesi, kostDiminta, opsi = {}) {
   // atau satu-satunya kost yang terdaftar di akses_kost.
   let kunci = '';
   if (kostDiminta) {
-    const izin = await env.DB.prepare(`select kost from akses_kost where user_id=?
-                                         union select ? where ? <> ''`).bind(u.id, u.kost, u.kost).all();
+    const daftar = await daftarKostAkun(env, u);
     const diminta = String(kostDiminta).trim().toLowerCase();
-    const cocok = (izin.results || []).find((r) => r.kost === diminta
-      || (diminta.length > 2 && String(r.kost).includes(diminta)
-        && (izin.results || []).filter((x) => String(x.kost).includes(diminta)).length === 1));
-    kunci = cocok ? cocok.kost : '';
+    const cocok = daftar.find((x) => String(x.kunci).toLowerCase() === diminta || String(x.namaApp || '').toLowerCase() === diminta)
+      || daftar.find((x) => diminta.length > 2 && String(x.kunci).toLowerCase().includes(diminta)
+        && daftar.filter((y) => String(y.kunci).toLowerCase().includes(diminta)).length === 1);
+    kunci = cocok ? cocok.kunci : '';
   }
   if (!kunci && u.kost) kunci = u.kost;
 
@@ -1256,31 +1329,27 @@ async function masukSebagai(env, u, secure, hariSesi, kostDiminta, opsi = {}) {
 // Daftar kost yang boleh dibuka akun (induk + akses_kost), tanpa duplikat.
 async function daftarKostAkun(env, u) {
   const izin = await env.DB.prepare('select kost from akses_kost where user_id=?').bind(u.id).all().catch(() => ({ results: [] }));
-  const kunci = [...new Set([...(izin.results || []).map((r) => r.kost).filter(Boolean), u.kost].filter(Boolean))];
+  const mentah = [...new Set([...(izin.results || []).map((r) => r.kost).filter(Boolean), u.kost].filter(Boolean))];
   const hasil = [];
-  for (const k of kunci) {
-    const d = await ambilKost(env, k);
-    hasil.push({ kunci: k, namaApp: d.namaApp || k, kota: d.kota || '', tagline: d.tagline || '' });
+  const sudah = new Set();
+  for (const k of mentah) {
+    // nilai bisa slug lama atau id baru: selalu tampilkan slug kanonik
+    const slug = await slugkanKost(env, k);
+    if (!slug || sudah.has(slug)) continue;
+    sudah.add(slug);
+    const d = await ambilKost(env, slug);
+    hasil.push({ kunci: slug, namaApp: d.namaApp || slug, kota: d.kota || '', tagline: d.tagline || '' });
   }
   return hasil;
 }
 
 async function mintaPilihBilaBanyak(env, u, secure, hariSesi) {
   if (u.role === 'master') return null;
-  const izin = await env.DB.prepare('select kost from akses_kost where user_id=?').bind(u.id).all();
-  const daftar = (izin.results || []).map((r) => r.kost).filter(Boolean);
-  if (!daftar.length) daftar.push(u.kost);
-  // Akun yang sama bisa terdaftar di users.kost sebagai induk dan di akses_kost:
-  // hitung kost unik, supaya akun satu kost tidak dibuatkan pilihan palsu.
-  const banyak = [...new Set([...daftar, u.kost].filter(Boolean))];
-  if (banyak.length === 1 && !u.akses_diminta) return null;
-  if (!banyak.length) return null;
-
-  const info = [];
-  for (const k of banyak) {
-    const d = await ambilKost(env, k);
-    info.push({ kunci: k, namaApp: d.namaApp || k, kota: d.kota || '', tagline: d.tagline || '' });
-  }
+  // daftarKostAkun sudah menggabungkan kost induk + akses_kost dan menormalkan
+  // slug/id menjadi satu entri per kost (dulu slug & id bisa terhitung dua kost).
+  const info = await daftarKostAkun(env, u);
+  if (info.length === 1 && !u.akses_diminta) return null;
+  if (!info.length) return null;
   const tokenPilih = logic.randomToken();
   const exp = new Date(Date.now() + hariSesi * 86400000).toISOString();
   await env.DB.prepare('insert into sessions (token_hash, user_id, expires_at, kost) values (?,?,?,?)')
@@ -1356,6 +1425,64 @@ async function pilihKostSesuaiPetunjuk(env, akun, petunjuk) {
 }
 
 async function tanganiApi(req, env, url, secure, today) {
+  /**
+   * db-kost.js menambahkan syarat kost pada SELECT/UPDATE/DELETE (tabel bisnis).
+   * Untuk MEMBACA, syarat itu diperlebar ke seluruh kunci (id baru + slug lama):
+   * `kost = ?` / `kost in (?)` menjadi `kost in (?,?)`. Posisi placeholder dihitung
+   * di petakan[] sehingga nilai daftar bisa disisipkan TANPA menebak urutan.
+   */
+  const gantiKost = (sql, daftar) => {
+    const nilai = (daftar || []).filter((k) => k != null && k !== '');
+    const asal = String(sql);
+    if (nilai.length < 2) return { sql: asal, petakan: null };
+    const semua = `(${nilai.map(() => '?').join(',')})`;
+    // petakan[j] = indeks nilai daftar yang menempati placeholder ke-j, atau -1
+    const petakan = [];
+    let hasil = '';
+    let i = 0;
+    while (i < asal.length) {
+      const sisa = asal.slice(i);
+      const m = /^kost\s+(?:in\s*\(\s*\?\s*\)|=\s*\?)/i.exec(sisa);
+      if (m && !/[\w.]/.test(asal[i - 1] || '')) {
+        hasil += `kost in ${semua}`;
+        nilai.forEach((_, u) => petakan.push(u));
+        i += m[0].length;
+        continue;
+      }
+      if (asal[i] === '?') petakan.push(-1);
+      hasil += asal[i];
+      i += 1;
+    }
+    return { sql: hasil, petakan };
+  };
+  const dbBaca = (daftar) => {
+    const nilai = (daftar || []).filter((k) => k != null && k !== '');
+    /** Susun argumen akhir: nilai pemanggil + kunci pada syarat kost. */
+    const susun = (petakan, n) => {
+      if (!petakan) return [...n];
+      let u = 0;
+      return petakan.map((p) => (p < 0 ? n[u++] : nilai[p]));
+    };
+    return {
+      prepare(sql) {
+        // Hanya SELECT yang syarat kostnya dilebarkan ke semua kunci (baca data lama + baru).
+        // UPDATE/DELETE wajib tetap satu kunci (id baru) supaya tidak menyentuh data kost lain
+        // dan meta.changes tetap bermakna untuk klaim bersyarat.
+        const baca = /^\s*select\b/i.test(String(sql)) || /^\s*with\b/i.test(String(sql));
+        const { sql: sqlSiap, petakan } = baca ? gantiKost(sql, nilai) : { sql, petakan: null };
+        const st = env.DB.prepare(sqlSiap);
+        return {
+          _st: st,
+          bind: (...n) => st.bind(...susun(petakan, n)),
+          first: (...n) => (n.length ? st.bind(...susun(petakan, n)) : st.bind(...susun(petakan, []))).first(),
+          all: (...n) => (n.length ? st.bind(...susun(petakan, n)) : st.bind(...susun(petakan, []))).all(),
+          run: (...n) => (n.length ? st.bind(...susun(petakan, n)) : st.bind(...susun(petakan, []))).run(),
+        };
+      },
+      batch: async (l) => env.DB.batch((l || []).map((x) => (x && x._st ? x._st : x))),
+      exec: (sql) => env.DB.exec(sql),
+    };
+  };
 
     try {
       // ---------- auth ----------
@@ -1470,7 +1597,6 @@ async function tanganiApi(req, env, url, secure, today) {
         // Akun satu kost: langsung masuk ke kost itu.
         return masukSebagai(env, u, secure, hariSesi, acuanKost);
       }
-
       const sesi = await sesiAktif(env, req);
 
       if (url.pathname === '/api/logout') {
@@ -1501,6 +1627,17 @@ async function tanganiApi(req, env, url, secure, today) {
       }
 
       if (!sesi) return json({ error: 'Sesi berakhir. Silakan login ulang.' }, 401);
+
+  // Nilai kolom `kost` selalu slug kanonik yang menjadi foreign key ke kosts.kunci.
+  const tulisKost = dbKost(env.DB, [sesi.kost], { tulis: sesi.kost });
+  // Satu-satunya pembentuk `ctx` untuk aksi tulis. `db` = pembungkus khusus BACA
+  // (syarat kost dilebarkan), `tulis` = pembungkus TULIS. Aksi yang menulis data bisnis
+  // WAJIB memakai ctx.tulis; memakai ctx.db untuk INSERT membuat baris masuk ke kost lain.
+  const buatCtx = (todayAktif) => ({
+    env, db: dbBaca([sesi.kost]), tulis: tulisKost, user: sesi, today: todayAktif, kost: sesi.kost,
+    now: () => new Date().toISOString(),
+    audit: (aksi, tabel, rowId, lama, baru) => logic.audit(env, sesi, aksi, tabel, rowId, lama, baru),
+  });
 
       // Password awal (dari tools/buat-akun.mjs) wajib diganti sebelum menyentuh data.
       // Tanpa ini, ?view=password cukup dilewati dengan memanggil API lain langsung,
@@ -1535,13 +1672,26 @@ async function tanganiApi(req, env, url, secure, today) {
 
       // ---------- baca ----------
       if (url.pathname === '/api/bootstrap') {
-        const db = dbKost(env.DB, sesi.kost);
-        // master melihat ringkasan kost yang sedang aktif; admin hanya kost miliknya
+        // Ringkasan HARUS hanya kost yang sedang aktif. `dbBaca` sengaja melebarkan
+        // syarat kost untuk PEMBACAAN (akun multi-kost melihat gabungan), tapi laporan
+        // satu kost yang menampilkan kamar/penyewa/kas kost lain adalah kebocoran data:
+        // admin Kost Hade bisa melihat penyewa Kost Melati hanya dengan membuka dashboard.
+        // Karena itu dashboard memakai daftar satu kunci (kost aktif), bukan daftar akses.
+        const dbKostAktif = dbBaca([sesi.kost]);
+        const db = dbKostAktif;
         const [d, ops, cats, us] = await Promise.all([
-          dashboard(env, db, sesi.kost), daftarLedger(env.DB, sesi.kost),
+          dashboard(env, dbKostAktif, [sesi.kost]), daftarLedger(env.DB, [sesi.kost]),
           db.prepare('select * from categories where aktif=1 order by jenis, nama').all(),
           env.DB.prepare('select id, username, fullname, role, aktif, created_at, kost, hp from users where kost=? order by username').bind(sesi.kost).all(),
         ]);
+        const journals = await env.DB.prepare(`select e.id,e.tanggal,e.sumber,e.source_ref,e.keterangan,
+          l.id as line_id,l.akun_kode,l.akun_nama,l.debet,l.kredit
+          from journal_entries e join journal_lines l on l.journal_id=e.id
+          where e.kost=? and e.voided_at is null and l.kost=?
+          order by e.tanggal desc,e.id desc,l.id`).bind(sesi.kost,sesi.kost).all().catch((e) => {
+            if (/no such table/i.test(String(e.message))) return { results: [] };
+            throw e;
+          });
         const kategori = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
         (cats.results || []).forEach((c) => {
           const k = c.jenis.charAt(0).toUpperCase() + c.jenis.slice(1);
@@ -1550,7 +1700,7 @@ async function tanganiApi(req, env, url, secure, today) {
         const users = ['admin', 'master'].includes(sesi.role)
           ? (us.results || []).map((u) => ({ id: u.id, username: u.username, nama: u.fullname, fullname: u.fullname, role: u.role, aktif: u.aktif, hp: u.hp || '' }))
           : [];
-        return json({ ...d, ops, kategori, users, kost: await ambilKost(env, sesi.kost) });
+        return json({ ...d, ops, kategori, users, journals:journals.results||[], kost: await ambilKost(env, sesi.kost) });
       }
       // ---------- MULTITENAN: pilih kost, parameter, logo, daftar kost (master) ----------
       if (url.pathname === '/api/pilih-kost' && req.method === 'POST') {
@@ -1562,18 +1712,27 @@ async function tanganiApi(req, env, url, secure, today) {
           if (cekU && cekU.must_change_password) return json({ error: 'Ganti password dulu.' }, 403);
         }
         const { kunci } = await req.json().catch(() => ({}));
-        const k = String(kunci || '').trim().toLowerCase();
-        if (!k) return json({ error: 'Kode aplikasi wajib dipilih.' }, 400);
+        const diminta = String(kunci || '').trim().toLowerCase();
+        if (!diminta) return json({ error: 'Kode aplikasi wajib dipilih.' }, 400);
+        const baris = await env.DB.prepare('select kunci, nama_app from kosts where kunci=? limit 1')
+          .bind(diminta).first();
+        // Kunci yang tidak terdaftar di kosts DITOLAK. Dulu nilai mentah diteruskan, dan
+        // untuk akun master `bolehKost` selalu benar — sesi pun tersimpan dengan kost
+        // "kost-ngawur": data baru masuk ke kolom kost yang tidak ada di kosts.
+        if (!baris) return json({ error: 'Kode aplikasi tidak dikenal.' }, 400);
+        const k = String(baris.kunci);
         if (!(await bolehKost(env, sesi, k))) return json({ error: 'Akun ini tidak punya akses ke aplikasi tersebut.' }, 403);
         await env.DB.prepare('update sessions set kost=? where token_hash=?').bind(k, sesi.token_hash).run();
         sesi.kost = k;
+        sesi.kunciSimpan = k;
+        sesi.daftarKost = [k];
         return json({ ok: true, kost: await ambilKost(env, k) });
       }
 
       if (url.pathname === '/api/parameter' && req.method === 'POST') {
         if (!['admin', 'master'].includes(sesi.role)) return json({ error: 'Hanya admin yang boleh mengubah parameter.' }, 403);
         const data = await req.json().catch(() => ({}));
-        const ctx = { db: dbKost(env.DB, sesi.kost), user: sesi, env, audit: (a, t, i, l, b) => logic.audit(env, sesi, a, t, i, l, b) };
+        const ctx = buatCtx(today);
         const pesan = await simpanParameter(ctx, data, sesi.kost);
         return json({ ok: true, message: pesan, kost: await ambilKost(env, sesi.kost) });
       }
@@ -1648,14 +1807,36 @@ async function tanganiApi(req, env, url, secure, today) {
       if (url.pathname.startsWith('/api/ktp/penyewa/')) {
         // URL stabil per penyewa (dipakai tombol "Lihat foto"); kunci R2 tidak pernah dikirim ke browser
         const kode = decodeURIComponent(url.pathname.slice('/api/ktp/penyewa/'.length));
-        const t = await env.DB.prepare('select ktp_key from tenants where kode=? or id=?').bind(kode, Number(kode) || -1).first();
+        const t = await env.DB.prepare('select ktp_key from tenants where kost=? and (kode=? or id=?)')
+          .bind(sesi.kost, kode, Number(kode) || -1).first();
         if (!t || !t.ktp_key) return json({ error: 'Penyewa ini belum punya foto KTP.' }, 404);
         return lihatKtp(env, t.ktp_key, sesi);
       }
       if (url.pathname.startsWith('/api/ktp/')) return lihatKtp(env, decodeURIComponent(url.pathname.slice('/api/ktp/'.length)), sesi);
-      if (url.pathname === '/api/pengingat') return json(await daftarPengingat(env, dbKost(env.DB, sesi.kost)));
-      if (url.pathname === '/api/dashboard') return json(await dashboard(env, dbKost(env.DB, sesi.kost), sesi.kost));
-      if (url.pathname === '/api/ops') return json(await daftarLedger(env.DB, sesi.kost));
+      // Sama seperti /api/bootstrap: laporan hanya kost aktif, bukan seluruh kost yang
+      // boleh dibuka akun. Kost lain diakses dengan berpindah kost (/api/pilih-kost).
+      if (url.pathname === '/api/pengingat') return json(await daftarPengingat(env, dbBaca([sesi.kost])));
+      if (url.pathname === '/api/dashboard') return json(await dashboard(env, dbBaca([sesi.kost]), [sesi.kost]));
+      // Export Data (CSV untuk Excel)
+      // Lihat Log Audit (Terbaru 100 aksi)
+      if (url.pathname === '/api/audit-log') {
+        if (!['admin', 'master'].includes(sesi.role)) return json({ error: 'Hanya admin yang boleh melihat log audit.' }, 403);
+        const res = await env.DB.prepare('SELECT * FROM audit_log WHERE kost=? ORDER BY created_at DESC LIMIT 100')
+          .bind(sesi.kost).all();
+        return new Response(JSON.stringify({ ok: true, logs: res.results || [] }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      if (url.pathname === '/api/export/ledger') {
+        const csv = await exportData.exportLedgerCsv(dbBaca([sesi.kost]), sesi.kost);
+        return new Response(csv, {
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="ledger-${sesi.kost}-${new Date().toISOString().slice(0,10)}.csv"`,
+          }
+        });
+      }
+      if (url.pathname === '/api/ops') return json(await daftarLedger(env.DB, [sesi.kost]));
 
       // ---------- tulis ----------
       if (url.pathname === '/api/action') {
@@ -1687,11 +1868,7 @@ async function tanganiApi(req, env, url, secure, today) {
           if (roleDiminta === 'master') return json({ error: 'Hanya master yang boleh membuat akun master.' }, 403);
           if (roleDiminta === 'admin') return json({ error: 'Hanya master yang boleh membuat akun admin.' }, 403);
         }
-        const ctx = {
-          env, db: dbKost(env.DB, sesi.kost), user: sesi, today, kost: sesi.kost,
-          now: () => new Date().toISOString(),
-          audit: (aksi, tabel, rowId, lama, baru) => logic.audit(env, sesi, aksi, tabel, rowId, lama, baru),
-        };
+        const ctx = buatCtx(today);
         // `hp` boleh dikirim di level atas atau di dalam `data` (d1-adapter mengirim dua-duanya).
         if (hpAtas !== undefined) data = { ...(data || {}), hp: hpAtas };
         const msg = await fn(ctx, data || {});

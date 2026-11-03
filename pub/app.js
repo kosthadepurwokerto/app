@@ -612,23 +612,59 @@
         </button>`;
     }
 
-    // Ganti password sendiri (dulu tidak ada jalan sama sekali selain sentuh database)
-    async function openGantiPassword() {
-      const lama = window.prompt('Password saat ini:');
-      if (lama === null) return;
-      const baru = window.prompt('Password baru (minimal 8 karakter):');
-      if (baru === null) return;
-      if (String(baru).length < 8) { showCustomAlert('Password Terlalu Pendek', 'Password baru minimal 8 karakter.', false); return; }
-      const ulang = window.prompt('Ulangi password baru:');
-      if (ulang !== baru) { showCustomAlert('Tidak Cocok', 'Ulangi password tidak sama.', false); return; }
-      showLoading(true);
-      try {
-        const r = await HADE.handlers.gantiPassword(lama, baru);
-        showCustomAlert('Berhasil', r.message || 'Password diganti.', true);
-      } catch (err) {
-        showCustomAlert('Gagal', err.message || 'Password gagal diganti.', false);
-      } finally { showLoading(false); }
+    // Ganti password lewat modal form responsif, bukan prompt native.
+    function openGantiPassword() {
+      const modal = document.getElementById('modal-ganti-password');
+      document.getElementById('form-ganti-password').reset();
+      document.getElementById('ganti-password-error').classList.add('hidden');
+      document.getElementById('password-kekuatan').style.width = '0%';
+      document.getElementById('password-kekuatan-label').textContent = 'Belum diisi';
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+      setTimeout(() => document.getElementById('password-lama').focus(), 50);
     }
+    function tutupModalGantiPassword() {
+      const modal = document.getElementById('modal-ganti-password');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+    function toggleGantiPasswordVisibility() {
+      const input = this.parentElement.querySelector('input');
+      if (input) input.type = input.type === 'password' ? 'text' : 'password';
+    }
+    async function simpanPasswordModal() {
+      const lama = document.getElementById('password-lama').value;
+      const baru = document.getElementById('password-baru').value;
+      const ulang = document.getElementById('password-ulangi').value;
+      const error = document.getElementById('ganti-password-error');
+      const submit = document.getElementById('ganti-password-submit');
+      const gagal = (pesan) => { error.textContent = pesan; error.classList.remove('hidden'); };
+      error.classList.add('hidden');
+      if (baru.length < 8) return gagal('Password baru minimal 8 karakter.');
+      if (baru === lama) return gagal('Password baru harus berbeda dari password saat ini.');
+      if (baru !== ulang) return gagal('Konfirmasi password belum sama. Periksa kembali.');
+      submit.disabled = true; submit.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Menyimpan…';
+      try {
+        const result = await HADE.handlers.gantiPassword(lama, baru);
+        tutupModalGantiPassword();
+        showCustomAlert('Password berhasil diperbarui', result.message || 'Password akun Anda sudah diganti.', true);
+      } catch (err) {
+        gagal((err && err.message) || 'Password gagal diganti. Coba lagi.');
+      } finally {
+        submit.disabled = false; submit.innerHTML = '<i class="fas fa-lock mr-2"></i>Simpan password';
+      }
+    }
+    document.getElementById('form-ganti-password').addEventListener('submit', (event) => { event.preventDefault(); simpanPasswordModal(); });
+    document.getElementById('form-ganti-password').addEventListener('input', (event) => {
+      if (event.target.id !== 'password-baru') return;
+      const value = event.target.value;
+      const score = [value.length >= 8, /[A-Z]/.test(value) && /[a-z]/.test(value), /[0-9]/.test(value), /[^A-Za-z0-9]/.test(value)].filter(Boolean).length;
+      const bar = document.getElementById('password-kekuatan');
+      const label = document.getElementById('password-kekuatan-label');
+      const levels = [{text:'Terlalu pendek',color:'bg-rose-500'}, {text:'Lemah',color:'bg-rose-500'}, {text:'Cukup',color:'bg-amber-500'}, {text:'Baik',color:'bg-blue-500'}, {text:'Kuat',color:'bg-emerald-500'}];
+      const level = value.length < 8 ? 1 : Math.max(2, score);
+      bar.className = 'block h-full rounded-full transition-all ' + levels[level].color;
+      bar.style.width = value ? (level * 25) + '%' : '0%';
+      label.textContent = value ? levels[level].text : 'Belum diisi';
+    });
 
     // Pemetaan tombol tabel -> fungsi yang sudah ada
     daftarAksi('bukti', (d) => {
@@ -1157,14 +1193,17 @@
         `;
       } else if (activeReportTab === 'neraca') {
         // --- 3. LAPORAN NERACA (BALANCE SHEET) ---
-        // Base starting values
-        let assetLandBuildingVal = 1200000000; // 1.2 Billion IDR Base Land & Building Valuation
-        let accumulatedDepreciation = -50000000; // Accumulated Depreciation 50m IDR
-        const activeTenantsCount = tenants.filter(p => p[5] === 'Aktif').length;
-        let depositLiabilities = activeTenantsCount * 500000;
-        let startingEquityCapital = 1100000000; // Owner Capital 1.1 Billion IDR
+        // Saldo awal harus berasal dari transaksi yang dicatat; jangan tampilkan angka contoh sebagai data aktual.
+        let assetLandBuildingVal = 0;
+        let accumulatedDepreciation = 0;
+        let depositLiabilities = 0;
+        let startingEquityCapital = 0;
+        const neracaBelumLengkap = 'Neraca ini hanya merangkum transaksi yang dicatat di aplikasi. Saldo awal bangunan/aset, penyusutan, deposit, dan modal belum dimasukkan; lengkapi saldo awal sebelum memakai laporan ini sebagai laporan akuntansi.';
 
-        // Dynamic adjustment based on all historical Neraca transactions up to the target date
+        const neracaNotice = `<div class="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900"><b>Catatan saldo awal:</b> ${neracaBelumLengkap}</div>`;
+
+
+        // Apply only Neraca transactions explicitly recorded in this kost; no sample opening balances.
         opsTransactions.forEach(o => {
           const parsed = parseDateObj(o[1]);
           const oDate = new Date(parsed.year, parsed.month - 1, 1);
@@ -1195,12 +1234,13 @@
         const netFixedAssets = assetLandBuildingVal + accumulatedDepreciation;
         const totalAssets = cumulativeCashEnd + netFixedAssets;
 
-        // Balance Equation: Equity = Assets - Liabilities
-        const retainedEarnings = totalAssets - depositLiabilities - startingEquityCapital;
-        const totalEquity = startingEquityCapital + retainedEarnings;
+        // Jangan mengarang laba ditahan sebagai angka penyeimbang. Tampilkan selisih yang belum direkonsiliasi.
+        const selisihNeraca = totalAssets - depositLiabilities - startingEquityCapital;
+        const totalEquity = startingEquityCapital;
         const totalLiabilitiesEquity = depositLiabilities + totalEquity;
 
         targetDiv.innerHTML = `
+          ${neracaNotice}
           <div class="text-center mb-8 border-b border-slate-100 pb-6">
             <h3 class="font-extrabold text-slate-900 text-xl">Laporan Posisi Keuangan (Neraca)</h3>
             <p class="text-xs text-rose-500 font-extrabold uppercase tracking-widest mt-1">Kost Hade Exclusive</p>
@@ -1274,7 +1314,7 @@
                 </div>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Laba Ditahan & Berjalan</span>
-                  <span class="font-semibold text-slate-800">${rp(retainedEarnings)}</span>
+                  <span class="font-semibold text-slate-800">${rp(0)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
                   <span>Total Ekuitas</span>
@@ -1291,60 +1331,84 @@
 
           <!-- BALANCED INDICATOR: dihitung, bukan dicap begitu saja -->
           <div class="mt-8 flex justify-center">
-            ${Math.abs(totalAssets - totalLiabilitiesEquity) < 1 ? `
-            <span class="px-4 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
-              <i class="fas fa-check-double"></i> Neraca seimbang
-            </span>` : `
-            <span class="px-4 py-1.5 bg-rose-100 text-rose-800 border border-rose-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
-              <i class="fas fa-triangle-exclamation"></i> Selisih ${(totalAssets - totalLiabilitiesEquity).toLocaleString('id-ID')}
-            </span>`}
+          ${Math.abs(selisihNeraca) < 1 ? `
+          <span class="px-4 py-1.5 bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
+          <i class="fas fa-check-double"></i> Selisih 0
+          </span>` : `
+          <span class="px-4 py-1.5 bg-rose-100 text-rose-800 border border-rose-200 rounded-full font-black text-xs tracking-widest flex items-center gap-2 uppercase">
+          <i class="fas fa-triangle-exclamation"></i> Selisih belum direkonsiliasi ${rp(selisihNeraca)}
+          </span>`}
           </div>
         `;
       }
     }
 
-    // PRINT INDIVIDUAL REPORTS TEMPLATES FLUIDLY
+    // Tutup laporan dengan kembali ke Dashboard (tanpa menggantung pada event browser).
+    function tutupLaporanKeuangan() {
+      showSection('dashboard', document.querySelector('#sidebar-nav button'));
+    }
+
+    async function exportLedgerCsv() {
+      try {
+        const response = await fetch('/api/export/ledger', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || `Export gagal (${response.status}).`);
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `ledger-${new Date().toISOString().slice(0,10)}.csv`;
+        document.body.appendChild(link); link.click(); link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (error) { showCustomAlert('Export gagal', error.message || String(error), false); }
+    }
+
+    async function bukaAuditLog() {
+      const panel = document.getElementById('audit-log-panel');
+      const status = document.getElementById('audit-log-status');
+      const rows = document.getElementById('audit-log-rows');
+      panel.classList.remove('hidden'); status.textContent = 'Memuat aktivitas terbaru…'; rows.replaceChildren();
+      try {
+        const response = await fetch('/api/audit-log', { credentials: 'same-origin' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || `Tidak dapat membaca audit log (${response.status}).`);
+        for (const log of (data.logs || [])) {
+          const tr = document.createElement('tr'); tr.className = 'border-b border-slate-100';
+          for (const value of [log.created_at, log.actor_name || log.actor || '—', log.aksi, `${log.tabel || ''} ${log.row_id || ''}`.trim() || '—']) {
+            const td = document.createElement('td'); td.className = 'p-2 align-top'; td.textContent = value || '—'; tr.appendChild(td);
+          }
+          rows.appendChild(tr);
+        }
+        status.textContent = `Menampilkan ${(data.logs || []).length} aktivitas terbaru.`;
+      } catch (error) { status.textContent = error.message || String(error); }
+    }
+    function tutupAuditLog() { document.getElementById('audit-log-panel').classList.add('hidden'); }
+
+    // Cetak dari halaman aktif agar browser Android tidak memblokir popup window.open().
     function printFinancialReport() {
-      const printContents = document.getElementById('financial-report-content').innerHTML;
-      const printWindow = window.open('', '_blank');
-      printWindow.document.write(`
-        <html>
-          <head>
-            <title>Cetak Laporan Keuangan Kost Hade</title>
-            <style>
-              body { 
-                font-family: 'Courier New', Courier, monospace; 
-                padding: 40px; 
-                font-size: 13px; 
-                color: #000; 
-                background: #fff; 
-              }
-              .text-center { text-align: center; }
-              .border-b { border-bottom: 1px solid #ccc; }
-              .pb-6 { padding-bottom: 20px; }
-              .mb-8 { margin-bottom: 30px; }
-              .space-y-6 > div { margin-bottom: 25px; }
-              .font-bold { font-weight: bold; }
-              .font-extrabold { font-weight: 800; }
-              .text-xl { font-size: 20px; }
-              .text-xs { font-size: 11px; }
-              .flex { display: flex; justify-content: space-between; }
-              .py-2 { padding-top: 6px; padding-bottom: 6px; }
-              .py-3 { padding-top: 10px; padding-bottom: 10px; }
-              .bg-emerald-50, .bg-rose-50, .bg-slate-50, .bg-blue-50 { background-color: #fafafa !important; border: 1px solid #000; padding: 10px; }
-              .double-underline { 
-                border-bottom: 3px double #000; 
-              }
-              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-              .border-t { border-top: 1px solid #000; }
-            </style>
-          </head>
-          <body onload="window.print(); window.close();">
-            ${printContents}
-          </body>
-        </html>
-      `);
-      printWindow.document.close();
+      const content = document.getElementById('financial-report-content');
+      if (!content || !content.textContent.trim()) {
+        showCustomAlert('Laporan belum siap', 'Pilih periode dan tunggu laporan tampil sebelum mencetak.', false);
+        return;
+      }
+      document.body.classList.add('mode-cetak-laporan');
+      const selesai = () => {
+        document.body.classList.remove('mode-cetak-laporan');
+        window.removeEventListener('afterprint', selesai);
+      };
+      window.addEventListener('afterprint', selesai, { once: true });
+      if (window.HadeNativePrint && typeof window.HadeNativePrint.open === 'function') {
+        const css = Array.from(document.styleSheets).map((sheet) => {
+          try { return Array.from(sheet.cssRules).map((rule) => rule.cssText).join('\\n'); }
+          catch (_) { return ''; }
+        }).join('\\n');
+        const printCss = '@page{size:A4;margin:14mm}body{background:#fff!important;color:#172033!important;font:11px Arial,sans-serif;margin:0;padding:0;line-height:1.45}#financial-report-content{display:block!important;max-width:100%!important;width:100%!important;margin:0!important;padding:0!important}#financial-report-content>div:first-child{text-align:center!important;border-bottom:2px solid #1e3a8a!important;padding:0 0 12px!important;margin:0 0 18px!important}#financial-report-content h3{font-size:18px!important;margin:0 0 4px!important;color:#0f172a!important}#financial-report-content h4{font-size:10px!important;letter-spacing:1px!important;color:#1e3a8a!important;border-bottom:1px solid #94a3b8!important;padding-bottom:5px!important;margin:0 0 10px!important}#financial-report-content .grid{display:grid!important;grid-template-columns:1fr 1fr!important;gap:12mm!important;align-items:start!important}#financial-report-content .space-y-4>div{margin-bottom:14px!important}#financial-report-content .flex{display:flex!important;justify-content:space-between!important;align-items:baseline!important;gap:12px!important}#financial-report-content .py-1\\.5{padding:5px 7px!important}#financial-report-content .py-3{padding:9px 10px!important}#financial-report-content .font-bold{font-weight:700!important}#financial-report-content .font-extrabold{font-weight:800!important}#financial-report-content .text-slate-500{color:#475569!important}#financial-report-content .text-slate-700,#financial-report-content .text-slate-800{color:#172033!important}#financial-report-content .text-rose-600{color:#b91c1c!important}#financial-report-content .bg-blue-50{background:#eff6ff!important;border:1px solid #93c5fd!important;border-radius:6px!important}#financial-report-content .bg-emerald-50{background:#ecfdf5!important;border:1px solid #86efac!important;border-radius:6px!important}#financial-report-content .border-t{border-top:1px solid #cbd5e1!important}#financial-report-content .border-dashed{border-top:1px dashed #cbd5e1!important}#financial-report-content .rounded-full{border-radius:999px!important}#financial-report-content>.mt-8{margin-top:18px!important;text-align:center!important}#financial-report-content>.mt-8 span{display:inline-flex!important;background:#ecfdf5!important;border:1px solid #86efac!important;color:#166534!important;padding:5px 12px!important;border-radius:999px!important}*{box-shadow:none!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}';
+        const dokumen = '<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Laporan Keuangan Kost Hade</title><style>' + css + printCss + '</style></head><body><main id="financial-report-content">' + content.innerHTML + '</main></body></html>';
+        window.HadeNativePrint.open(dokumen);
+        setTimeout(selesai, 60000);
+      } else {
+        window.print();
+      }
+
     }
 
     // RENDERS LIVE DYNAMIC LEASE BILLING ALERT BOXES
@@ -3572,7 +3636,7 @@ var AKSI = {
   'handleTipeSewaChange': handleTipeSewaChange, 'handleTransTypeChange': handleTransTypeChange,
   'hapusPratinjauKtp': hapusPratinjauKtp, 'kirimSemuaPengingat': kirimSemuaPengingat,
   'muatDaftarKost': muatDaftarKost, 'muatPengingat': muatPengingat,
-  'openGantiPassword': openGantiPassword, 'printFinancialReport': printFinancialReport,
+    'openGantiPassword': openGantiPassword, 'simpanPasswordModal': simpanPasswordModal, 'tutupModalGantiPassword': tutupModalGantiPassword, 'toggleGantiPasswordVisibility': toggleGantiPasswordVisibility, 'printFinancialReport': printFinancialReport, 'tutupLaporanKeuangan': tutupLaporanKeuangan, 'exportLedgerCsv': exportLedgerCsv, 'bukaAuditLog': bukaAuditLog, 'tutupAuditLog': tutupAuditLog,
   'printReceipt': printReceipt, 'salinTeksUndangan': salinTeksUndangan,
   'showLoading': showLoading, 'showSection': showSection,
   'simpanAdminKost': simpanAdminKost, 'simpanImporWa': simpanImporWa,
@@ -3649,10 +3713,9 @@ document.addEventListener('click', function (e) {
   if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
   jalankanAksi(el, 'click', e);
 }, false);
-// Hanya form/submit yang dipetakan ke handler. `input`/`change` sengaja TIDAK dipetakan:
-// keduanya naik (bubble) dari kolom isian ke <form data-h="...">, sehingga setiap karakter
-// yang diketik ikut memicu handler form (bug: login terkirim setengah jadi, checkbox mati).
-['submit'].forEach(function (jenis) {
+// `change` diperlukan dropdown jenis transaksi. Jangan petakan `input`: teks yang diketik
+// tidak boleh naik ke form login (regresi lama: login terkirim setiap karakter).
+['submit', 'change'].forEach(function (jenis) {
   document.addEventListener(jenis, function (e) {
     var el = cariAksi(e.target);
     if (!el) return;

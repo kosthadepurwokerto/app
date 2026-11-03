@@ -20,7 +20,7 @@
 
 /** Tabel yang datanya dipisah per kost. */
 export const TABEL_BERKOST = new Set([
-  'rooms', 'tenants', 'bills', 'payments', 'ledger', 'categories', 'counters',
+  'rooms', 'tenants', 'bills', 'payments', 'ledger', 'categories', 'counters', 'journal_entries', 'journal_lines',
 ]);
 
 /** Kata kunci SQL yang menandakan sub-query (untuk mencari "tabel data" pertama). */
@@ -113,91 +113,135 @@ function tabelBerkost(sql) {
   return { berkost: hasil };
 }
 
+
 /**
  * Bungkus satu pernyataan SQL agar terikat ke `kost`.
- * @returns {{sql: string, args: any[]}} SQL baru + argumen tambahan (dibuang dari pemanggil lama).
+ * @param {string} sqlAsli
+ * @param {string|string[]} kost  satu nilai, atau daftar nilai (id baru + slug lama).
+ *   Bila daftar, syaratnya `kost in (?,?)` sehingga data lama (slug) dan data baru
+ *   (id angka) sama-sama terbaca — lihat migrasi 019.
+ * @returns {{sql: string, args: any[], tambah: number}} SQL baru + argumen tambahan (dibuang dari pemanggil lama).
  */
 export function bungkusSql(sqlAsli, kost) {
   const sql = String(sqlAsli);
   const rendah = sql.toLowerCase();
+  const daftar = Array.isArray(kost) ? [...new Set(kost.filter((k) => k !== null && k !== undefined && String(k) !== ''))] : [kost];
+  if (!daftar.length) return { sql, args: [], tambah: 0 };
+  const tanda = `(${daftar.map(() => '?').join(',')})`;
+  const kondisiKost = (awalan) => (daftar.length === 1
+    ? `${awalan}kost = ?`
+    : `${awalan}kost in ${tanda}`);
+  const argsKost = () => (daftar.length === 1 ? [daftar[0]] : daftar.map((k) => k));
 
   // ---- INSERT ... INTO tabel ----
-  const ins = rendah.match(/^\s*insert\s+(or\s+\w+\s+)?into\s+([a-z_][a-z0-9_]*)/);
-  if (ins && TABEL_BERKOST.has(ins[2])) {
-    const tabel = ins[2];
+  // Hanya INSERT polos yang dibungkus. `insert or ignore/replace ... select` tidak boleh
+  // disentuh: penambahan kolom pada daftar kolom akan menggeser pasangan VALUES/SELECT-nya.
+  const ins = rendah.match(/^\s*insert\s+into\s+([a-z_][a-z0-9_]*)/);
+  if (ins && TABEL_BERKOST.has(ins[1])) {
+    const tabel = ins[1];
     // Kolom: cari kurung pertama setelah nama tabel
     const buka = sql.indexOf('(', ins[0].length - 1);
     const tutup = sql.indexOf(')', buka);
-    if (buka === -1 || tutup === -1) return { sql, args: [] };
+    if (buka === -1 || tutup === -1) return { sql, args: [], tambah: 0 };
     const kolom = sql.slice(buka + 1, tutup);
-    if (/\bkost\b/.test(kolom.toLowerCase())) return { sql, args: [] }; // sudah ada
+    // Penulisan selalu memakai SATU nilai: nilai pertama (id baru bila ada).
+    // Kolom kost sudah ditulis pemanggil: nilainya diisi kunci tulis (id baru) oleh dbKost().
+    if (/\bkost\b/.test(kolom.toLowerCase())) return { sql, args: [], tambah: 0 };
     const baru = `${sql.slice(0, tutup)}, kost${sql.slice(tutup)}`;
     // nilai: (?,?,?) -> (?,?,?,?)
     const posValues = /values\s*\(([^)]*)\)/i.exec(baru);
     if (!posValues) return { sql: baru, args: [] };
     const isiBaru = baru.slice(0, posValues.index + posValues[0].lastIndexOf(')')) + ', ?' +
                     baru.slice(posValues.index + posValues[0].lastIndexOf(')'));
-    return { sql: isiBaru, args: [kost] };
+    return { sql: isiBaru, args: [daftar[0]], tambah: 1 };
   }
 
   // ---- UPDATE tabel SET ... WHERE ----
   const upd = rendah.match(/^\s*update\s+([a-z_][a-z0-9_]*)/);
   if (upd && TABEL_BERKOST.has(upd[1])) {
-    return { sql: sisipWhere(sql, 'kost = ?'), args: [kost] };
+    return { sql: sisipWhere(sql, kondisiKost('')), args: argsKost(), tambah: argsKost().length };
   }
 
   // ---- DELETE FROM tabel WHERE ----
   const del = rendah.match(/^\s*delete\s+from\s+([a-z_][a-z0-9_]*)/);
   if (del && TABEL_BERKOST.has(del[1])) {
-    return { sql: sisipWhere(sql, 'kost = ?'), args: [kost] };
+    return { sql: sisipWhere(sql, kondisiKost('')), args: argsKost(), tambah: argsKost().length };
   }
 
   // ---- SELECT ... ----
   if (/^\s*select\b/i.test(sql)) {
     const { berkost } = tabelBerkost(sql);
-    if (!berkost.length) return { sql, args: [] };
+    if (!berkost.length) return { sql, args: [], tambah: 0 };
     // Semua tabel berkost di level atas ikut difilter. Tanpa ini, join dua tabel (mis.
     // `from tenants t join rooms r`) hanya terfilter satu sisi: nama penyewa milik kost
     // lain bisa muncul di `Tidak ada tagihan terbuka untuk <nama>` walau datanya terpisah.
-    const saringan = berkost.map((x) => (x.alias ? `${x.alias}.kost = ?` : 'kost = ?'));
-    return { sql: sisipWhere(sql, saringan.join(' and ')), args: saringan.map(() => kost) };
+    // Daftar lengkap ditaruh di kurung supaya `a.kost in (...) and b.kost in (...)`
+    // tidak salah dikelompokkan.
+    const saringan = berkost.map((x) => `(${kondisiKost(x.alias ? `${x.alias}.` : '')})`);
+    const args = berkost.flatMap(() => argsKost());
+    return { sql: sisipWhere(sql, saringan.join(' and ')), args, tambah: args.length };
   }
 
-  return { sql, args: [] };
+  return { sql, args: [], tambah: 0 };
 }
 
 /**
  * Bungkus objek D1 (prepare/batch) sehingga kost selalu ikut.
  * @param {D1Database} db
- * @param {string} kost  kunci kost aktif
+ * @param {string|string[]} kost  kunci kost aktif (boleh daftar: id baru + slug lama)
+ * @param {{ tulis?: string }} opsi
+ *   `tulis` = nilai yang ditulis ke kolom kost (id baru, migrasi 019). Saat MENULIS,
+ *   syarat kost milik pemanggil (mis. `kost = ?` pada insert users) diisi nilai ini.
+ *   Saat MEMBACA, daftar lengkap tetap dipakai agar data lama (slug) ikut terbaca.
  */
-export function dbKost(db, kost) {
-  if (!kost) return db;                              // tanpa kost = perilaku lama (mis. migrasi)
+export function dbKost(db, kost, { tulis } = {}) {
+  const daftar = (Array.isArray(kost) ? kost.filter(Boolean) : (kost ? [kost] : [])).filter((k) => String(k) !== '');
+  if (!daftar.length) return db;                     // tanpa kost = perilaku lama (mis. migrasi)
+  const kunciTulis = tulis != null && String(tulis) !== '' ? String(tulis) : daftar[0];
 
   const prepare = (sql) => {
-    const { sql: s2, args } = bungkusSql(sql, kost);
+    const { sql: s2, args, tambah } = bungkusSql(sql, daftar);
     const stmt = db.prepare(s2);
-    // .bind() asli tetap dipakai; argumen kost ditambahkan paling belakang
+    // Placeholder `kost = ?` milik pemanggil (di luar yang ditambahkan bungkusSql) diisi kunciTulis.
+    // Hanya bila pemanggil memang mengirim nilai untuk kolom kost (lihat catatan di bungkusSql:
+    // INSERT ke tabel berkost dengan kolom kost yang sudah ditulis sendiri tidak menambah argumen).
+    const posisiKost = [];
+    if (tambah > 0) {
+      s2.replace(/\bkost\s*=\s*\?/gi, (m, off) => {
+        posisiKost.push((s2.slice(0, off).match(/\?/g) || []).length - 1);
+        return m;
+      });
+    }
+    const ikat = (nilai) => {
+      const hasil = [];
+      const jml = nilai.length + (tambah || 0);
+      for (let j = 0; j < jml; j += 1) {
+        if (posisiKost.includes(j)) hasil.push(kunciTulis);
+        else if (j < nilai.length) hasil.push(nilai[j]);
+        else hasil.push(args[j - nilai.length] ?? kunciTulis);
+      }
+      return stmt.bind(...hasil);
+    };
     return {
       _st: stmt,
-      bind: (...nilai) => prepareSetelah(stmt, [...nilai, ...args]),
-      first: (...nilai) => (nilai.length ? stmt.bind(...nilai, ...args) : stmt.bind(...args)).first(),
-      all: (...nilai) => (nilai.length ? stmt.bind(...nilai, ...args) : stmt.bind(...args)).all(),
-      run: (...nilai) => (nilai.length ? stmt.bind(...nilai, ...args) : stmt.bind(...args)).run(),
+      bind: (...nilai) => prepareSetelah(ikat(nilai)),
+      first: (...nilai) => (nilai.length ? ikat(nilai) : stmt.bind(...args)).first(),
+      all: (...nilai) => (nilai.length ? ikat(nilai) : stmt.bind(...args)).all(),
+      run: (...nilai) => (nilai.length ? ikat(nilai) : stmt.bind(...args)).run(),
     };
   };
 
   return {
     prepare,
-    batch: async (daftar) => {
+    batch: async (l) => {
       // Statement ter-wrap milik dbKost() sudah menyisipkan kost sendiri — pakai apa adanya.
       // Statement MENTAH (db.prepare() biasa, tanpa filter kost) di sini akan membuat tulis/baca
       // menembus batas kost, jadi langsung ditolak: pemanggil wajib memakai dbKost().prepare().
-      const siap = (daftar || []).map((s) => {
+      const siapDaftar = (l || []).map((s) => {
         if (s && s._st) return s._st;
         throw new Error('db-kost: batch() hanya menerima statement dari dbKost().prepare() — statement mentah tidak terfilter kost.');
       });
-      return db.batch(siap);
+      return db.batch(siapDaftar);
     },
     exec: (sql) => db.exec(sql),
     dump: (...a) => db.dump(...a),
@@ -205,11 +249,10 @@ export function dbKost(db, kost) {
 }
 
 /** Objek statement yang sudah ter-bind: tetap mendukung .first/.all/.run dan bisa dipakai di batch. */
-function prepareSetelah(stmt, nilai) {
-  const terikat = stmt.bind(...nilai);
+function prepareSetelah(terikat) {
   return {
     _st: terikat,
-    bind: () => prepareSetelah(stmt, nilai),
+    bind: () => prepareSetelah(terikat),
     first: () => terikat.first(),
     all: () => terikat.all(),
     run: () => terikat.run(),

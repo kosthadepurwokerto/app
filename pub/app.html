@@ -940,8 +940,19 @@
 
         <!-- SECTION: LAPORAN KEUANGAN (NERACA, RUGI LABA, ARUS KAS) -->
         <section id="sec-laporan" class="content-section hidden w-full animate-fade-in">
+        <div class='p-4 sm:p-0'>
+          <!-- Export laporan operasional; file mengikuti periode/kost aktif. -->
+          <div class="no-print mb-5 flex flex-wrap gap-2">
+            <button type="button" data-h="exportLedgerCsv" class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100"><i class="fas fa-file-csv mr-1"></i> Unduh Ledger CSV</button>
+            <button type="button" data-h="bukaAuditLog" class="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-bold text-blue-700 hover:bg-blue-100"><i class="fas fa-history mr-1"></i> Riwayat Aktivitas</button>
+          </div>
+          <div id="audit-log-panel" class="hidden no-print mb-5 rounded-2xl border border-slate-200 bg-white p-4">
+            <div class="mb-3 flex items-center justify-between"><h3 class="font-bold">Riwayat Aktivitas Terbaru</h3><button type="button" data-h="tutupAuditLog" class="rounded-lg bg-slate-100 px-3 py-1 text-xs font-bold">Tutup</button></div>
+            <div id="audit-log-status" class="mb-2 text-xs text-slate-500"></div>
+            <div class="overflow-x-auto"><table class="w-full text-left text-xs"><thead><tr class="border-b text-slate-500"><th class="p-2">Waktu</th><th class="p-2">Pengguna</th><th class="p-2">Aksi</th><th class="p-2">Objek</th></tr></thead><tbody id="audit-log-rows"></tbody></table></div>
+          </div>
           <!-- Report Header & Month Filter -->
-          <div class="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div class="no-print bg-white p-6 rounded-3xl border border-slate-200/80 shadow-sm mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <h2 class="text-xl md:text-2xl font-black text-slate-900 flex items-center gap-2">
                 <i class="fas fa-file-invoice-dollar text-rose-500"></i> Laporan Keuangan Berkala
@@ -979,7 +990,7 @@
           </div>
 
           <!-- Subtabs Navigation inside Reports -->
-          <div class="flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-lg mb-6 shadow-inner">
+          <div class="no-print flex bg-slate-200/50 p-1.5 rounded-2xl border border-slate-200 max-w-lg mb-6 shadow-inner">
             <button data-h="switchReportTab" data-h-arg="[&quot;rugi-laba&quot;]" id="tab-rep-rugi-laba" class="flex-1 py-3 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">
               <i class="fas fa-chart-line mr-1.5"></i> Rugi Laba
             </button>
@@ -1005,7 +1016,8 @@
             </div>
 
             <!-- Action Buttons -->
-            <div class="mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
+            <div class="no-print mt-8 pt-6 border-t border-slate-100 flex justify-end gap-3">
+              <button data-h="tutupLaporanKeuangan" class="no-print flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-5 py-3 rounded-xl font-bold text-xs transition border border-slate-200">Tutup</button>
               <button data-h="printFinancialReport" class="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-5 py-3 rounded-xl font-bold text-xs transition shadow-md shadow-slate-800/10">
                 <i class="fas fa-print"></i> Cetak Laporan Keuangan
               </button>
@@ -1013,6 +1025,7 @@
           </div>
         </section>
 
+        </div>
         <!-- SECTION: USER MANAGEMENT -->
         <section id="sec-user" class="content-section hidden w-full animate-fade-in restricted-user-view">
           <div class="flex flex-col lg:flex-row gap-8">
@@ -1569,6 +1582,27 @@
       <button type="button" data-h="batalkanPilihKost" class="mt-4 w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-2.5 rounded-xl font-bold text-xs transition">
         Batal
       </button>
+    </div>
+  </div>
+
+  <div id="modal-ganti-password" class="fixed inset-0 z-[10003] hidden items-center justify-center bg-slate-950/55 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="ganti-password-judul">
+    <div class="w-full max-w-md overflow-hidden rounded-3xl border border-white/70 bg-white shadow-2xl">
+      <div class="bg-gradient-to-br from-slate-900 via-blue-950 to-blue-700 px-6 pb-7 pt-6 text-white">
+        <div class="mb-5 flex items-center justify-between">
+          <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-xl ring-1 ring-white/20"><i class="fas fa-shield-alt"></i></div>
+          <button type="button" data-h="tutupModalGantiPassword" aria-label="Tutup" class="flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-white/80 hover:bg-white/20"><i class="fas fa-times"></i></button>
+        </div>
+        <p class="text-[10px] font-bold uppercase tracking-[.2em] text-blue-200">Keamanan akun</p>
+        <h2 id="ganti-password-judul" class="mt-1 text-2xl font-black tracking-tight">Perbarui password</h2>
+        <p class="mt-2 text-sm leading-relaxed text-blue-100/85">Gunakan password yang kuat dan tidak dipakai di akun lain.</p>
+      </div>
+      <form id="form-ganti-password" class="space-y-4 px-6 py-5">
+        <label class="block"><span class="mb-1.5 block text-xs font-bold text-slate-600">Password saat ini</span><span class="relative block"><input id="password-lama" type="password" autocomplete="current-password" required class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"><button type="button" data-h="toggleGantiPasswordVisibility" aria-label="Tampilkan password" class="absolute inset-y-0 right-0 px-4 text-slate-400 hover:text-blue-600"><i class="fas fa-eye"></i></button></span></label>
+        <label class="block"><span class="mb-1.5 block text-xs font-bold text-slate-600">Password baru</span><span class="relative block"><input id="password-baru" type="password" autocomplete="new-password" minlength="8" required class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"><button type="button" data-h="toggleGantiPasswordVisibility" aria-label="Tampilkan password" class="absolute inset-y-0 right-0 px-4 text-slate-400 hover:text-blue-600"><i class="fas fa-eye"></i></button></span><span class="mt-1.5 block text-[11px] text-slate-400">Minimal 8 karakter. Hindari password yang mudah ditebak.</span><span class="mt-2 block h-1.5 overflow-hidden rounded-full bg-slate-100"><span id="password-kekuatan" class="block h-full w-0 rounded-full bg-slate-300 transition-all"></span></span><span id="password-kekuatan-label" class="mt-1 block text-[10px] text-slate-400">Belum diisi</span></label>
+        <label class="block"><span class="mb-1.5 block text-xs font-bold text-slate-600">Ulangi password baru</span><span class="relative block"><input id="password-ulangi" type="password" autocomplete="new-password" minlength="8" required class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-12 text-sm text-slate-800 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10"><button type="button" data-h="toggleGantiPasswordVisibility" aria-label="Tampilkan password" class="absolute inset-y-0 right-0 px-4 text-slate-400 hover:text-blue-600"><i class="fas fa-eye"></i></button></span></label>
+        <p id="ganti-password-error" class="hidden rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700" role="alert"></p>
+        <div class="flex gap-3 pt-1"><button type="button" data-h="tutupModalGantiPassword" class="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-200">Batal</button><button id="ganti-password-submit" type="submit" class="flex-1 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:from-blue-700 hover:to-blue-800 disabled:cursor-not-allowed disabled:opacity-60"><i class="fas fa-lock mr-2"></i>Simpan password</button></div>
+      </form>
     </div>
   </div>
 
