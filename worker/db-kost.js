@@ -205,23 +205,7 @@ export function dbKost(db, kost, { tulis } = {}) {
     // Placeholder `kost = ?` milik pemanggil (di luar yang ditambahkan bungkusSql) diisi kunciTulis.
     // Hanya bila pemanggil memang mengirim nilai untuk kolom kost (lihat catatan di bungkusSql:
     // INSERT ke tabel berkost dengan kolom kost yang sudah ditulis sendiri tidak menambah argumen).
-    const posisiKost = [];
-    if (tambah > 0) {
-      s2.replace(/\bkost\s*=\s*\?/gi, (m, off) => {
-        posisiKost.push((s2.slice(0, off).match(/\?/g) || []).length - 1);
-        return m;
-      });
-    }
-    const ikat = (nilai) => {
-      const hasil = [];
-      const jml = nilai.length + (tambah || 0);
-      for (let j = 0; j < jml; j += 1) {
-        if (posisiKost.includes(j)) hasil.push(kunciTulis);
-        else if (j < nilai.length) hasil.push(nilai[j]);
-        else hasil.push(args[j - nilai.length] ?? kunciTulis);
-      }
-      return stmt.bind(...hasil);
-    };
+    const ikat = (nilai) => stmt.bind(...nilai, ...args);
     return {
       _st: stmt,
       bind: (...nilai) => prepareSetelah(ikat(nilai)),
