@@ -47,6 +47,7 @@ for i in $(seq 1 60); do curl -s -o /dev/null http://localhost:8787/api/session 
 # 5) uji
 node tools/uji-jurnal.mjs || exit 1
 node tools/uji-kategori-edit.mjs || exit 1
+node tools/uji-kategori-mobile.mjs || exit 1
 /usr/bin/python3 - <<'PY'
 src=open('tools/uji-e2e.sh').read()
 extra=open('tools/uji-pindah-kamar.sh').read()+open('tools/uji-nominal.sh').read()

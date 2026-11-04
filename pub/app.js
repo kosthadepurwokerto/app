@@ -2713,6 +2713,16 @@
       document.getElementById('category-form-desc').innerText = "Ubah pemetaan akun atau nama kategori";
       document.getElementById('btn-save-category').innerHTML = '<i class="fas fa-check-circle"></i> Simpan Perubahan';
       document.getElementById('btn-cancel-edit-category').classList.remove('hidden');
+      // Di layar HP tabel berada jauh di bawah form; kembalikan pengguna ke form
+      // agar perubahan edit terlihat dan langsung bisa disimpan.
+      const form = document.getElementById('form-kategori');
+      if (form && typeof form.scrollIntoView === 'function') {
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      const namaInput = document.getElementById('category-nama');
+      if (namaInput) {
+        window.setTimeout(() => namaInput.focus({ preventScroll: true }), 250);
+      }
     }
 
     function cancelEditCategory() {
