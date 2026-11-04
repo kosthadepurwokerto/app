@@ -68,6 +68,7 @@ create table if not exists categories (
   jenis        text not null check (jenis in ('pendapatan','pengeluaran','neraca')),
   nama         text not null,
   saldo_normal text not null default 'Debet' check (saldo_normal in ('Debet','Kredit')),
+  tipe_akun    text not null default 'expense' check (tipe_akun in ('asset','liability','equity','revenue','expense')),
   aktif        integer not null default 1,
   arus_kas     integer not null default 1,   -- 0 = non-cash (penyusutan) tidak menggerakkan kas
   kost         text not null default 'kost-hade'
@@ -346,6 +347,13 @@ insert or ignore into categories (jenis, nama, saldo_normal) values
   ('neraca','Pengembalian Deposit Jaminan','Debet'),
   ('neraca','Setoran Modal Pemilik','Kredit'),
   ('neraca','Penarikan Prive Pemilik','Debet');
+
+update categories set tipe_akun='revenue' where jenis='pendapatan';
+update categories set tipe_akun='expense' where jenis='pengeluaran';
+update categories set tipe_akun='asset' where jenis='neraca' and (nama like '%Aset%' or nama like '%Pembelian%');
+update categories set tipe_akun='liability' where jenis='neraca' and (nama like '%Deposit%' or nama like '%Jaminan%');
+update categories set tipe_akun='equity' where jenis='neraca' and (nama like '%Modal%' or nama like '%Prive%' or nama like '%Penarikan%');
+update categories set tipe_akun='asset' where jenis='neraca' and (nama like '%Penyusutan%' or nama like '%Depresiasi%');
 
 -- ---------- INDEX TAMBAHAN (kuota baca) ----------
 -- Query dashboard/ops selalu menyaring voided_at is null; index parsial membuat D1

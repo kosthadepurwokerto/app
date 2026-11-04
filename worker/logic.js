@@ -608,9 +608,23 @@ export async function updateTenant(ctx, data) {
   return `Data penyewa ${nama} diperbarui.`;
 }
 
-function akunJurnalLedger(jenis, kategori, saldoNormal) {
+function akunJurnalLedger(jenis, kategori, saldoNormal, tipeAkun) {
   const nama = String(kategori || '');
   const low = nama.toLowerCase();
+  if (jenis === 'neraca' && tipeAkun === 'liability') {
+    return /pengembalian|refund/.test(low)
+      ? { debit: ['2100', 'Utang Deposit/Pihak Ketiga'], kredit: ['1000', 'Kas/Bank'] }
+      : { debit: ['1000', 'Kas/Bank'], kredit: ['2100', nama] };
+  }
+  if (jenis === 'neraca' && tipeAkun === 'asset') {
+    if (/penyusutan|depresiasi/.test(low)) return { debit: ['6100', 'Beban Penyusutan'], kredit: ['1600', 'Akumulasi Penyusutan Aset Tetap'] };
+    return { debit: ['1500', nama], kredit: ['1000', 'Kas/Bank'] };
+  }
+  if (jenis === 'neraca' && tipeAkun === 'equity') {
+    return /prive|penarikan/.test(low)
+      ? { debit: ['3100', 'Prive Pemilik'], kredit: ['1000', 'Kas/Bank'] }
+      : { debit: ['1000', 'Kas/Bank'], kredit: ['3000', nama] };
+  }
   if (/penyusutan|depresiasi/.test(low)) return {
     debit: ['6100', 'Beban Penyusutan'], kredit: ['1600', 'Akumulasi Penyusutan Aset Tetap'],
   };
@@ -628,10 +642,10 @@ function akunJurnalLedger(jenis, kategori, saldoNormal) {
     : { debit: ['5900', nama], kredit: ['1000', 'Kas/Bank'] };
 }
 
-async function jurnalLedger(ctx, { id, tanggal, jenis, kategori, jumlah, keterangan }) {
+async function jurnalLedger(ctx, { id, tanggal, jenis, kategori, jumlah, keterangan, tipeAkun }) {
   const ada = await ctx.db.prepare("select name from sqlite_master where type='table' and name='journal_entries'").first().catch(() => null);
   if (!ada) return;
-  const akun = akunJurnalLedger(jenis, kategori, '');
+  const akun = akunJurnalLedger(jenis, kategori, '', tipeAkun);
   const ref = `ledger:${id}`;
   await ctx.tulis.prepare("insert or ignore into journal_entries (tanggal,sumber,source_ref,keterangan,created_by) values (?,'ledger',?,?,?)")
     .bind(tanggal, ref, keterangan || kategori, ctx.user.id).run();
@@ -663,7 +677,7 @@ export async function addOpsTransaction(ctx, data) {
     'insert into ledger (tanggal, jenis, kategori_id, kategori, jumlah, keterangan, created_by) values (?,?,?,?,?,?,?)'
   ).bind(tgl, jenis, cat.id, cat.nama, jumlah, String(data.keterangan || ''), ctx.user.id).run();
   const ledgerId = ins.meta.last_row_id;
-  await jurnalLedger(ctx, { id: ledgerId, tanggal: tgl, jenis, kategori: cat.nama, jumlah, keterangan: data.keterangan });
+  await jurnalLedger(ctx, { id: ledgerId, tanggal: tgl, jenis, kategori: cat.nama, jumlah, keterangan: data.keterangan, tipeAkun: cat.tipe_akun });
   await ctx.audit('ledger', 'ledger', ledgerId, null, { jenis, nama, jumlah, tgl });
   return `Transaksi ${jenis} "${data.keterangan || nama}" berhasil dicatat.`;
 }

@@ -1031,6 +1031,7 @@
       const activeMonthlyRentIncome = monthlyTenantPayments.reduce((acc, curr) => acc + (Number(String(curr[3]).replace(/[^0-9]/g, '')) || 0), 0);
       const activeMonthlyOpsIncome = monthlyOps.filter(o => o[2] === 'Pendapatan').reduce((acc, curr) => acc + (Number(curr[4]) || 0), 0);
       const activeMonthlyOpsExpenses = monthlyOps.filter(o => o[2] === 'Pengeluaran').reduce((acc, curr) => acc + (Number(curr[4]) || 0), 0);
+      const activeMonthlyCashExpenses = monthlyOps.filter(o => o[2] === 'Pengeluaran' && infoKategori('Pengeluaran', o[3]).arusKas).reduce((acc, curr) => acc + (Number(curr[4]) || 0), 0);
       
       // Monthly Neraca cash-flow additions
       let activeMonthlyNeracaInflow = 0;
@@ -1046,7 +1047,7 @@
 
       // Total Cashflow for current month
       const totalMonthlyInflow = activeMonthlyRentIncome + activeMonthlyOpsIncome + activeMonthlyNeracaInflow;
-      const totalMonthlyOutflow = activeMonthlyOpsExpenses + activeMonthlyNeracaOutflow;
+      const totalMonthlyOutflow = activeMonthlyCashExpenses + activeMonthlyNeracaOutflow;
       const netMonthlyCashFlow = totalMonthlyInflow - totalMonthlyOutflow;
 
       // Cumulative Cash up to END of current month
@@ -1198,7 +1199,8 @@
         let accumulatedDepreciation = 0;
         let depositLiabilities = 0;
         let startingEquityCapital = 0;
-        const neracaBelumLengkap = 'Neraca ini hanya merangkum transaksi yang dicatat di aplikasi. Saldo awal bangunan/aset, penyusutan, deposit, dan modal belum dimasukkan; lengkapi saldo awal sebelum memakai laporan ini sebagai laporan akuntansi.';
+        let labaBerjalan = 0;
+        const neracaBelumLengkap = 'Neraca ini merangkum transaksi yang sudah dicatat di aplikasi. Pastikan seluruh saldo awal aset, kewajiban, dan modal sudah dimasukkan sebelum memakai laporan ini sebagai laporan akuntansi.';
 
         const neracaNotice = `<div class="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900"><b>Catatan saldo awal:</b> ${neracaBelumLengkap}</div>`;
 
@@ -1216,28 +1218,44 @@
             // sehingga persamaan Aset = Kewajiban + Ekuitas tetap seimbang.
             const val = Number(o[4]) || 0;
             const nama = String(o[3] || '').toLowerCase();
-            const kredit = infoKategori('Neraca', o[3]).kredit;
+            const info = infoKategori('Neraca', o[3]);
+            const kredit = info.kredit;
             if (/penyusutan|depresiasi/.test(nama)) {
               accumulatedDepreciation -= val;               // menambah akumulasi penyusutan (aset turun)
+            } else if (info.tipeAkun === 'liability') {
+              depositLiabilities += /pengembalian|refund/.test(nama) ? -val : val;
+            } else if (info.tipeAkun === 'equity') {
+              startingEquityCapital += /prive|penarikan/.test(nama) ? -val : val;
             } else if (kredit) {
               // saldo normal kredit: modal / pinjaman / deposito jaminan
-              if (/deposit|jaminan/.test(nama)) depositLiabilities += val;
-              else startingEquityCapital += val;
+              startingEquityCapital += val;
             } else {
               // saldo normal debet: aset bertambah, prive/penarikan mengurangi ekuitas
-              if (/prive|penarikan|pengembalian/.test(nama)) startingEquityCapital -= val;
+              if (/prive|penarikan/.test(nama)) startingEquityCapital -= val;
               else assetLandBuildingVal += val;
             }
           }
         });
 
+        // Laba berjalan masuk ke ekuitas; ini bukan angka penyeimbang fiktif.
+        const targetDate = new Date(selYear, selMonth - 1, 1);
+        tenantPayments.forEach(p => {
+          const d = parseDateObj(p[0]);
+          if (new Date(d.year, d.month - 1, 1) <= targetDate) labaBerjalan += Number(String(p[3]).replace(/[^0-9]/g, '')) || 0;
+        });
+        opsTransactions.forEach(o => {
+          const d = parseDateObj(o[1]);
+          if (new Date(d.year, d.month - 1, 1) <= targetDate) {
+            if (o[2] === 'Pendapatan') labaBerjalan += Number(o[4]) || 0;
+            if (o[2] === 'Pengeluaran') labaBerjalan -= Number(o[4]) || 0;
+          }
+        });
+
         const netFixedAssets = assetLandBuildingVal + accumulatedDepreciation;
         const totalAssets = cumulativeCashEnd + netFixedAssets;
-
-        // Jangan mengarang laba ditahan sebagai angka penyeimbang. Tampilkan selisih yang belum direkonsiliasi.
-        const selisihNeraca = totalAssets - depositLiabilities - startingEquityCapital;
-        const totalEquity = startingEquityCapital;
+        const totalEquity = startingEquityCapital + labaBerjalan;
         const totalLiabilitiesEquity = depositLiabilities + totalEquity;
+        const selisihNeraca = totalAssets - totalLiabilitiesEquity;
 
         targetDiv.innerHTML = `
           ${neracaNotice}
@@ -1314,7 +1332,7 @@
                 </div>
                 <div class="flex justify-between py-1.5 px-2 hover:bg-slate-50 transition rounded-lg">
                   <span>Laba Ditahan & Berjalan</span>
-                  <span class="font-semibold text-slate-800">${rp(0)}</span>
+                                    <span class="font-semibold text-slate-800">${rp(labaBerjalan)}</span>
                 </div>
                 <div class="flex justify-between py-1.5 px-2 font-bold text-slate-700 border-t border-dashed border-slate-100 mt-1">
                   <span>Total Ekuitas</span>
@@ -1887,15 +1905,15 @@
     function infoKategori(jenis, nama) {
       const c = petaKategori()[String(jenis) + '|' + String(nama)];
       const kredit = c ? String(c.saldoNormal || 'Debet') === 'Kredit' : false;
-      const arusKas = c ? c.arusKas !== false : true;
-      return { kredit, arusKas, ada: !!c };
+      const arusKas = c ? c.arusKas !== false && c.arusKas !== 0 && c.arusKas !== '0' : true;
+      return { kredit, arusKas, tipeAkun: c ? c.tipeAkun : null, ada: !!c };
     }
     // dampak arus kas: pendapatan +, pengeluaran -, neraca mengikuti saldo normal
     function dampakKas(o) {
       const val = Number(o[4]) || 0;
       const j = o[2];
       if (j === 'Pendapatan') return val;
-      if (j === 'Pengeluaran') return -val;
+      if (j === 'Pengeluaran') return infoKategori('Pengeluaran', o[3]).arusKas ? -val : 0;
       if (j === 'Neraca') {
         const info = infoKategori(j, o[3]);
         if (!info.arusKas) return 0;

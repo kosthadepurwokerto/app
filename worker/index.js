@@ -547,10 +547,10 @@ async function buatKost(req, env, sesi) {
     .bind(kunci, nama, kota, tagline).run();
 
   // Kategori standar untuk kost baru (mengikuti daftar bawaan)
-  const bawaan = await env.DB.prepare('select jenis, nama, saldo_normal, arus_kas from categories where kost=?').bind(sesi.kost).all();
+  const bawaan = await env.DB.prepare('select jenis, nama, saldo_normal, tipe_akun, arus_kas from categories where kost=?').bind(sesi.kost).all();
   for (const c of (bawaan.results || [])) {
-    await env.DB.prepare('insert or ignore into categories (jenis, nama, saldo_normal, arus_kas, kost) values (?,?,?,?,?)')
-      .bind(c.jenis, c.nama, c.saldo_normal, c.arus_kas, kunci).run();
+    await env.DB.prepare('insert or ignore into categories (jenis, nama, saldo_normal, tipe_akun, arus_kas, kost) values (?,?,?,?,?,?)')
+      .bind(c.jenis, c.nama, c.saldo_normal, c.tipe_akun, c.arus_kas, kunci).run();
   }
   await env.DB.prepare("insert or ignore into counters (kost, nama, value) values (?, 'kode_penyewa', 0)").bind(kunci).run();
 
@@ -791,6 +791,8 @@ async function deleteRoom(ctx, d) {
 
 const JENIS_KAT = { pengeluaran: 'Pengeluaran', pendapatan: 'Pendapatan', neraca: 'Neraca' };
 
+const TIPE_AKUN = new Set(['asset', 'liability', 'equity', 'revenue', 'expense']);
+
 function validKat(d) {
   const jenis = String(d.jenis || '').toLowerCase();
   if (!JENIS_KAT[jenis]) throw logic.httpError(400, 'Jenis kategori harus Pendapatan, Pengeluaran, atau Neraca.');
@@ -798,16 +800,20 @@ function validKat(d) {
   if (!nama) throw logic.httpError(400, 'Nama kategori wajib diisi.');
   const saldo = String(d.saldoNormal || (jenis === 'pengeluaran' ? 'Debet' : 'Kredit'));
   if (!['Debet', 'Kredit'].includes(saldo)) throw logic.httpError(400, 'Saldo normal harus Debet atau Kredit.');
+  const tipeAkun = String(d.tipeAkun || (jenis === 'pendapatan' ? 'revenue' : jenis === 'pengeluaran' ? 'expense' : 'equity')).toLowerCase();
+  if (!TIPE_AKUN.has(tipeAkun)) throw logic.httpError(400, 'Tipe akun tidak valid.');
+  if (jenis === 'pendapatan' && tipeAkun !== 'revenue') throw logic.httpError(400, 'Kategori pendapatan harus bertipe revenue.');
+  if (jenis === 'pengeluaran' && tipeAkun !== 'expense') throw logic.httpError(400, 'Kategori pengeluaran harus bertipe expense.');
   const arusKas = d.arusKas === undefined ? 1 : (d.arusKas ? 1 : 0);
-  return { jenis, nama, saldo, arusKas };
+  return { jenis, nama, saldo, tipeAkun, arusKas };
 }
 
 async function addCategory(ctx, d) {
-  const { jenis, nama, saldo, arusKas } = validKat(d);
+  const { jenis, nama, saldo, tipeAkun, arusKas } = validKat(d);
   const dup = await ctx.db.prepare('select id from categories where jenis=? and nama=?').bind(jenis, nama).first();
   if (dup) throw logic.httpError(409, `Kategori "${nama}" sudah ada.`);
-  await ctx.tulis.prepare('insert into categories (jenis, nama, saldo_normal, arus_kas) values (?,?,?,?)').bind(jenis, nama, saldo, arusKas).run();
-  await ctx.audit('category.create', 'categories', nama, null, { jenis, nama, saldo, arusKas });
+  await ctx.tulis.prepare('insert into categories (jenis, nama, saldo_normal, tipe_akun, arus_kas) values (?,?,?,?,?)').bind(jenis, nama, saldo, tipeAkun, arusKas).run();
+  await ctx.audit('category.create', 'categories', nama, null, { jenis, nama, saldo, tipeAkun, arusKas });
   return `Kategori ${JENIS_KAT[jenis]} "${nama}" ditambahkan.`;
 }
 
@@ -815,13 +821,14 @@ async function updateCategory(ctx, d) {
   const id = Number(d.id);
   const old = await ctx.db.prepare('select * from categories where id=?').bind(id).first();
   if (!old) throw logic.httpError(404, 'Kategori tidak ditemukan.');
-  const { jenis, nama, saldo, arusKas } = validKat({
+  const { jenis, nama, saldo, tipeAkun, arusKas } = validKat({
     ...d, jenis: d.jenis || old.jenis, saldoNormal: d.saldoNormal || old.saldo_normal,
+    tipeAkun: d.tipeAkun === undefined ? old.tipe_akun : d.tipeAkun,
     arusKas: d.arusKas === undefined ? old.arus_kas : d.arusKas,
   });
   const dup = await ctx.db.prepare('select id from categories where jenis=? and nama=? and id<>?').bind(jenis, nama, id).first();
   if (dup) throw logic.httpError(409, `Kategori "${nama}" sudah ada.`);
-  await ctx.db.prepare('update categories set jenis=?, nama=?, saldo_normal=?, arus_kas=? where id=?').bind(jenis, nama, saldo, arusKas, id).run();
+  await ctx.db.prepare('update categories set jenis=?, nama=?, saldo_normal=?, tipe_akun=?, arus_kas=? where id=?').bind(jenis, nama, saldo, tipeAkun, arusKas, id).run();
   // transaksi lama menyimpan nama kategori sebagai teks: ikut diganti agar laporan tidak terpecah
   await ctx.db.prepare('update ledger set kategori=? where kategori=? and jenis=?').bind(nama, old.nama, old.jenis).run();
   await ctx.audit('category.update', 'categories', id, { jenis: old.jenis, nama: old.nama }, { jenis, nama });
@@ -1695,7 +1702,7 @@ async function tanganiApi(req, env, url, secure, today) {
         const kategori = { Pengeluaran: [], Pendapatan: [], Neraca: [] };
         (cats.results || []).forEach((c) => {
           const k = c.jenis.charAt(0).toUpperCase() + c.jenis.slice(1);
-          (kategori[k] = kategori[k] || []).push({ id: c.id, nama: c.nama, saldoNormal: c.saldo_normal, jenis: k, arusKas: c.arus_kas !== 0 });
+          (kategori[k] = kategori[k] || []).push({ id: c.id, nama: c.nama, saldoNormal: c.saldo_normal, tipeAkun: c.tipe_akun, jenis: k, arusKas: c.arus_kas !== 0 });
         });
         const users = ['admin', 'master'].includes(sesi.role)
           ? (us.results || []).map((u) => ({ id: u.id, username: u.username, nama: u.fullname, fullname: u.fullname, role: u.role, aktif: u.aktif, hp: u.hp || '' }))
