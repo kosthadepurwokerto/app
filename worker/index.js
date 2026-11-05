@@ -4,6 +4,7 @@
 // =====================================================================
 import * as logic from './logic.js';
 import * as exportData from './export.js';
+import { renderDocument, validDocumentType, DOCUMENT_TYPES } from './templates.js';
 import { dbKost, TABEL_BERKOST } from './db-kost.js';
 import { ringkasKost, daftarLedger } from './ringkasan.js';
 
@@ -49,8 +50,12 @@ function kepalaKeamanan(h, api) {
     h.set('cache-control', 'no-store');
     h.set('vary', 'origin');
     // Kebijakan isi ketat: hanya skrip/gaya dari asal sendiri.
-    h.set('content-security-policy',
-      "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    // Dokumen cetak (/api/dokumen) adalah HTML dengan <style> sebaris; tanpa izin ini
+    // browser memblokir gayanya dan kontrak tampil polos tanpa kop/garis/tabel.
+    const html = (h.get('content-type') || '').startsWith('text/html');
+    h.set('content-security-policy', html
+      ? "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+      : "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
   }
   return h;
 }
@@ -186,7 +191,7 @@ async function dashboard(env, DB, kost) {
     transaksi: (pays.results || []).map((p) => {
       const t = (tenants.results || []).find((x) => x.id === p.tenant_id);
       return [p.tgl_bayar, t ? t.nama : '-', t ? (roomMap[t.kamar_id] || '') : '', String(p.jumlah),
-              (p.keterangan || '') + ' • ' + p.nomor_struk, String(p.id), p.bukti_key || ''];
+              (p.keterangan || '') + ' • ' + p.nomor_struk, String(p.id), p.bukti_key || '', p.approval_status || 'approved'];
     }),
   };
 }
@@ -635,7 +640,49 @@ async function daftarkanAdmin(req, env, sesi) {
   });
 }
 
-// ---------- rute ----------
+async function dokumenHtml(env, db, sesi, type, id) {
+  type = String(type || '').trim().replaceAll('_', '-');
+  if (!validDocumentType(type)) return json({ error: 'Jenis dokumen tidak dikenal.' }, 400);
+  const n = Number(id);
+  if (!Number.isInteger(n) || n <= 0) return json({ error: 'ID dokumen tidak valid.' }, 400);
+  const data = { kost: await env.DB.prepare('select nama_app as nama, kota, tagline from kosts where kunci=?').bind(sesi.kost).first() };
+  const tenant = type === 'kuitansi-pembayaran'
+    ? await db.prepare('select t.*, r.no_kamar from payments p join tenants t on t.id=p.tenant_id left join rooms r on r.id=t.kamar_id where p.id=?').bind(n).first()
+    : type === 'tagihan-sewa'
+      ? await db.prepare('select t.*, r.no_kamar from bills b join tenants t on t.id=b.tenant_id left join rooms r on r.id=t.kamar_id where b.id=?').bind(n).first()
+      : (type === 'perjanjian-sewa' || type === 'tata-tertib' || type === 'inventaris-kamar' || type === 'rincian-sewa-deposit' || type === 'paket-kontrak')
+        ? await db.prepare('select t.*, r.no_kamar from contracts c join tenants t on t.id=c.tenant_id left join rooms r on r.id=c.kamar_id where c.id=?').bind(n).first()
+        : await db.prepare('select t.*, r.no_kamar from tenants t left join rooms r on r.id=t.kamar_id where t.id=?').bind(n).first();
+  if (!tenant) return json({ error: 'Data dokumen tidak ditemukan.' }, 404);
+  data.penyewa = { nama: tenant.nama, hp: tenant.hp };
+  data.kamar = tenant.no_kamar || '-';
+  if (type === 'kuitansi-pembayaran') {
+    const p = await db.prepare('select * from payments where id=?').bind(n).first();
+    data.pembayaran = { nomor: p.nomor_struk, tanggal: p.tgl_bayar, jumlah: p.jumlah, keterangan: p.keterangan };
+  } else if (type === 'tagihan-sewa') {
+    const b = await db.prepare('select * from bills where id=? and tenant_id=?').bind(n, tenant.id).first();
+    if (!b) return json({ error: 'Tagihan tidak ditemukan.' }, 404);
+    data.tagihan = { periode: b.periode.slice(0, 7), jatuhTempo: b.jatuh_tempo, jumlah: b.jumlah, status: b.status };
+  } else if (type === 'surat-tunggakan') {
+    const rows = await db.prepare("select periode,jatuh_tempo as jatuhTempo,jumlah from bills where tenant_id=? and status='belum_bayar' order by jatuh_tempo").bind(tenant.id).all();
+    data.tunggakan = (rows.results || []).map((b) => ({ periode: b.periode.slice(0, 7), jatuhTempo: b.jatuhTempo, jumlah: b.jumlah }));
+  } else if (type === 'perjanjian-sewa') {
+    const c = await db.prepare('select * from contracts where id=? and tenant_id=?').bind(n, tenant.id).first();
+    if (!c) return json({ error: 'Kontrak tidak ditemukan.' }, 404);
+    data.kontrak = { nomor: c.nomor, mulai: c.mulai, berakhir: c.berakhir, harga: c.harga, deposit: c.deposit, jatuhTempo: tenant.tgl_mulai_tagihan ? tenant.tgl_mulai_tagihan.slice(8, 10) : '-' };
+  } else if (type === 'tata-tertib' || type === 'inventaris-kamar' || type === 'rincian-sewa-deposit' || type === 'paket-kontrak') {
+    const c = await db.prepare('select * from contracts where id=? and tenant_id=?').bind(n, tenant.id).first();
+    if (!c) return json({ error: 'Kontrak tidak ditemukan.' }, 404);
+    data.kontrak = { nomor: c.nomor, mulai: c.mulai, berakhir: c.berakhir, harga: c.harga, deposit: c.deposit, jatuhTempo: tenant.tgl_mulai_tagihan ? tenant.tgl_mulai_tagihan.slice(8, 10) : '-' };
+  } else if (type === 'berita-acara-checkout' || type === 'pengembalian-deposit') {
+    data.tanggal = tenant.tgl_keluar;
+    data.checkout = { tanggal: tenant.tgl_keluar, tunggakan: 0, depositKembali: 0, kondisi: 'Belum diisi' };
+    data.deposit = { awal: 0, potongan: 0, kembali: 0, alasan: '' };
+  }
+  const html = renderDocument(type, data);
+  return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'content-disposition': 'inline' } });
+}
+
 // Aksi yang hanya boleh dilakukan admin. Aksi lain boleh untuk semua user aktif.
 const KEPERLUAN = {
   'tenants.delete': 'admin',
@@ -644,6 +691,9 @@ const KEPERLUAN = {
   'tenants.pindah': 'admin',
   'rooms.create': 'admin',
   'payments.void': 'admin',
+  'payments.review': 'admin',
+  'contracts.create': 'admin',
+  'contracts.update': 'admin',
   'ledger.void': 'admin',
   'rooms.delete': 'admin',
   'rooms.update': 'admin',
@@ -717,6 +767,9 @@ const AKSI = {
   'tenants.delete': (ctx, d) => logic.deleteTenant(ctx, d.id, d.kamar),
   'payments.create': logic.recordPayment,
   'payments.void': (ctx, d) => logic.voidPayment(ctx, d.id),
+  'payments.review': logic.reviewPayment,
+  'contracts.create': logic.createContract,
+  'contracts.update': logic.updateContract,
   'ledger.create': addLedger,
   'ledger.void': (ctx, d) => logic.voidOpsTransaction(ctx, d.id),
   'rooms.create': addRoom,
@@ -1820,6 +1873,13 @@ async function tanganiApi(req, env, url, secure, today) {
         return lihatKtp(env, t.ktp_key, sesi);
       }
       if (url.pathname.startsWith('/api/ktp/')) return lihatKtp(env, decodeURIComponent(url.pathname.slice('/api/ktp/'.length)), sesi);
+      if (url.pathname === '/api/dokumen' && req.method === 'GET') {
+        return dokumenHtml(env, dbBaca([sesi.kost]), sesi, url.searchParams.get('jenis'), url.searchParams.get('id'));
+      }
+      if (url.pathname === '/api/kontrak' && req.method === 'GET') {
+        const rows = await dbBaca([sesi.kost]).prepare('select c.*, t.nama, r.no_kamar from contracts c join tenants t on t.id=c.tenant_id left join rooms r on r.id=c.kamar_id order by c.berakhir').all();
+        return json({ kontrak: rows.results || [] });
+      }
       // Sama seperti /api/bootstrap: laporan hanya kost aktif, bukan seluruh kost yang
       // boleh dibuka akun. Kost lain diakses dengan berpindah kost (/api/pilih-kost).
       if (url.pathname === '/api/pengingat') return json(await daftarPengingat(env, dbBaca([sesi.kost])));
