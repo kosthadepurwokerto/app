@@ -4,7 +4,7 @@
 // =====================================================================
 import * as logic from './logic.js';
 import * as exportData from './export.js';
-import { renderDocument, validDocumentType, DOCUMENT_TYPES } from './templates.js';
+import { renderDocument, validDocumentType, DOCUMENT_TYPES, DEFAULT_TEMPLATE, PLACEHOLDER } from './templates.js';
 import { dbKost, TABEL_BERKOST } from './db-kost.js';
 import { ringkasKost, daftarLedger } from './ringkasan.js';
 
@@ -640,6 +640,18 @@ async function daftarkanAdmin(req, env, sesi) {
   });
 }
 
+// Teks template perjanjian milik kost ini; null = pakai template bawaan kode.
+async function isiTemplateKost(env, kost) {
+  try {
+    const r = await env.DB.prepare("select isi from document_templates where kost=? and jenis='perjanjian-sewa'").bind(kost).first();
+    return (r && r.isi) ? r.isi : null;
+  } catch (e) {
+    // Kolom `isi` belum ada (migrasi 026 belum dijalankan): dokumen tetap tercetak dari bawaan.
+    if (/no such column/i.test(String(e.message))) return null;
+    throw e;
+  }
+}
+
 async function dokumenHtml(env, db, sesi, type, id) {
   type = String(type || '').trim().replaceAll('_', '-');
   if (!validDocumentType(type)) return json({ error: 'Jenis dokumen tidak dikenal.' }, 400);
@@ -679,7 +691,7 @@ async function dokumenHtml(env, db, sesi, type, id) {
     data.checkout = { tanggal: tenant.tgl_keluar, tunggakan: 0, depositKembali: 0, kondisi: 'Belum diisi' };
     data.deposit = { awal: 0, potongan: 0, kembali: 0, alasan: '' };
   }
-  const html = renderDocument(type, data);
+  const html = renderDocument(type, data, { template: type === 'perjanjian-sewa' || type === 'paket-kontrak' ? await isiTemplateKost(env, sesi.kost) : null });
   return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8', 'content-disposition': 'inline' } });
 }
 
@@ -694,6 +706,7 @@ const KEPERLUAN = {
   'payments.review': 'admin',
   'contracts.create': 'admin',
   'contracts.update': 'admin',
+  'templates.save': 'admin',
   'ledger.void': 'admin',
   'rooms.delete': 'admin',
   'rooms.update': 'admin',
@@ -770,6 +783,7 @@ const AKSI = {
   'payments.review': logic.reviewPayment,
   'contracts.create': logic.createContract,
   'contracts.update': logic.updateContract,
+  'templates.save': simpanTemplate,
   'ledger.create': addLedger,
   'ledger.void': (ctx, d) => logic.voidOpsTransaction(ctx, d.id),
   'rooms.create': addRoom,
@@ -785,6 +799,19 @@ const AKSI = {
   'users.update': updateUser,
   'users.delete': deleteUser,
 };
+
+// Menyimpan teks template perjanjian untuk kost aktif (maks 200 KB, cukup untuk dokumen).
+async function simpanTemplate(ctx, d) {
+  const isi = String(d.isi ?? '').trim();
+  if (!isi) throw logic.httpError(400, 'Teks template tidak boleh kosong.');
+  if (isi.length > 200000) throw logic.httpError(400, 'Teks template terlalu panjang (maks 200 KB).');
+  if (!/\{\{\s*(penyewa|nomor|kamar)\s*\}\}/i.test(isi))
+    throw logic.httpError(400, 'Template wajib memuat penanda {{penyewa}}, {{nomor}}, atau {{kamar}}.');
+  await ctx.tulis.prepare(`insert into document_templates (jenis, nama, aktif, kost, isi) values ('perjanjian-sewa','Perjanjian Sewa Kamar',1,?,?)
+    on conflict(kost, jenis) do update set isi=excluded.isi, aktif=1`).bind(ctx.kost, isi).run();
+  await ctx.audit('template.save', 'document_templates', 'perjanjian-sewa', null, { panjang: isi.length });
+  return 'Template kontrak disimpan.';
+}
 
 async function addLedger(ctx, d) {
   // UI lama mengirim jenis berkapital: "Pengeluaran" -> normalisasi
@@ -1875,6 +1902,12 @@ async function tanganiApi(req, env, url, secure, today) {
       if (url.pathname.startsWith('/api/ktp/')) return lihatKtp(env, decodeURIComponent(url.pathname.slice('/api/ktp/'.length)), sesi);
       if (url.pathname === '/api/dokumen' && req.method === 'GET') {
         return dokumenHtml(env, dbBaca([sesi.kost]), sesi, url.searchParams.get('jenis'), url.searchParams.get('id'));
+      }
+      if (url.pathname === '/api/template' && req.method === 'GET') {
+        // Teks sumber perjanjian: dipakai tab Template di menu Kontrak.
+        const r = await env.DB.prepare("select isi from document_templates where kost=? and jenis='perjanjian-sewa'")
+          .bind(sesi.kost).first().catch(() => null);
+        return json({ isi: (r && r.isi) || null, bawaan: DEFAULT_TEMPLATE, penanda: PLACEHOLDER });
       }
       if (url.pathname === '/api/kontrak' && req.method === 'GET') {
         const rows = await dbBaca([sesi.kost]).prepare('select c.*, t.nama, r.no_kamar from contracts c join tenants t on t.id=c.tenant_id left join rooms r on r.id=c.kamar_id order by c.berakhir').all();

@@ -137,12 +137,66 @@ ${tandaTangan(d)}`,
 const PAKET = ['perjanjian-sewa', 'tata-tertib', 'inventaris-kamar', 'rincian-sewa-deposit'];
 const judul = { 'perjanjian-sewa': 'Perjanjian Sewa Kamar', 'tata-tertib': 'Tata Tertib Kost', 'inventaris-kamar': 'Inventaris Kamar', 'rincian-sewa-deposit': 'Rincian Sewa dan Deposit', 'paket-kontrak': 'Paket Kontrak', 'tagihan-sewa': 'Tagihan Sewa', 'surat-tunggakan': 'Surat Tunggakan', 'kuitansi-pembayaran': 'Kuitansi Pembayaran', 'berita-acara-checkout': 'Berita Acara Check-out', 'pengembalian-deposit': 'Pengembalian Deposit' };
 
+// Teks template yang bisa disunting pemilik lewat tab Template pada menu Kontrak.
+// Berisi HTML badan perjanjian dengan {{penanda}}; kop dan gayanya dari `base`.
+export const DEFAULT_TEMPLATE = `<h2>PERJANJIAN SEWA KAMAR</h2>
+<div class="doc-number">Nomor Dokumen: {{nomor}}</div>
+<p>Pada hari ini, para pihak yang bertanda tangan di bawah ini menyatakan sepakat untuk mengikatkan diri dalam Perjanjian Sewa Kamar dengan rincian data pihak dan ketentuan sebagai berikut:</p>
+<h3>IDENTITAS PIHAK</h3><ul>
+<li><strong>Pihak Pertama (Pengelola):</strong> {{pengelola}}</li>
+<li><strong>Pihak Kedua (Penyewa):</strong> {{penyewa}}</li>
+<li><strong>Nomor WhatsApp:</strong> {{whatsapp}}</li>
+<li><strong>Unit Sewa:</strong> Kamar {{kamar}}</li></ul>
+<h3>KETENTUAN PERJANJIAN</h3>
+<p><strong>Pasal 1 · Objek dan Jangka Waktu</strong><br>
+Pengelola menyewakan Kamar {{kamar}} kepada Penyewa untuk keperluan hunian pribadi. Masa sewa disepakati berlaku mulai tanggal <strong>{{mulai}}</strong> sampai dengan <strong>{{berakhir}}</strong>.</p>
+<p><strong>Pasal 2 · Nilai Sewa dan Jaminan</strong><br>
+Penyewa sepakat untuk membayarkan biaya sewa kepada Pengelola dengan rincian sebagai berikut:</p>
+<table><tr><th>Komponen Biaya</th><th>Nilai</th></tr>
+<tr><td>Harga Sewa Bulanan</td><td>{{harga}}</td></tr>
+<tr><td>Deposit Jaminan</td><td>{{deposit}}</td></tr></table>
+<p><strong>Pasal 3 · Hak dan Kewajiban</strong></p>
+<ol>
+<li><strong>Kewajiban Penyewa:</strong> Membayar biaya sewa tepat waktu, menjaga kebersihan kamar dan fasilitas umum, mematuhi seluruh tata tertib yang berlaku, serta melaporkan segera apabila terdapat kerusakan fasilitas.</li>
+<li><strong>Kewajiban Pengelola:</strong> Menyediakan akses hunian dan fasilitas sesuai dengan kesepakatan, serta menangani kebutuhan operasional dan perbaikan secara wajar.</li>
+</ol>
+<p><strong>Pasal 4 · Penggunaan Kamar dan Fasilitas</strong><br>
+Kamar disewa secara eksklusif sebagai hunian pribadi Penyewa. Segala ketentuan terkait penerimaan tamu, penggunaan fasilitas bersama, pemakaian utilitas (listrik/air), pemeliharaan, serta larangan-larangan diatur secara rinci dalam <strong>Lampiran A</strong>.</p>
+<p><strong>Pasal 5 · Kerusakan dan Inventaris</strong><br>
+Kondisi awal kamar dan inventaris di dalamnya dicatat secara rinci dalam <strong>Lampiran B</strong>. Setiap bentuk kerusakan atau kehilangan yang terjadi di luar batas pemakaian wajar (<em>wear and tear</em>) akan menjadi tanggung jawab Penyewa dan dapat diperhitungkan dalam penyelesaian deposit atau penagihan langsung berdasarkan hasil pemeriksaan.</p>
+<p><strong>Pasal 6 · Pengakhiran dan Checkout</strong><br>
+Setiap perpanjangan, perubahan, perpindahan kamar, atau pengakhiran kontrak wajib dilaporkan dan dicatat oleh Pengelola. Pada saat proses <em>checkout</em>, Pengelola akan melakukan pemeriksaan kondisi kamar, penyelesaian seluruh tagihan tertunggak, serta perhitungan pengembalian deposit sebagaimana diatur dalam <strong>Lampiran C</strong>.</p>
+<p class="notes">*Lampiran A, B, dan C merupakan satu kesatuan dan bagian yang tidak terpisahkan dari perjanjian ini.</p>
+<p>Ditandatangani pada tanggal <strong>{{tanggal_ttd}}</strong>,</p>
+<div class="signature-section">
+<div class="signature-box"><p>Pihak Pertama (Pengelola)</p><p class="signature-name">{{pengelola}}</p></div>
+<div class="signature-box"><p>Pihak Kedua (Penyewa)</p><p class="signature-name">{{penyewa}}</p></div></div>`;
+
+export const PLACEHOLDER = ['pengelola','penyewa','whatsapp','kamar','nomor','mulai','berakhir','harga','deposit','jatuh_tempo','tanggal_ttd'];
+
+const nilaiPenanda = (d) => ({
+  pengelola: namaKost(d), penyewa: namaPenyewa(d), whatsapp: val(d.penyewa?.hp),
+  kamar: val(d.kamar), nomor: val(d.kontrak?.nomor),
+  mulai: tanggal(d.kontrak?.mulai), berakhir: tanggal(d.kontrak?.berakhir),
+  harga: rupiah(d.kontrak?.harga), deposit: rupiah(d.kontrak?.deposit),
+  jatuh_tempo: jatuhTempo(d), tanggal_ttd: tglTtd(d),
+});
+
+// Nilai penanda sudah di-escape saat dibentuk; teks template sendiri dipercaya (diisi admin).
+const isiTemplate = (tpl, d) => {
+  const v = nilaiPenanda(d);
+  return String(tpl).replace(/\{\{\s*([a-z_]+)\s*\}\}/gi, (m, k) => (k.toLowerCase() in v ? v[k.toLowerCase()] : m));
+};
+
 export const validDocumentType = (type) => Object.hasOwn(judul, type);
-export function renderDocument(type, data = {}) {
+export function renderDocument(type, data = {}, opsi = {}) {
   if (!validDocumentType(type)) throw new Error('Jenis dokumen tidak dikenal.');
+  const khusus = opsi.template ? isiTemplate(opsi.template, data) : null;
   if (type === 'paket-kontrak') {
-    return base(judul[type], PAKET.map((t) => bagian[t](data)).join('<div class="page-break"></div>'), data);
+    const halaman = PAKET.map((t) => (t === 'perjanjian-sewa' && khusus) ? khusus : bagian[t](data));
+    return base(judul[type], halaman.join('<div class="page-break"></div>'), data);
   }
+  if (type === 'perjanjian-sewa' && khusus) return base(judul[type], khusus, data);
   return base(judul[type], bagian[type](data), data);
 }
 export const DOCUMENT_TYPES = Object.keys(judul);

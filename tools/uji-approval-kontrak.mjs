@@ -16,6 +16,7 @@ try {
   execFileSync('npx',['wrangler','d1','execute','hadekost-db','--local','--persist-to',persist,'--file=db/migrasi-017-pindah-kamar.sql'],{cwd:root,stdio:'ignore'});
   execFileSync('npx',['wrangler','d1','execute','hadekost-db','--local','--persist-to',persist,'--file=db/migrasi-022-jurnal-berpasangan.sql'],{cwd:root,stdio:'ignore'});
   execFileSync('npx',['wrangler','d1','execute','hadekost-db','--local','--persist-to',persist,'--file=db/migrasi-025-kontrak-approval.sql'],{cwd:root,stdio:'ignore'});
+  execFileSync('npx',['wrangler','d1','execute','hadekost-db','--local','--persist-to',persist,'--file=db/migrasi-026-template-kontrak.sql'],{cwd:root,stdio:'ignore'});
   const seed=execFileSync('node',['tools/buat-akun.mjs','admin','Kostsaya12345','admin','Admin'],{cwd:root,env:{...process.env,UJI_TANPA_GANTI:'1',UJI_HP:'081200000100'}}).toString(); const seedFile=path.join(persist,'seed.sql'); fs.writeFileSync(seedFile,seed); execFileSync('npx',['wrangler','d1','execute','hadekost-db','--local','--persist-to',persist,'--file='+seedFile],{cwd:root,stdio:'ignore'}); fs.rmSync(seedFile,{force:true});
   const login=await post('/api/login',{username:'081200000100',password:'Kostsaya12345'}); assert.equal(login.status,200); const cookie=login.headers.get('set-cookie').split(';')[0];
   assert.equal((await post('/api/action',{action:'rooms.create',data:{noKamar:'A1',tipe:'Standar',hargaBulanan:1000000}},cookie)).status,200);
@@ -38,5 +39,19 @@ try {
   const csp=dok.headers.get('content-security-policy')||'';
   assert.match(csp,/style-src 'unsafe-inline'/); assert.doesNotMatch(csp,/script-src/);
   assert.match(await dok.text(),/<div class="page-break">/);
+
+  // Template yang disunting pemilik menjadi sumber dokumen.
+  const tplAwal=await req('/api/template',{headers:{cookie}}); assert.equal(tplAwal.status,200);
+  assert.ok(tplAwal.body.bawaan.includes('{{penyewa}}')); assert.equal(tplAwal.body.isi,null);
+  assert.equal((await post('/api/action',{action:'templates.save',data:{isi:'   '}},cookie)).status,400);
+  assert.equal((await post('/api/action',{action:'templates.save',data:{isi:'tanpa penanda'}},cookie)).status,400);
+  const teksKhusus='<h2>PERJANJIAN KHUSUS</h2><p>{{penyewa}} · Kamar {{kamar}} · {{nomor}}</p>';
+  assert.equal((await post('/api/action',{action:'templates.save',data:{isi:teksKhusus}},cookie)).status,200);
+  assert.equal((await req('/api/template',{headers:{cookie}})).body.isi,teksKhusus);
+  const perjanjian=await (await fetch(`${base}/api/dokumen?jenis=perjanjian-sewa&id=${idKontrak}`,{headers:{cookie}})).text();
+  assert.match(perjanjian,/PERJANJIAN KHUSUS/); assert.match(perjanjian,/Uji Approval/);
+  assert.doesNotMatch(perjanjian,/Pasal 1 · Objek/);
+  const paket=await (await fetch(`${base}/api/dokumen?jenis=paket-kontrak&id=${idKontrak}`,{headers:{cookie}})).text();
+  assert.match(paket,/PERJANJIAN KHUSUS/); assert.match(paket,/LAMPIRAN A/);
   console.log('approval/contract e2e passed');
 } finally { child.kill('SIGTERM'); fs.rmSync(persist,{recursive:true,force:true}); }

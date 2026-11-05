@@ -94,6 +94,14 @@
 
     // ---------------- PEMBAYARAN ----------------
     recordPayment: (d) => aksi('payments.create', d).then((m) => { data.dashboard = null; return m; }),
+    reviewPayment: (d) => aksi('payments.review', d).then((m) => { data.dashboard = null; return m; }),
+    documentUrl: (jenis, id) => `${API}/dokumen?jenis=${encodeURIComponent(jenis)}&id=${encodeURIComponent(id)}`,
+    getContracts: () => call('/kontrak'),
+    getTemplate: () => call('/template'),
+    saveTemplate: (isi) => aksi('templates.save', { isi }),
+    createContract: (d) => aksi('contracts.create', d),
+    updateContract: (d) => aksi('contracts.update', d),
+
 
     // ---------------- LEDGER ----------------
     addOpsTransaction: (d) => aksi('ledger.create', d).then((m) => { data.dashboard = null; return m; }),

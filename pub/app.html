@@ -194,6 +194,11 @@
             </button>
           </li>
           <li class="shrink-0 md:shrink">
+            <button data-h="showSection" data-h-arg="[&quot;kontrak&quot;]" data-h-self="1" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
+              <i class="fas fa-file-signature w-5 text-center text-base"></i> Kontrak
+            </button>
+          </li>
+          <li class="shrink-0 md:shrink">
             <button data-h="showSection" data-h-arg="[&quot;kamar&quot;]" data-h-self="1" class="flex items-center gap-2 md:gap-3 px-4 py-2.5 md:py-3.5 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition text-xs md:text-sm font-bold w-full">
               <i class="fas fa-door-open w-5 text-center text-base"></i> Kamar
             </button>
@@ -525,6 +530,43 @@
               </div>
             </div>
 
+          </div>
+        </section>
+
+        <!-- SECTION: KONTRAK SEWA -->
+        <section id="sec-kontrak" class="content-section hidden w-full animate-fade-in">
+          <div class="bg-white rounded-3xl border border-slate-200 shadow-sm p-5 md:p-8">
+            <div class="flex items-center justify-between gap-3 mb-6">
+              <div><h2 class="text-xl font-black text-slate-900">Kontrak Sewa</h2><p class="text-xs text-slate-400 mt-1">Kelola masa berlaku, harga, dan deposit penyewa.</p></div>
+              <button data-h="muatKontrak" class="px-3 py-2 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold"><i class="fas fa-sync mr-1"></i> Segarkan</button>
+            </div>
+            <div class="flex gap-2 bg-slate-50 p-1 rounded-2xl mb-5">
+              <button type="button" data-h="switchKontrakTab" data-h-arg="[&quot;daftar&quot;]" id="tab-kontrak-daftar" class="flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all">Daftar Kontrak</button>
+              <button type="button" data-h="switchKontrakTab" data-h-arg="[&quot;template&quot;]" id="tab-kontrak-template" class="flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all">Template</button>
+            </div>
+            <div id="kontrak-panel-daftar">
+            <form id="form-kontrak" class="grid grid-cols-1 md:grid-cols-3 gap-3 border-b border-slate-100 pb-6 mb-6">
+              <select name="tenantId" required class="p-3 bg-slate-50 rounded-xl text-sm"><option value="">Pilih penyewa</option></select>
+              <input name="nomor" placeholder="Nomor kontrak (opsional)" class="p-3 bg-slate-50 rounded-xl text-sm">
+              <input name="mulai" type="date" required class="p-3 bg-slate-50 rounded-xl text-sm">
+              <input name="berakhir" type="date" required class="p-3 bg-slate-50 rounded-xl text-sm">
+              <input name="harga" type="number" min="1" required placeholder="Harga sewa/bulan" class="p-3 bg-slate-50 rounded-xl text-sm">
+              <input name="deposit" type="number" min="0" placeholder="Deposit" class="p-3 bg-slate-50 rounded-xl text-sm">
+              <input name="catatan" placeholder="Catatan" class="p-3 bg-slate-50 rounded-xl text-sm md:col-span-2">
+              <button class="bg-blue-600 text-white rounded-xl font-bold text-sm">Simpan Kontrak</button>
+            </form>
+            <div id="daftar-kontrak" class="space-y-2"><p class="text-sm text-slate-400">Memuat kontrak…</p></div>
+            </div>
+            <div id="kontrak-panel-template" class="hidden">
+              <p class="text-xs text-slate-500 mb-3">Teks di bawah adalah sumber setiap kontrak yang dicetak. Isi penanda dengan data penyewa saat dokumen dibuat.</p>
+              <div id="daftar-penanda" class="flex flex-wrap gap-1.5 mb-3"></div>
+              <textarea id="isi-template-kontrak" spellcheck="false" class="w-full h-80 p-3 bg-slate-50 rounded-xl text-xs font-mono leading-relaxed border border-slate-200"></textarea>
+              <div class="flex flex-wrap gap-2 mt-3">
+                <button type="button" data-h="simpanTemplateKontrak" class="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-xs font-bold"><i class="fas fa-save mr-1"></i> Simpan Template</button>
+                <button type="button" data-h="kembalikanTemplateBawaan" class="px-4 py-2.5 rounded-xl bg-slate-100 text-slate-600 text-xs font-bold"><i class="fas fa-rotate-left mr-1"></i> Kembalikan Bawaan</button>
+                <span id="status-template" class="text-[11px] text-slate-400 self-center"></span>
+              </div>
+            </div>
           </div>
         </section>
 

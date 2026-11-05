@@ -672,6 +672,16 @@
       if (url) window.open(url, '_blank', 'noopener');
     });
     daftarAksi('struk', (d) => viewReceipt(d.tgl, d.nama, d.kamar, Number(d.jumlah || 0), d.ket, d.struk || d.no));
+    daftarAksi('review-payment', async (d) => {
+      const status = String(d.status || '').toLowerCase();
+      const alasan = status === 'rejected' ? (prompt('Alasan penolakan bukti pembayaran:') || '').trim() : '';
+      if (status === 'rejected' && !alasan) return;
+      try {
+        await HADE.handlers.reviewPayment({ id: Number(d.id), status, alasan });
+        await loadDashboard();
+        showCustomAlert('Berhasil', 'Status pembayaran diperbarui.', true);
+      } catch (e) { showCustomAlert('Gagal', e.message || 'Approval gagal.', false); }
+    });
     daftarAksi('edit-kamar', (d) => openEditRoomModal(d.no, d.tipe, d.bulanan, d.harian));
     daftarAksi('hapus-kamar', (d) => promptDeleteRoom(d.no, d.status));
     daftarAksi('edit-penyewa', (d) => openEditTenantModal(d.kode, d.nama, d.hp, d.kamar, d.masuk, d.status, d.tempo));
@@ -891,6 +901,9 @@
       if(sectionId === 'kamar') {
         loadDashboard(); // Refresh kamar structure
       }
+      if(sectionId === 'kontrak') {
+        muatKontrak();
+      }
       if(sectionId === 'laporan') {
         generateSelectedReport();
       }
@@ -933,6 +946,88 @@
         }).catch(err => console.warn('[hade] ledger', err));
       }
     }
+
+    async function muatKontrak() {
+      const form = document.getElementById('form-kontrak'), list = document.getElementById('daftar-kontrak');
+      if (!form || !list || !window.HADE) return;
+      try {
+        const d = await HADE.handlers.getDashboardData();
+        const pilih = form.elements.tenantId, selected = pilih.value;
+        pilih.innerHTML = '<option value="">Pilih penyewa</option>' + (d.penyewa || []).filter(x => x[5] === 'Aktif').map(x => `<option value="${esc(x[0])}">${esc(x[1])} · Kamar ${esc(x[3])}</option>`).join('');
+        pilih.value = selected;
+        const r = await HADE.handlers.getContracts();
+        list.innerHTML = (r.kontrak || []).length ? r.kontrak.map(c => `<div class="border border-slate-100 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3"><div><b class="text-sm text-slate-900">${esc(c.nomor)}</b><p class="text-xs text-slate-500">${esc(c.nama)} · Kamar ${esc(c.no_kamar || '-')}</p><p class="text-[11px] text-slate-400">${esc(c.mulai)} sampai ${esc(c.berakhir)} · ${rp(c.harga)}</p></div><div class="flex flex-wrap items-center gap-2"><span class="px-2 py-1 rounded-lg bg-blue-50 text-blue-700 text-[10px] font-bold">${esc(c.status)}</span><button type="button" data-kontrak-dokumen="${esc(c.id)}" data-jenis="perjanjian-sewa" class="px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 text-[10px] font-bold"><i class="fas fa-file-signature mr-1"></i>Perjanjian</button><button type="button" data-kontrak-dokumen="${esc(c.id)}" data-jenis="paket-kontrak" class="px-3 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-[10px] font-bold"><i class="fas fa-layer-group mr-1"></i>Paket Lengkap</button></div></div>`).join('') : '<p class="text-sm text-slate-400">Belum ada kontrak.</p>';
+      } catch (e) { list.innerHTML = `<p class="text-sm text-rose-600">${esc(e.message)}</p>`; }
+    }
+    document.getElementById('daftar-kontrak')?.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-kontrak-dokumen]');
+      if (!btn || !window.HADE) return;
+      const url = HADE.handlers.documentUrl(btn.dataset.jenis || 'perjanjian-sewa', btn.dataset.kontrakDokumen);
+      window.open(url, '_blank', 'noopener');
+    });
+    document.getElementById('form-kontrak')?.addEventListener('submit', async (e) => {
+      e.preventDefault(); const f = e.currentTarget;
+      if (f.elements.berakhir.value < f.elements.mulai.value) return showCustomAlert('Kontrak tidak valid', 'Tanggal berakhir harus setelah tanggal mulai.', false);
+      try { await HADE.handlers.createContract(Object.fromEntries(new FormData(f))); f.reset(); await muatKontrak(); showCustomAlert('Berhasil', 'Kontrak berhasil disimpan.', true); }
+      catch (err) { showCustomAlert('Gagal', err.message, false); }
+    });
+
+    // ---------------- TAB TEMPLATE KONTRAK ----------------
+    // Teks ini yang dipakai server sebagai sumber dokumen; yang tersimpan adalah versi
+    // yang sudah diisi penanda, jadi mengubahnya langsung mengubah hasil cetak.
+    var templateBawaan = '';
+    function switchKontrakTab(tab) {
+      var daftar = document.getElementById('kontrak-panel-daftar');
+      var tpl = document.getElementById('kontrak-panel-template');
+      var bDaftar = document.getElementById('tab-kontrak-daftar');
+      var bTpl = document.getElementById('tab-kontrak-template');
+      if (!daftar || !tpl) return;
+      var aktif = 'flex-1 py-2.5 text-xs font-extrabold rounded-xl bg-gradient-to-r from-blue-600 to-rose-600 text-white shadow-md transition-all';
+      var pasif = 'flex-1 py-2.5 text-xs font-extrabold text-slate-500 hover:text-slate-800 rounded-xl transition-all';
+      daftar.classList.toggle('hidden', tab !== 'daftar');
+      tpl.classList.toggle('hidden', tab !== 'template');
+      bDaftar.className = tab === 'daftar' ? aktif : pasif;
+      bTpl.className = tab === 'template' ? aktif : pasif;
+      if (tab === 'template') muatTemplateKontrak();
+    }
+
+    async function muatTemplateKontrak() {
+      var ta = document.getElementById('isi-template-kontrak'), status = document.getElementById('status-template');
+      if (!ta || !window.HADE) return;
+      status.textContent = 'Memuat…';
+      try {
+        var r = await HADE.handlers.getTemplate();
+        templateBawaan = r.bawaan || '';
+        ta.value = r.isi || r.bawaan || '';
+        var kotak = document.getElementById('daftar-penanda');
+        if (kotak) kotak.innerHTML = (r.penanda || []).map(function (p) {
+          return '<code class="px-2 py-1 rounded-lg bg-slate-100 text-[10px] font-bold text-slate-600 cursor-pointer" data-penanda="{{' + p + '}}">{{' + p + '}}</code>';
+        }).join('');
+        status.textContent = r.isi ? 'Memakai template tersimpan.' : 'Masih memakai template bawaan.';
+      } catch (e) { status.textContent = e.message; }
+    }
+
+    async function simpanTemplateKontrak() {
+      var ta = document.getElementById('isi-template-kontrak'), status = document.getElementById('status-template');
+      if (!ta || !window.HADE) return;
+      status.textContent = 'Menyimpan…';
+      try { await HADE.handlers.saveTemplate(ta.value); status.textContent = 'Tersimpan. Kontrak berikutnya memakai teks ini.'; }
+      catch (e) { status.textContent = e.message; }
+    }
+
+    function kembalikanTemplateBawaan() {
+      var ta = document.getElementById('isi-template-kontrak'), status = document.getElementById('status-template');
+      if (!ta) return;
+      ta.value = templateBawaan;
+      status.textContent = 'Bawaan dimuat. Tekan Simpan Template untuk memakainya.';
+    }
+
+    document.getElementById('daftar-penanda')?.addEventListener('click', (e) => {
+      var chip = e.target.closest('[data-penanda]'), ta = document.getElementById('isi-template-kontrak');
+      if (!chip || !ta) return;
+      ta.setRangeText(chip.dataset.penanda, ta.selectionStart, ta.selectionEnd, 'end');
+      ta.focus();
+    });
 
     // FINANCIAL REPORTS TAB SWITCHER & CALCULATOR
     function switchReportTab(reportType) {
@@ -1554,8 +1649,10 @@
               <td class="py-3 px-4"><span class="bg-blue-50 text-blue-600 border border-blue-100 px-2.5 py-0.5 rounded text-[10px] font-black uppercase tracking-tight">${esc(t[2])}</span></td>
               <td class="py-3 px-4 text-emerald-600 font-extrabold text-xs md:text-sm whitespace-nowrap">${rp(angkaBersih)}</td>
               <td class="py-3 px-4 text-xs text-slate-500 max-w-[180px] truncate" title="${esc(t[4])}">${esc(t[4])}</td>
+              <td class="py-3 px-4 text-center"><span class="px-2 py-0.5 rounded text-[9px] font-bold ${t[7] === 'rejected' ? 'bg-rose-50 text-rose-600' : t[7] === 'pending' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}">${esc(t[7] || 'approved')}</span></td>
               <td class="py-3 px-6 text-center">
               ${t[6] ? `<button data-aksi="bukti" data-bukti="${esc(t[6])}" title="Lihat bukti bayar" class="text-emerald-500 hover:text-emerald-700 transition p-2 hover:bg-emerald-50 rounded-lg mr-1"><i class="fas fa-paperclip text-xs"></i></button>` : ''}
+                ${t[7] === 'pending' && isAdminAtauMaster() ? `<button data-aksi="review-payment" data-id="${esc(t[5])}" data-status="approved" title="Setujui pembayaran" class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 mr-1"><i class="fas fa-check text-xs"></i></button><button data-aksi="review-payment" data-id="${esc(t[5])}" data-status="rejected" title="Tolak pembayaran" class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 mr-1"><i class="fas fa-times text-xs"></i></button>` : ''}
                 <button data-aksi="struk" data-tgl="${esc(t[0])}" data-nama="${esc(t[1])}" data-kamar="${esc(t[2])}" data-jumlah="${angkaBersih}" data-ket="${esc(t[4])}" data-no="${esc(t[5] || '')}" data-struk="${esc(String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/) ? String(t[4]).match(/STR-[0-9]{8}-[0-9]{3}/)[0] : '')}" class="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-rose-600 flex items-center justify-center mx-auto transition shadow-sm" title="Lihat Struk">
                   <i class="fas fa-file-invoice text-xs"></i>
                 </button>
@@ -3623,6 +3720,7 @@ try { window.hapusPratinjauKtp = hapusPratinjauKtp; } catch (e) {}
 try { window.kirimSemuaPengingat = kirimSemuaPengingat; } catch (e) {}
 try { window.muatDaftarKost = muatDaftarKost; } catch (e) {}
 try { window.muatPengingat = muatPengingat; } catch (e) {}
+try { window.muatKontrak = muatKontrak; } catch (e) {}
 try { window.printFinancialReport = printFinancialReport; } catch (e) {}
 try { window.printReceipt = printReceipt; } catch (e) {}
 try { window.salinTeksUndangan = salinTeksUndangan; } catch (e) {}
@@ -3663,13 +3761,15 @@ var AKSI = {
   'handleLogout': handleLogout, 'handlePenyewaChange': handlePenyewaChange,
   'handleTipeSewaChange': handleTipeSewaChange, 'handleTransTypeChange': handleTransTypeChange,
   'hapusPratinjauKtp': hapusPratinjauKtp, 'kirimSemuaPengingat': kirimSemuaPengingat,
-  'muatDaftarKost': muatDaftarKost, 'muatPengingat': muatPengingat,
+  'muatDaftarKost': muatDaftarKost, 'muatPengingat': muatPengingat, 'muatKontrak': muatKontrak,
     'openGantiPassword': openGantiPassword, 'simpanPasswordModal': simpanPasswordModal, 'tutupModalGantiPassword': tutupModalGantiPassword, 'toggleGantiPasswordVisibility': toggleGantiPasswordVisibility, 'printFinancialReport': printFinancialReport, 'tutupLaporanKeuangan': tutupLaporanKeuangan, 'exportLedgerCsv': exportLedgerCsv, 'bukaAuditLog': bukaAuditLog, 'tutupAuditLog': tutupAuditLog,
   'printReceipt': printReceipt, 'salinTeksUndangan': salinTeksUndangan,
   'showLoading': showLoading, 'showSection': showSection,
   'simpanAdminKost': simpanAdminKost, 'simpanImporWa': simpanImporWa,
   'simpanKostBaru': simpanKostBaru, 'simpanParameter': simpanParameter,
   'switchOpsSubTab': switchOpsSubTab, 'switchReportTab': switchReportTab,
+  'switchKontrakTab': switchKontrakTab, 'muatTemplateKontrak': muatTemplateKontrak,
+  'simpanTemplateKontrak': simpanTemplateKontrak, 'kembalikanTemplateBawaan': kembalikanTemplateBawaan,
   'syncData': syncData, 'togglePasswordVisibility': togglePasswordVisibility,
   'toggleRoomForm': toggleRoomForm, 'toggleUserDropdown': toggleUserDropdown,
   'tutupImporWa': tutupImporWa, 'tutupModalAdminKost': tutupModalAdminKost,
