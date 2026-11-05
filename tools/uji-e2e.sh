@@ -216,6 +216,12 @@ ck "Pembayaran 2 bulan dengan bukti tersimpan" "$(actj $J "{\"action\":\"payment
 code -b $J "$B/api/dashboard" >/dev/null
 ck "Dashboard menampilkan kunci bukti pada transaksi" "$(jq_ "(d.transaksi.find(t=>t[2]==='111')||[])[6] || 'kosong'")" "$BK"
 ck "Kunci bukti palsu saat bayar ditolak 400" "$(actj $J "{\"action\":\"payments.create\",\"data\":{\"kamar\":\"111\",\"jumlah\":1100000,\"tanggal\":\"$TODAY\",\"buktiKey\":\"ktp/2026/x.png\"}}")" "400"
+# Bukti masuk pending; reject hanya mengubah status dan tetap menyisakan riwayat.
+code -b $J "$B/api/dashboard" >/dev/null
+PAY_ID=$(jq_ "(d.transaksi.find(t=>t[2]==='111')||[])[5]")
+ck "Review bukti menjadi rejected" "$(actj $J "{\"action\":\"payments.review\",\"data\":{\"id\":$PAY_ID,\"status\":\"rejected\",\"alasan\":\"Bukti tidak terbaca\"}}")" "200"
+code -b $J "$B/api/dashboard" >/dev/null
+ck "Pembayaran rejected tetap ada di riwayat" "$(jq_ "(d.transaksi.find(t=>t[2]==='111')||[])[7]")" "rejected"
 
 echo "== TANGGAL MULAI TAGIHAN & PRORATA =="
 actj $J '{"action":"rooms.create","data":{"noKamar":"109","tipe":"Standar","hargaBulanan":1100000}}' >/dev/null

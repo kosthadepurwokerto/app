@@ -31,7 +31,7 @@ export async function ringkasKost(db, kost) {
   const satu = async (sql, args = k.args) => angka(await db.prepare(sql).bind(...args).first());
 
   const pembayaran = await satu(
-    `select coalesce(sum(jumlah),0) as v from payments where voided_at is null and ${k.sql}`);
+    `select coalesce(sum(jumlah),0) as v from payments where voided_at is null and coalesce(approval_status,'approved')='approved' and ${k.sql}`);
 
   const pendapatanLedger = await satu(
     `select coalesce(sum(jumlah),0) as v from ledger where jenis='pendapatan' and voided_at is null and ${k.sql}`);
@@ -40,7 +40,7 @@ export async function ringkasKost(db, kost) {
     `select coalesce(sum(jumlah),0) as v from ledger where jenis='pengeluaran' and voided_at is null and ${k.sql}`);
 
   const pendapatanBulanIni = await satu(
-    `select coalesce(sum(jumlah),0) as v from payments where voided_at is null and ${k.sql} and tgl_bayar >= date('now','localtime','start of month')`);
+    `select coalesce(sum(jumlah),0) as v from payments where voided_at is null and coalesce(approval_status,'approved')='approved' and ${k.sql} and tgl_bayar >= date('now','localtime','start of month')`);
 
   const tunggakan = await satu(
     `select coalesce(sum(jumlah),0) as v from bills where ${k.sql} and status='belum_bayar' and jatuh_tempo < date('now','localtime')`);

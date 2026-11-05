@@ -24,7 +24,7 @@ npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file=db/sc
 if grep -qi 'error' /tmp/hk-schema.log; then echo "SKEMA ADA ERROR:"; grep -i -A3 'error' /tmp/hk-schema.log | head -20; exit 1; fi
 # migrasi yang objeknya belum masuk db/schema.sql. tenant_kamar (017) masih dibuat migrasi;
 # audit_log.kost sudah berada di skema bersih, migrasi 018 khusus upgrade DB lama.
-for m in db/migrasi-017-*.sql db/migrasi-020-*.sql db/migrasi-021-*.sql db/migrasi-022-*.sql db/migrasi-023-*.sql; do
+for m in db/migrasi-017-*.sql db/migrasi-020-*.sql db/migrasi-021-*.sql db/migrasi-022-*.sql db/migrasi-023-*.sql db/migrasi-025-*.sql db/migrasi-026-*.sql; do
   [ -f "$m" ] || continue
   npx wrangler d1 execute hadekost-db --local --persist-to "$PERSIST" --file="$m" >>/tmp/hk-schema.log 2>&1 || { echo "MIGRASI GAGAL: $m"; tail -5 /tmp/hk-schema.log; exit 1; }
 done

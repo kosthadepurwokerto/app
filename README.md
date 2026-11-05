@@ -85,14 +85,12 @@ diberi izin (aksi `tenants.pindah`, role admin).
   sesuaikan manual bila perlu.
 - Uji: `tools/uji-pindah-kamar.sh` — otomatis disisipkan ke `tools/uji-lokal.sh`.
 
-## Yang belum tersedia di versi D1
+## Penyimpanan foto KTP
 
-- Foto KTP lewat R2 **belum aktif di produksi**: token API Cloudflare yang dipakai sekarang
-  tidak punya izin *Workers R2 Storage* (error `10000 Authentication error`), jadi bucket
-  `hadekost-ktp` belum bisa dibuat. Blok `[[r2_buckets]]` di `wrangler.toml` masih dikomentari
-  dan foto disimpan sementara di tabel `ktp_berkas` (D1, batas baris ~2 MB).
-  Jalur R2 di kode sudah diuji lokal (unggah → baca kembali identik, tidak menyentuh D1);
-  langkah mengaktifkannya ada di komentar `wrangler.toml`.
+Foto KTP produksi disimpan di R2 bucket `hadekost-ktp` melalui binding `KTP` (bukan D1).
+Upload dan baca-kembali sudah diuji pada jalur lokal dan live. Foto lama yang masih berada
+sebagai baris `ktp_berkas` di D1 tidak otomatis dipindahkan; unggah ulang bila diperlukan.
+
 
 ## Migrasi database
 

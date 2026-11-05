@@ -4,7 +4,7 @@
   "description": "Aplikasi manajemen kost: kamar, penyewa, tagihan, pembayaran, ledger operasional, laporan.",
   "main": "index.js",
   "scripts": {
-    "test": "bash tools/uji-lokal.sh",
+    "test": "bash tools/uji-lokal.sh && node tools/uji-approval-kontrak.mjs",
     "dev": "wrangler dev --local --var COOKIE_SECURE:false --port 8787",
     "deploy": "npm run ui && wrangler deploy",
     "db:init": "wrangler d1 execute hadekost-db --local --file=db/schema.sql",

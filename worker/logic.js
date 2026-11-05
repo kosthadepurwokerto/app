@@ -406,6 +406,8 @@ export async function recordPayment(ctx, data) {
   // 1) catat pembayaran (nomor struk unik tanpa race: cek + insert dalam satu batch, ulangi bila bentrok)
   let nomor = '';
   let bukti = null;
+  const approvalStatus = buktiKey ? 'pending' : 'approved';
+  const lunasiLangsung = approvalStatus === 'approved';
   for (let coba = 0; coba < 5 && !bukti; coba++) {
     const cnt = await ctx.db.prepare('select count(*) as n from payments where tgl_bayar=?').bind(tgl).first();
     nomor = `STR-${tgl.replace(/-/g, '')}-${String(cnt.n + 1 + coba).padStart(3, '0')}`;
@@ -417,12 +419,12 @@ export async function recordPayment(ctx, data) {
           .bind(t.id, b.periode, b.jatuh_tempo, b.jumlah, 'belum_bayar'));
       }
       // satu baris pembayaran untuk seluruh bulan (struk menampilkan jumlah bulan bayar)
-      stmts.push(ctx.tulis.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, bukti_key, created_by) values (?,?,?,?,?,?,?,?)')
-        .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), buktiKey || null, ctx.user.id));
+      stmts.push(ctx.tulis.prepare('insert into payments (nomor_struk, bill_id, tenant_id, tgl_bayar, jumlah, keterangan, bukti_key, created_by, approval_status) values (?,?,?,?,?,?,?,?,?)')
+        .bind(nomor, bill.id, t.id, tgl, jumlah, [String(data.keterangan || '').trim(), bulan > 1 ? `bayar ${bulan} bulan` : ''].filter(Boolean).join(' — '), buktiKey || null, ctx.user.id, approvalStatus));
       // Pembayaran tunai sewa: Debit Kas/Bank, Kredit Pendapatan Sewa.
       // Header + baris jurnal satu batch dengan pembayaran agar tidak tercatat setengah.
       const jurnalSiap = await ctx.db.prepare("select name from sqlite_master where type='table' and name='journal_entries'").first().catch(() => null);
-      if (jurnalSiap) {
+      if (jurnalSiap && lunasiLangsung) {
       stmts.push(ctx.tulis.prepare("insert into journal_entries (tanggal,sumber,source_ref,keterangan,created_by,kost) values (?,'pembayaran',?,?,?,?)")
         .bind(tgl, nomor, `Sewa ${t.nama} · ${t.no_kamar}`, ctx.user.id, ctx.kost));
       stmts.push(ctx.tulis.prepare("insert into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit,kost) select id,'1000','Kas/Bank',?,0,? from journal_entries where sumber='pembayaran' and source_ref=? and kost=?")
@@ -434,15 +436,15 @@ export async function recordPayment(ctx, data) {
       // Dulu void menebak lewat "periode >= ? limit N", yang bisa membuka bulan yang dibayar struk lain.
       stmts.push(ctx.db.prepare("update payments set bulan=?, periode_lunas=? where nomor_struk=?")
         .bind(bulan, daftar.map((b) => String(b.periode).slice(0, 7)).join(','), nomor));
-      for (const b of daftar.filter((x) => !x.baru)) {
+      if (lunasiLangsung) for (const b of daftar.filter((x) => !x.baru)) {
         stmts.push(ctx.db.prepare("update bills set status='lunas' where id=?").bind(b.id));
       }
       // tagihan baris "bayar N bulan" dilunasi lewat pasangan pembayaran per periode,
       // supaya jejak lunas per bulan tetap jelas dan void bisa mengembalikannya satu per satu.
-      for (const b of daftar.filter((x) => x.baru)) {
+      if (lunasiLangsung) for (const b of daftar.filter((x) => x.baru)) {
         stmts.push(ctx.db.prepare("update bills set status='lunas' where tenant_id=? and periode=?").bind(t.id, b.periode));
       }
-      if (!dup) {
+      if (lunasiLangsung && !dup) {
         // nominal bulan berikutnya = harga kamar saat ini (bukan nominal prorata bulan pertama)
         const kamarNow = await ctx.db.prepare('select harga_bulanan from rooms where id=?').bind(t.kamar_id).first();
         const nominalNext = num(kamarNow && kamarNow.harga_bulanan) || num(daftar[0].jumlah);
@@ -522,7 +524,98 @@ export async function voidPayment(ctx, id) {
   return `Pembayaran ${p.nomor_struk} (${rupiah(p.jumlah)}) dibatalkan. Tagihan kembali terbuka.`;
 }
 
-// Edit data penyewa (nama/hp/kamar/tanggal masuk/tanggal keluar).
+export async function reviewPayment(ctx, data) {
+  const id = Number(data.id);
+  const status = String(data.status || '').toLowerCase();
+  if (!Number.isInteger(id) || id <= 0) throw httpError(400, 'ID pembayaran tidak valid.');
+  if (!['pending', 'approved', 'rejected'].includes(status)) throw httpError(400, 'Status approval tidak valid.');
+  const p = await ctx.db.prepare('select * from payments where id=? and voided_at is null').bind(id).first();
+  if (!p) throw httpError(404, 'Pembayaran tidak ditemukan atau sudah dibatalkan.');
+  const lama = p.approval_status || 'approved';
+  if (lama === status) throw httpError(409, `Pembayaran sudah berstatus ${status}.`);
+  const alasan = String(data.alasan || '').trim().slice(0, 500) || null;
+  if (status === 'rejected' && !alasan) throw httpError(400, 'Alasan penolakan wajib diisi.');
+  if (status === 'approved') {
+    await ctx.tulis.prepare("update payments set approval_status='approved', approved_by=?, approved_at=datetime('now'), rejection_reason=null where id=?")
+      .bind(ctx.user.id, id).run();
+    const periode = String(p.periode_lunas || '').split(',').filter(Boolean);
+    for (const periodeBulan of periode) {
+      await ctx.tulis.prepare("update bills set status='lunas' where tenant_id=? and periode like ? and status='belum_bayar'")
+        .bind(p.tenant_id, `${periodeBulan}%`).run();
+    }
+    const lastPeriod = periode[periode.length - 1];
+    if (lastPeriod) {
+      const anchor = `${lastPeriod}-01`;
+      const nextJt = klemJatuhTempo(addMonths(anchor, 1));
+      const nextPeriode = bulanPeriode(nextJt);
+      const adaBerikut = await ctx.db.prepare('select id from bills where tenant_id=? and periode=?').bind(p.tenant_id, nextPeriode).first();
+      if (!adaBerikut) {
+        const room = await ctx.db.prepare('select r.harga_bulanan from tenants t join rooms r on r.id=t.kamar_id where t.id=?').bind(p.tenant_id).first();
+        await ctx.tulis.prepare('insert into bills (tenant_id, periode, jatuh_tempo, jumlah, status) values (?,?,?,?,?)')
+          .bind(p.tenant_id, nextPeriode, nextJt, num(room?.harga_bulanan) || p.jumlah, 'belum_bayar').run();
+      }
+    }
+    const jurnal = await ctx.db.prepare("select name from sqlite_master where type='table' and name='journal_entries'").first().catch(() => null);
+    if (jurnal) {
+      const tenant = await ctx.db.prepare('select t.nama, r.no_kamar from tenants t left join rooms r on r.id=t.kamar_id where t.id=?').bind(p.tenant_id).first();
+      await ctx.tulis.prepare("insert or ignore into journal_entries (tanggal,sumber,source_ref,keterangan,created_by,kost) values (?,'pembayaran',?,?,?,?)")
+        .bind(p.tgl_bayar, p.nomor_struk, `Sewa ${tenant?.nama || '-'} · ${tenant?.no_kamar || '-'}`, ctx.user.id, ctx.kost).run();
+      await ctx.tulis.batch([
+        ctx.tulis.prepare("insert or ignore into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit,kost) select id,'1000','Kas/Bank',?,0,? from journal_entries where sumber='pembayaran' and source_ref=? and kost=?").bind(p.jumlah, ctx.kost, p.nomor_struk, ctx.kost),
+        ctx.tulis.prepare("insert or ignore into journal_lines (journal_id,akun_kode,akun_nama,debet,kredit,kost) select id,'4100','Pendapatan Sewa',0,?,? from journal_entries where sumber='pembayaran' and source_ref=? and kost=?").bind(p.jumlah, ctx.kost, p.nomor_struk, ctx.kost),
+      ]);
+    }
+  } else if (status === 'pending') {
+    await ctx.tulis.prepare("update payments set approval_status='pending', approved_by=null, approved_at=null, rejection_reason=null where id=?")
+      .bind(id).run();
+  } else {
+    if (lama === 'approved') throw httpError(409, 'Pembayaran yang sudah disahkan tidak bisa ditolak; batalkan melalui Void.');
+    await ctx.tulis.prepare("update payments set approval_status='rejected', approved_by=?, approved_at=datetime('now'), rejection_reason=? where id=?")
+      .bind(ctx.user.id, alasan, id).run();
+  }
+  await ctx.tulis.prepare('insert into payment_reviews (payment_id,status_lama,status_baru,alasan,reviewed_by) values (?,?,?,?,?)')
+    .bind(id, lama, status, alasan, ctx.user.id).run();
+  await ctx.audit('payment.review', 'payments', id, { approval_status: lama }, { approval_status: status, alasan });
+  return `Pembayaran ${p.nomor_struk} diubah menjadi ${status}.`;
+}
+
+function contractDates(data, today) {
+  const mulai = toISODate(data.mulai), berakhir = toISODate(data.berakhir);
+  if (!mulai || !berakhir || berakhir < mulai || berakhir < today) throw httpError(400, 'Tanggal kontrak tidak valid.');
+  return { mulai, berakhir };
+}
+
+export async function createContract(ctx, data) {
+  const tenantId = Number(data.tenantId || data.tenant_id);
+  const tenantRef = String(data.tenantId || data.tenant_id || '').trim();
+  if (!tenantRef) throw httpError(400, 'Penyewa kontrak tidak valid.');
+  const t = await ctx.db.prepare('select t.*, r.id as kamar_id from tenants t left join rooms r on r.id=t.kamar_id where t.id=? or t.kode=?').bind(Number(tenantRef) || -1, tenantRef).first();
+  if (!t) throw httpError(404, 'Penyewa tidak ditemukan.');
+  const { mulai, berakhir } = contractDates(data, ctx.today);
+  const harga = nominalUang(data.harga), deposit = data.deposit === undefined || data.deposit === '' ? 0 : nominalUang(data.deposit);
+  if (harga == null || deposit == null) throw httpError(400, 'Harga dan deposit kontrak tidak valid.');
+  const nomor = String(data.nomor || '').trim().slice(0, 50) || `KON-${String(Date.now()).slice(-8)}`;
+  const bentrok = await ctx.db.prepare("select id from contracts where tenant_id=? and status not in ('berakhir','dibatalkan') and mulai<=? and berakhir>=?").bind(tenantId, berakhir, mulai).first();
+  if (bentrok) throw httpError(409, 'Periode kontrak penyewa bertumpuk dengan kontrak aktif.');
+  await ctx.tulis.prepare('insert into contracts (nomor,tenant_id,kamar_id,mulai,berakhir,harga,deposit,status,catatan,created_by) values (?,?,?,?,?,?,?,?,?,?)')
+    .bind(nomor, t.id, t.kamar_id, mulai, berakhir, harga, deposit, mulai > ctx.today ? 'akan_dimulai' : 'aktif', String(data.catatan || '').slice(0, 1000), ctx.user.id).run();
+  await ctx.audit('contract.create', 'contracts', nomor, null, { tenantId, mulai, berakhir, harga, deposit });
+  return `Kontrak ${nomor} berhasil dibuat.`;
+}
+
+export async function updateContract(ctx, data) {
+  const id = Number(data.id);
+  const old = await ctx.db.prepare('select * from contracts where id=?').bind(id).first();
+  if (!Number.isInteger(id) || id <= 0 || !old) throw httpError(404, 'Kontrak tidak ditemukan.');
+  const { mulai, berakhir } = contractDates(data, ctx.today);
+  const harga = nominalUang(data.harga), deposit = data.deposit === undefined || data.deposit === '' ? 0 : nominalUang(data.deposit);
+  if (harga == null || deposit == null) throw httpError(400, 'Harga dan deposit kontrak tidak valid.');
+  await ctx.tulis.prepare('update contracts set mulai=?,berakhir=?,harga=?,deposit=?,status=?,catatan=? where id=?')
+    .bind(mulai, berakhir, harga, deposit, mulai > ctx.today ? 'akan_dimulai' : 'aktif', String(data.catatan || '').slice(0, 1000), id).run();
+  await ctx.audit('contract.update', 'contracts', id, { mulai: old.mulai, berakhir: old.berakhir }, { mulai, berakhir, harga, deposit });
+  return `Kontrak ${old.nomor} diperbarui.`;
+}
+
 // Tanggal jatuh tempo atau nominal tagihan yang sudah ada tidak diubah di sini —
 // ubah lewat pembatalan pembayaran / tagihan, supaya angka tagihan tidak pernah
 // berubah diam-diam tanpa jejak.
